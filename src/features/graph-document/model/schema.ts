@@ -1,0 +1,165 @@
+import { z } from 'zod';
+import {
+  GRAPH_DOCUMENT_FORMAT,
+  GRAPH_DOCUMENT_VERSION,
+  type GraphDocument,
+} from './types';
+import { normalizeStudioLayoutSpec } from './studio-layout';
+import type { StudioLayoutNode, StudioLayoutSpec } from './studio-workspace';
+
+const studioPlotPaletteSchema = z.union([
+  z.object({
+    kind: z.literal('builtin'),
+    id: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('studio'),
+    id: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('custom'),
+    colors: z.array(z.string().min(1)).min(1),
+  }),
+]);
+
+const studioPlotStyleConfigSchema = z.object({
+  assignmentMode: z.literal('byIndex').optional(),
+  palette: studioPlotPaletteSchema.optional(),
+});
+
+const studioPanelSpecSchema = z.object({
+  id: z.string().min(1),
+  nodeId: z.string().min(1),
+  kind: z.enum(['series', 'series2d', 'image', 'audio']),
+  title: z.string().optional(),
+  visible: z.boolean(),
+  previewOnCanvas: z.boolean(),
+  plotStyle: studioPlotStyleConfigSchema.optional(),
+});
+
+const studioLayoutNodeSchema: z.ZodType<StudioLayoutNode> = z.lazy(() =>
+  z.union([
+    z.object({
+      kind: z.literal('pane'),
+      panelId: z.string().min(1),
+    }),
+    z.object({
+      kind: z.literal('split'),
+      direction: z.enum(['row', 'column']),
+      children: z.array(studioLayoutNodeSchema),
+      sizes: z.array(z.number().positive()).optional(),
+    }),
+  ]) as z.ZodType<StudioLayoutNode>,
+);
+
+const studioLayoutSpecSchema: z.ZodType<StudioLayoutSpec> = z.object({
+  version: z.literal(2),
+  root: studioLayoutNodeSchema,
+  activePanelId: z.string().min(1).optional(),
+});
+
+const studioWorkspaceMetadataSchema = z.object({
+  panels: z.array(studioPanelSpecSchema),
+  layout: studioLayoutSpecSchema.optional(),
+  plotPalettes: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        colors: z.array(z.string().min(1)).min(1),
+      }),
+    )
+    .optional(),
+});
+
+const applicationSpecSchema = z.object({
+  mode: z.enum(['in_app', 'new_tab', 'popout', 'external']),
+  renderer: z.enum(['react', 'webgl', 'imgui', 'custom']),
+  title: z.string().optional(),
+});
+
+const parameterValueSchema = z.object({
+  kind: z.literal('expression'),
+  value: z.string(),
+});
+
+const graphNodeSchema = z.object({
+  id: z.string().min(1),
+  blockType: z.string().min(1),
+  title: z.string().optional(),
+  position: z.object({
+    x: z.number(),
+    y: z.number(),
+  }),
+  parameters: z.record(z.string(), parameterValueSchema).default({}),
+});
+
+const graphEdgeEndpointSchema = z.object({
+  nodeId: z.string().min(1),
+  portId: z.string().optional(),
+});
+
+const graphEdgeSchema = z.object({
+  id: z.string().min(1),
+  source: graphEdgeEndpointSchema,
+  target: graphEdgeEndpointSchema,
+});
+
+export const graphDocumentSchema = z.object({
+  format: z.literal(GRAPH_DOCUMENT_FORMAT),
+  version: z.literal(GRAPH_DOCUMENT_VERSION),
+  metadata: z.object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    studio: studioWorkspaceMetadataSchema.optional(),
+    application: applicationSpecSchema.optional(),
+  }),
+  graph: z.object({
+    nodes: z.array(graphNodeSchema),
+    edges: z.array(graphEdgeSchema),
+  }),
+});
+
+function makeIssueMessage(issues: z.ZodIssue[]): string {
+  return issues
+    .map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`)
+    .join('; ');
+}
+
+export function parseGraphDocument(input: unknown): GraphDocument {
+  if (input && typeof input === 'object') {
+    const maybeDoc = input as { format?: unknown; version?: unknown };
+
+    if (typeof maybeDoc.format === 'string' && maybeDoc.format !== GRAPH_DOCUMENT_FORMAT) {
+      throw new Error(
+        `Unsupported graph document format: ${maybeDoc.format}. Expected ${GRAPH_DOCUMENT_FORMAT}.`,
+      );
+    }
+
+    if (typeof maybeDoc.version === 'number' && maybeDoc.version !== GRAPH_DOCUMENT_VERSION) {
+      throw new Error(
+        `Unsupported graph document version: ${maybeDoc.version}. Expected version ${GRAPH_DOCUMENT_VERSION}.`,
+      );
+    }
+  }
+
+  const parsed = graphDocumentSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(`Invalid GraphDocument: ${makeIssueMessage(parsed.error.issues)}`);
+  }
+
+  if (!parsed.data.metadata.studio?.layout) {
+    return parsed.data;
+  }
+
+  const panelIds = parsed.data.metadata.studio.panels.map((panel) => panel.id);
+  return {
+    ...parsed.data,
+    metadata: {
+      ...parsed.data.metadata,
+      studio: {
+        ...parsed.data.metadata.studio,
+        layout: normalizeStudioLayoutSpec(parsed.data.metadata.studio.layout, panelIds),
+      },
+    },
+  };
+}

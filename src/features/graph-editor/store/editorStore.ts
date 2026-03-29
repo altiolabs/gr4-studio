@@ -1,0 +1,406 @@
+import { create } from 'zustand';
+import type { EdgeChange, NodeChange } from '@xyflow/react';
+import type { BlockDetails } from '../../../lib/api/block-details';
+import type { ApplicationSpec, StudioLayoutSpec, StudioPanelSpec, StudioPlotPaletteSpec } from '../../graph-document/model/studio-workspace';
+import {
+  buildInitialParameterDrafts,
+  createEditorNode,
+  createEdgeId,
+  getNextNodePosition,
+} from '../model/nodeFactory';
+import type {
+  EditorCatalogBlock,
+  EditorGraphEdge,
+  EditorGraphNode,
+  EditorNodeParameterDrafts,
+  GraphPoint,
+} from '../model/types';
+
+type AddEdgeInput = {
+  sourceInstanceId: string;
+  targetInstanceId: string;
+  sourcePort?: string;
+  targetPort?: string;
+};
+
+type EditorState = {
+  nodes: EditorGraphNode[];
+  edges: EditorGraphEdge[];
+  documentName: string;
+  documentDescription?: string;
+  studioPanels?: StudioPanelSpec[];
+  studioLayout?: StudioLayoutSpec;
+  studioPlotPalettes?: StudioPlotPaletteSpec[];
+  application?: ApplicationSpec;
+  selectedNodeId: string | null;
+  nextNodeSequence: number;
+  getNodeById: (instanceId: string) => EditorGraphNode | undefined;
+  getGraphSnapshot: () => {
+    nodes: EditorGraphNode[];
+    edges: EditorGraphEdge[];
+    metadata: {
+      name: string;
+      description?: string;
+      studioPanels?: StudioPanelSpec[];
+      studioLayout?: StudioLayoutSpec;
+      studioPlotPalettes?: StudioPlotPaletteSpec[];
+      application?: ApplicationSpec;
+    };
+  };
+  setDocumentMetadata: (metadata: {
+    name: string;
+    description?: string;
+    studioPanels?: StudioPanelSpec[];
+    studioLayout?: StudioLayoutSpec;
+    studioPlotPalettes?: StudioPlotPaletteSpec[];
+    application?: ApplicationSpec;
+  }) => void;
+  setStudioPanels: (panels: StudioPanelSpec[]) => void;
+  setStudioPlotPalettes: (palettes: StudioPlotPaletteSpec[]) => void;
+  setStudioLayout: (layout: StudioLayoutSpec) => void;
+  clearGraph: () => void;
+  replaceGraph: (input: {
+    nodes: EditorGraphNode[];
+    edges: EditorGraphEdge[];
+    metadata: {
+      name: string;
+      description?: string;
+      studioPanels?: StudioPanelSpec[];
+      studioLayout?: StudioLayoutSpec;
+      studioPlotPalettes?: StudioPlotPaletteSpec[];
+      application?: ApplicationSpec;
+    };
+  }) => void;
+  addNodeFromCatalogItem: (block: EditorCatalogBlock) => void;
+  applyFlowNodeChanges: (changes: NodeChange[]) => void;
+  applyFlowEdgeChanges: (changes: EdgeChange[]) => void;
+  selectNode: (nodeId: string | null) => void;
+  setNodePosition: (nodeId: string, position: GraphPoint) => void;
+  removeNode: (nodeId: string) => void;
+  addEdge: (input: AddEdgeInput) => void;
+  removeEdge: (edgeId: string) => void;
+  updateNodeParameter: (instanceId: string, parameterName: string, value: string) => void;
+  updateNodeParameters: (instanceId: string, parameterValues: Record<string, string>) => void;
+  ensureNodeParametersInitialized: (instanceId: string, blockDetails: BlockDetails) => void;
+};
+
+export const useEditorStore = create<EditorState>((set, get) => ({
+  nodes: [],
+  edges: [],
+  documentName: 'Untitled Graph',
+  documentDescription: undefined,
+  studioPanels: undefined,
+  studioLayout: undefined,
+  studioPlotPalettes: undefined,
+  application: undefined,
+  selectedNodeId: null,
+  nextNodeSequence: 1,
+  getNodeById: (instanceId) => {
+    return get().nodes.find((node) => node.instanceId === instanceId);
+  },
+  getGraphSnapshot: () => {
+    const state = get();
+    return {
+      nodes: state.nodes,
+      edges: state.edges,
+      metadata: {
+        name: state.documentName,
+        description: state.documentDescription,
+        studioPanels: state.studioPanels,
+        studioLayout: state.studioLayout,
+        studioPlotPalettes: state.studioPlotPalettes,
+        application: state.application,
+      },
+    };
+  },
+  setDocumentMetadata: ({ name, description, studioPanels, studioLayout, studioPlotPalettes, application }) => {
+    set((state) => ({
+      documentName: name,
+      documentDescription: description,
+      studioPanels: studioPanels ?? state.studioPanels,
+      studioLayout: studioLayout ?? state.studioLayout,
+      studioPlotPalettes: studioPlotPalettes ?? state.studioPlotPalettes,
+      application: application ?? state.application,
+    }));
+  },
+  setStudioPanels: (panels) => {
+    set({
+      studioPanels: panels,
+    });
+  },
+  setStudioPlotPalettes: (palettes) => {
+    set({
+      studioPlotPalettes: palettes,
+    });
+  },
+  setStudioLayout: (layout) => {
+    set({
+      studioLayout: layout,
+    });
+  },
+  clearGraph: () => {
+    set({
+      nodes: [],
+      edges: [],
+      studioPanels: undefined,
+      studioLayout: undefined,
+      studioPlotPalettes: undefined,
+      application: undefined,
+      selectedNodeId: null,
+      nextNodeSequence: 1,
+    });
+  },
+  replaceGraph: ({ nodes, edges, metadata }) => {
+    const maxSuffix = nodes.reduce((max, node) => {
+      const match = node.instanceId.match(/_(\d+)$/);
+      if (!match) {
+        return max;
+      }
+
+      const value = Number.parseInt(match[1], 10);
+      return Number.isFinite(value) ? Math.max(max, value) : max;
+    }, 0);
+
+    set({
+      nodes,
+      edges,
+      documentName: metadata.name,
+      documentDescription: metadata.description,
+      studioPanels: metadata.studioPanels,
+      studioLayout: metadata.studioLayout,
+      studioPlotPalettes: metadata.studioPlotPalettes,
+      application: metadata.application,
+      selectedNodeId: null,
+      nextNodeSequence: Math.max(maxSuffix + 1, nodes.length + 1, 1),
+    });
+  },
+  addNodeFromCatalogItem: (block) => {
+    const { nextNodeSequence, nodes } = get();
+    const position = getNextNodePosition(nodes.length);
+    const node = createEditorNode(block, nextNodeSequence, position);
+
+    set((state) => ({
+      nodes: [...state.nodes, node],
+      selectedNodeId: node.instanceId,
+      nextNodeSequence: state.nextNodeSequence + 1,
+    }));
+  },
+  applyFlowNodeChanges: (changes) => {
+    if (changes.length === 0) {
+      return;
+    }
+
+    set((state) => {
+      const removedNodeIds = new Set<string>();
+      const positionByNodeId = new Map<string, GraphPoint>();
+      let nextSelectedNodeId = state.selectedNodeId;
+      let selectionTouched = false;
+
+      changes.forEach((change) => {
+        if (change.type === 'remove') {
+          removedNodeIds.add(change.id);
+          if (nextSelectedNodeId === change.id) {
+            nextSelectedNodeId = null;
+            selectionTouched = true;
+          }
+          return;
+        }
+
+        if (change.type === 'position') {
+          const nextPosition =
+            change.position ??
+            ((change as NodeChange & { positionAbsolute?: GraphPoint }).positionAbsolute ?? null);
+          if (nextPosition) {
+            positionByNodeId.set(change.id, nextPosition);
+          }
+          return;
+        }
+
+        if (change.type === 'select') {
+          selectionTouched = true;
+          if (change.selected) {
+            nextSelectedNodeId = change.id;
+          } else if (nextSelectedNodeId === change.id) {
+            nextSelectedNodeId = null;
+          }
+        }
+      });
+
+      let nodesChanged = false;
+      const nextNodes = state.nodes
+        .filter((node) => {
+          const keep = !removedNodeIds.has(node.instanceId);
+          if (!keep) {
+            nodesChanged = true;
+          }
+          return keep;
+        })
+        .map((node) => {
+          const nextPosition = positionByNodeId.get(node.instanceId);
+          if (!nextPosition) {
+            return node;
+          }
+          if (node.position.x === nextPosition.x && node.position.y === nextPosition.y) {
+            return node;
+          }
+          nodesChanged = true;
+          return {
+            ...node,
+            position: {
+              x: nextPosition.x,
+              y: nextPosition.y,
+            },
+          };
+        });
+
+      let edgesChanged = false;
+      const nextEdges = removedNodeIds.size > 0
+        ? state.edges.filter((edge) => {
+            const keep = !removedNodeIds.has(edge.sourceInstanceId) && !removedNodeIds.has(edge.targetInstanceId);
+            if (!keep) {
+              edgesChanged = true;
+            }
+            return keep;
+          })
+        : state.edges;
+
+      const selectionChanged = selectionTouched && nextSelectedNodeId !== state.selectedNodeId;
+      if (!nodesChanged && !edgesChanged && !selectionChanged) {
+        return state;
+      }
+
+      return {
+        nodes: nextNodes,
+        edges: nextEdges,
+        selectedNodeId: nextSelectedNodeId,
+      };
+    });
+  },
+  applyFlowEdgeChanges: (changes) => {
+    if (changes.length === 0) {
+      return;
+    }
+
+    const removedEdgeIds = new Set(changes.filter((change) => change.type === 'remove').map((change) => change.id));
+    if (removedEdgeIds.size === 0) {
+      return;
+    }
+
+    set((state) => {
+      const nextEdges = state.edges.filter((edge) => !removedEdgeIds.has(edge.id));
+      if (nextEdges.length === state.edges.length) {
+        return state;
+      }
+      return {
+        edges: nextEdges,
+      };
+    });
+  },
+  selectNode: (nodeId) => {
+    set({ selectedNodeId: nodeId });
+  },
+  setNodePosition: (nodeId, position) => {
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.instanceId === nodeId ? { ...node, position: { ...position } } : node,
+      ),
+    }));
+  },
+  removeNode: (nodeId) => {
+    set((state) => ({
+      nodes: state.nodes.filter((node) => node.instanceId !== nodeId),
+      edges: state.edges.filter(
+        (edge) => edge.sourceInstanceId !== nodeId && edge.targetInstanceId !== nodeId,
+      ),
+      selectedNodeId: state.selectedNodeId === nodeId ? null : state.selectedNodeId,
+    }));
+  },
+  addEdge: ({ sourceInstanceId, targetInstanceId, sourcePort, targetPort }) => {
+    if (sourceInstanceId === targetInstanceId) {
+      return;
+    }
+
+    const edgeId = createEdgeId(sourceInstanceId, targetInstanceId, sourcePort, targetPort);
+
+    set((state) => {
+      const duplicateExists = state.edges.some((edge) => edge.id === edgeId);
+      if (duplicateExists) {
+        return state;
+      }
+
+      const edge: EditorGraphEdge = {
+        id: edgeId,
+        sourceInstanceId,
+        targetInstanceId,
+        sourcePort,
+        targetPort,
+      };
+
+      return {
+        edges: [...state.edges, edge],
+      };
+    });
+  },
+  removeEdge: (edgeId) => {
+    set((state) => ({
+      edges: state.edges.filter((edge) => edge.id !== edgeId),
+    }));
+  },
+  updateNodeParameter: (instanceId, parameterName, value) => {
+    set((state) => ({
+      nodes: state.nodes.map((node) => {
+        if (node.instanceId !== instanceId) {
+          return node;
+        }
+
+        return {
+          ...node,
+          parameters: {
+            ...node.parameters,
+            [parameterName]: { value },
+          },
+        };
+      }),
+    }));
+  },
+  updateNodeParameters: (instanceId, parameterValues) => {
+    const parameters: EditorNodeParameterDrafts = Object.entries(parameterValues).reduce(
+      (acc, [name, value]) => {
+        acc[name] = { value };
+        return acc;
+      },
+      {} as EditorNodeParameterDrafts,
+    );
+
+    set((state) => ({
+      nodes: state.nodes.map((node) => {
+        if (node.instanceId !== instanceId) {
+          return node;
+        }
+
+        return {
+          ...node,
+          parameters,
+        };
+      }),
+    }));
+  },
+  ensureNodeParametersInitialized: (instanceId, blockDetails) => {
+    set((state) => ({
+      nodes: state.nodes.map((node) => {
+        if (node.instanceId !== instanceId) {
+          return node;
+        }
+
+        if (Object.keys(node.parameters).length > 0) {
+          return node;
+        }
+
+        return {
+          ...node,
+          parameters: buildInitialParameterDrafts(blockDetails),
+        };
+      }),
+    }));
+  },
+}));

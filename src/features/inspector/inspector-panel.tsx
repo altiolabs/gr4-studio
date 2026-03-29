@@ -1,0 +1,802 @@
+import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { PanelHeader } from '../../components/panel-header';
+import { StatusPill } from '../../components/status-pill';
+import { formatTimestamp } from '../../lib/utils/ui-formatting';
+import { isAdvancedParameterName, isAdvancedUiHint } from '../../lib/utils/parameter-groups';
+import { resolveRenderedPorts } from '../ports/model/resolveRenderedPorts';
+import type { SchemaPort } from '../ports/model/types';
+import { useBlockDetailsQuery } from './hooks/use-block-details-query';
+import { useRuntimeBlockSettings } from './hooks/use-runtime-block-settings';
+import {
+  resolveRuntimeSettingsAvailability,
+  toRuntimeSettingsErrorMessage,
+} from './runtime-settings-model';
+import { useEditorStore } from '../graph-editor/store/editorStore';
+import { useGraphTabsStore } from '../graph-tabs/store/graphTabsStore';
+import type { RuntimeSettingsValue } from '../../lib/api/block-settings';
+import { useRuntimeSessionStore } from '../runtime-session/store/runtimeSessionStore';
+import { graphDocumentFromEditor } from '../graph-document/model/fromEditor';
+import { toGrctrlContentSubmission } from '../runtime-submission/model/toGrctrlPayload';
+import { buildStudioBindingView } from '../graph-editor/runtime/known-block-bindings';
+import { toCanonicalBlockDisplayName } from '../graph-editor/model/presentation';
+import type { BlockDetails, BlockParameterMeta } from '../../lib/api/block-details';
+
+type InspectorTabId = 'selection' | 'graph' | 'session';
+
+function graphSubmissionLabel(state: 'none' | 'current' | 'stale' | undefined): string {
+  if (state === 'current') {
+    return 'linked session snapshot current';
+  }
+  if (state === 'stale') {
+    return 'linked session snapshot stale';
+  }
+  return 'no snapshot baseline';
+}
+
+function runIntentLabel(state: 'none' | 'create-session' | 'replace-session-from-edits' | 'start-linked-session' | undefined): string {
+  if (state === 'create-session') {
+    return 'Run creates and starts a new session from current graph.';
+  }
+  if (state === 'replace-session-from-edits') {
+    return 'Run replaces the linked session with a new session from current graph edits.';
+  }
+  if (state === 'start-linked-session') {
+    return 'Run starts the linked session.';
+  }
+  return 'Session currently running.';
+}
+
+function SummaryLabel({ children }: { children: string }) {
+  return <p className="text-xs uppercase tracking-wide text-slate-400">{children}</p>;
+}
+
+function SummaryValue({ children }: { children: ReactNode }) {
+  return <p className="text-sm text-slate-100 font-medium break-words">{children}</p>;
+}
+
+function SectionCard({ children }: { children: ReactNode }) {
+  return <div className="rounded-md border border-slate-700 bg-slate-900/60 p-3 space-y-2">{children}</div>;
+}
+
+function EmptyState({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
+      {children}
+    </div>
+  );
+}
+
+function bindingStateClass(state: 'unsupported' | 'unconfigured' | 'configured' | 'invalid'): string {
+  if (state === 'configured') {
+    return 'border-emerald-600/60 bg-emerald-900/20 text-emerald-200';
+  }
+  if (state === 'unconfigured') {
+    return 'border-amber-600/60 bg-amber-900/20 text-amber-200';
+  }
+  if (state === 'invalid') {
+    return 'border-rose-600/60 bg-rose-900/20 text-rose-200';
+  }
+  return 'border-slate-600 bg-slate-800/70 text-slate-300';
+}
+
+function toSchemaPorts(details: NonNullable<ReturnType<typeof useBlockDetailsQuery>['data']>): SchemaPort[] {
+  return [...details.inputPorts, ...details.outputPorts]
+    .filter((port) => port.direction === 'input' || port.direction === 'output')
+    .map((port) => ({
+      name: port.name,
+      direction: port.direction as 'input' | 'output',
+      cardinalityKind: port.cardinalityKind,
+      minPortCount: port.minPortCount,
+      maxPortCount: port.maxPortCount,
+      typeName: port.valueType,
+      isOptional: port.isOptional,
+      description: port.description,
+    }));
+}
+
+function RuntimeSettingsCard({
+  runtimeContext,
+  graphDriftState,
+  selectedBlock,
+  blockDetails,
+}: {
+  runtimeContext: ReturnType<typeof useRuntimeSessionStore.getState>['contextsByTabId'][string] | undefined;
+  graphDriftState: 'in-sync' | 'out-of-sync' | null | undefined;
+  selectedBlock:
+    | ReturnType<typeof useEditorStore.getState>['nodes'][number]
+    | undefined;
+  blockDetails?: BlockDetails;
+}) {
+  const updateNodeParameters = useEditorStore((state) => state.updateNodeParameters);
+  const selectedNodeRuntimeName = selectedBlock?.instanceId;
+  const availability = resolveRuntimeSettingsAvailability({
+    session: runtimeContext?.session,
+    sessionId: runtimeContext?.sessionId,
+    selectedNodeRuntimeName,
+    graphDriftState,
+  });
+  const sessionId = availability.state === 'ready' ? availability.sessionId : undefined;
+  const uniqueName = availability.state === 'ready' ? availability.uniqueName : undefined;
+  const { query, mutation } = useRuntimeBlockSettings(sessionId, uniqueName, availability.state === 'ready');
+  const [draftValues, setDraftValues] = useState<Record<string, string | boolean>>({});
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [applyMessage, setApplyMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!query.data) {
+      setDraftValues({});
+      return;
+    }
+
+    const nextDraft: Record<string, string | boolean> = {};
+    for (const [key, value] of Object.entries(query.data)) {
+      if (typeof value === 'boolean') {
+        nextDraft[key] = value;
+      } else if (typeof value === 'string' || typeof value === 'number') {
+        nextDraft[key] = String(value);
+      }
+    }
+    setDraftValues(nextDraft);
+    setSaveError(null);
+    setApplyMessage(null);
+  }, [query.data, uniqueName]);
+
+  const savePatch = async (name: string, value: RuntimeSettingsValue) => {
+    if (!sessionId || !uniqueName) {
+      return;
+    }
+
+    setSaveError(null);
+    try {
+      await mutation.mutateAsync({
+        patch: {
+          [name]: value,
+        },
+      });
+    } catch (error) {
+      setSaveError(toRuntimeSettingsErrorMessage(error));
+      throw error;
+    }
+  };
+
+  const runtimeValues = query.data ?? {};
+  const parameterMetaByName = useMemo(
+    () =>
+      new Map<string, BlockParameterMeta>(
+        (blockDetails?.parameters ?? []).map((parameter) => [parameter.name, parameter]),
+      ),
+    [blockDetails],
+  );
+
+  const editableEntries: Array<[string, RuntimeSettingsValue]> = [];
+  const advancedEntries: Array<[string, RuntimeSettingsValue]> = [];
+
+  Object.entries(runtimeValues)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .forEach(([name, value]) => {
+      const parameterMeta = parameterMetaByName.get(name);
+      const advanced =
+        isAdvancedParameterName(name) ||
+        (parameterMeta ? isAdvancedUiHint(parameterMeta.uiHint) : false);
+
+      if (advanced) {
+        advancedEntries.push([name, value]);
+        return;
+      }
+
+      if (parameterMeta && parameterMeta.mutable && !parameterMeta.readOnly) {
+        editableEntries.push([name, value]);
+        return;
+      }
+
+      return;
+    });
+
+  const applicableGraphPatch = useMemo(() => {
+    if (!selectedBlock || !query.data) {
+      return {};
+    }
+
+    const nextPatch: Record<string, string> = {};
+    for (const [name, value] of Object.entries(query.data)) {
+      const parameterMeta = parameterMetaByName.get(name);
+      if (!parameterMeta || parameterMeta.readOnly || !parameterMeta.mutable) {
+        continue;
+      }
+      if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+        nextPatch[name] = String(value);
+      }
+    }
+
+    return nextPatch;
+  }, [parameterMetaByName, query.data, selectedBlock]);
+
+  const applyRuntimeToGraph = () => {
+    if (!selectedBlock) {
+      return;
+    }
+
+    const entries = Object.entries(applicableGraphPatch);
+    if (entries.length === 0) {
+      setApplyMessage('No editable runtime values can be applied to the graph.');
+      return;
+    }
+
+    updateNodeParameters(selectedBlock.instanceId, applicableGraphPatch);
+    setApplyMessage(`Applied ${entries.length} runtime value${entries.length === 1 ? '' : 's'} to graph properties.`);
+  };
+
+  const renderRuntimeValue = (name: string, value: RuntimeSettingsValue, editable: boolean) => {
+    const parameterMeta = parameterMetaByName.get(name);
+    const typeLabel = parameterMeta?.valueType ?? typeof value;
+
+    if (typeof value === 'boolean') {
+      const checked = Boolean(draftValues[name]);
+      return (
+        <label key={name} className="flex items-center justify-between gap-3 rounded border border-slate-700 p-2">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-slate-400">{name}</p>
+            <p className="text-[11px] text-slate-500">{typeLabel}</p>
+          </div>
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled={!editable || mutation.isPending}
+            onChange={(event) => {
+              if (!editable) {
+                return;
+              }
+              const next = event.target.checked;
+              setDraftValues((current) => ({ ...current, [name]: next }));
+              void savePatch(name, next);
+            }}
+            className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-emerald-500"
+          />
+        </label>
+      );
+    }
+
+    if (typeof value === 'string' || typeof value === 'number') {
+      const draftValue = draftValues[name];
+      const inputValue = typeof draftValue === 'string' ? draftValue : String(value);
+      const commitScalar = async () => {
+        if (!editable) {
+          return;
+        }
+        const raw = typeof draftValues[name] === 'string' ? String(draftValues[name]) : String(value);
+        const nextValue: RuntimeSettingsValue = typeof value === 'number' ? Number(raw) : raw;
+        if (nextValue === value) {
+          return;
+        }
+        await savePatch(name, nextValue);
+      };
+
+      const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === 'Enter') {
+          event.currentTarget.blur();
+        }
+      };
+
+      return (
+        <label key={name} className="block rounded border border-slate-700 p-2">
+          <p className="text-xs uppercase tracking-wide text-slate-400">{name}</p>
+          <p className="mb-2 text-[11px] text-slate-500">{typeLabel}</p>
+          <input
+            type={typeof value === 'number' ? 'number' : 'text'}
+            value={inputValue}
+            disabled={!editable || mutation.isPending}
+            onChange={(event) => {
+              if (!editable) {
+                return;
+              }
+              const nextValue = event.target.value;
+              setDraftValues((current) => ({ ...current, [name]: nextValue }));
+            }}
+            onBlur={() => {
+              void commitScalar();
+            }}
+            onKeyDown={onKeyDown}
+            className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 outline-none focus:border-cyan-500 disabled:opacity-70"
+          />
+        </label>
+      );
+    }
+
+    return (
+      <div key={name} className="rounded border border-slate-700 p-2">
+        <p className="text-xs uppercase tracking-wide text-slate-400">{name}</p>
+        <p className="mb-2 text-[11px] text-slate-500">nested object</p>
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-slate-950/70 p-2 text-[11px] text-slate-300">
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      </div>
+    );
+  };
+
+  return (
+    <SectionCard>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <SummaryLabel>Runtime Settings</SummaryLabel>
+          <p className="text-[11px] text-slate-500">
+            Live runtime edits target the linked session only. They do not change the graph document.
+          </p>
+        </div>
+        {availability.state === 'ready' && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={applyRuntimeToGraph}
+              disabled={query.isFetching || mutation.isPending || Object.keys(applicableGraphPatch).length === 0}
+              className="rounded border border-emerald-700/70 bg-emerald-900/30 px-2 py-1 text-[11px] text-emerald-100 hover:bg-emerald-800/40 disabled:opacity-50"
+            >
+              Apply To Graph
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void query.refetch();
+              }}
+              disabled={query.isFetching || mutation.isPending}
+              className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-[11px] text-slate-100 hover:bg-slate-700 disabled:opacity-50"
+            >
+              Refresh
+            </button>
+          </div>
+        )}
+      </div>
+
+      {availability.state === 'unavailable' && (
+        <p className="text-sm text-slate-400">{availability.reason}</p>
+      )}
+
+      {availability.state === 'ready' && query.isPending && (
+        <p className="text-sm text-slate-400">Loading runtime settings...</p>
+      )}
+
+      {availability.state === 'ready' && query.isError && (
+        <p className="text-sm text-rose-300">{toRuntimeSettingsErrorMessage(query.error)}</p>
+      )}
+
+      {availability.state === 'ready' && saveError && (
+        <p className="text-sm text-rose-300">{saveError}</p>
+      )}
+
+      {availability.state === 'ready' && applyMessage && (
+        <p className="text-sm text-emerald-300">{applyMessage}</p>
+      )}
+
+      {availability.state === 'ready' && query.data && (
+        <div className="space-y-3">
+          <div className="rounded border border-slate-700 bg-slate-950/50 px-2 py-1 text-[11px] text-slate-400">
+            target: {uniqueName}
+            {query.isFetching && ' · loading'}
+            {mutation.isPending && ' · saving'}
+          </div>
+
+          {editableEntries.length === 0 && advancedEntries.length === 0 && (
+            <p className="text-sm text-slate-400">No live-editable runtime settings available for this block.</p>
+          )}
+
+          {editableEntries.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">Editable</p>
+              {editableEntries.map(([name, value]) => renderRuntimeValue(name, value, true))}
+            </div>
+          )}
+
+          {advancedEntries.length > 0 && (
+            <details className="rounded border border-slate-700 bg-slate-950/30 p-2">
+              <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                Advanced ({advancedEntries.length})
+              </summary>
+              <div className="mt-2 space-y-2">
+                {advancedEntries.map(([name, value]) => renderRuntimeValue(name, value, false))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function SelectionTab({
+  runtimeContext,
+  graphDriftState,
+}: {
+  runtimeContext: ReturnType<typeof useRuntimeSessionStore.getState>['contextsByTabId'][string] | undefined;
+  graphDriftState: 'in-sync' | 'out-of-sync' | null | undefined;
+}) {
+  const selectedBlock = useEditorStore((state) =>
+    state.nodes.find((block) => block.instanceId === state.selectedNodeId),
+  );
+  const canonicalDisplayName = selectedBlock
+    ? toCanonicalBlockDisplayName(selectedBlock.displayName, selectedBlock.blockTypeId)
+    : '';
+  const blockDetailsQuery = useBlockDetailsQuery(selectedBlock?.blockTypeId);
+
+  const draftParameterValues = Object.entries(selectedBlock?.parameters ?? {}).reduce<Record<string, string>>(
+    (acc, [name, value]) => {
+      acc[name] = value.value;
+      return acc;
+    },
+    {},
+  );
+  const effectiveParameterValues = useMemo(() => {
+    const values: Record<string, string> = { ...draftParameterValues };
+
+    if (blockDetailsQuery.data) {
+      for (const parameter of blockDetailsQuery.data.parameters) {
+        if (!(parameter.name in values)) {
+          values[parameter.name] = parameter.defaultValue ?? '';
+        }
+      }
+    }
+
+    return values;
+  }, [blockDetailsQuery.data, draftParameterValues]);
+  const studioBinding = useMemo(
+    () =>
+      selectedBlock
+        ? buildStudioBindingView(selectedBlock.blockTypeId, effectiveParameterValues)
+        : null,
+    [effectiveParameterValues, selectedBlock],
+  );
+
+  const renderedPorts =
+    blockDetailsQuery.data && selectedBlock
+      ? resolveRenderedPorts({
+          schemaPorts: toSchemaPorts(blockDetailsQuery.data),
+          parameterValues: effectiveParameterValues,
+        })
+      : { inputs: [], outputs: [] };
+
+  if (!selectedBlock) {
+    return (
+      <EmptyState>
+        Select a block on the canvas.
+        <p className="mt-2 text-xs text-slate-500">Double-click a block to open properties.</p>
+      </EmptyState>
+    );
+  }
+
+  return (
+    <>
+      <SectionCard>
+        <div>
+          <SummaryLabel>Instance ID</SummaryLabel>
+          <SummaryValue>{selectedBlock.instanceId}</SummaryValue>
+        </div>
+        <div>
+          <SummaryLabel>Block Type ID</SummaryLabel>
+          <SummaryValue>{selectedBlock.blockTypeId}</SummaryValue>
+        </div>
+        <div>
+          <SummaryLabel>Display Name</SummaryLabel>
+          <SummaryValue>{canonicalDisplayName}</SummaryValue>
+        </div>
+      </SectionCard>
+
+      <RuntimeSettingsCard
+        runtimeContext={runtimeContext}
+        graphDriftState={graphDriftState}
+        selectedBlock={selectedBlock}
+        blockDetails={blockDetailsQuery.data}
+      />
+
+      <SectionCard>
+        <SummaryLabel>Resolved Ports</SummaryLabel>
+
+        {blockDetailsQuery.isPending && <p className="text-sm text-slate-400">Loading port schema...</p>}
+        {blockDetailsQuery.isError && (
+          <p className="text-sm text-rose-300">Failed to resolve ports: {blockDetailsQuery.error.message}</p>
+        )}
+
+        {blockDetailsQuery.data && renderedPorts.inputs.length === 0 && renderedPorts.outputs.length === 0 && (
+          <p className="text-sm text-slate-400">No ports available for this block.</p>
+        )}
+
+        {renderedPorts.inputs.length > 0 && (
+          <div>
+            <p className="text-xs text-slate-400 mb-1">Inputs</p>
+            <ul className="space-y-1">
+              {renderedPorts.inputs.map((port) => (
+                <li key={port.key} className="text-xs text-slate-300">
+                  {port.displayLabel} · {port.inference}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {renderedPorts.outputs.length > 0 && (
+          <div>
+            <p className="text-xs text-slate-400 mb-1">Outputs</p>
+            <ul className="space-y-1">
+              {renderedPorts.outputs.map((port) => (
+                <li key={port.key} className="text-xs text-slate-300">
+                  {port.displayLabel} · {port.inference}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </SectionCard>
+
+      {studioBinding && (
+        <SectionCard>
+          <SummaryLabel>Studio Binding</SummaryLabel>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs uppercase tracking-wide text-slate-400">State</p>
+              <span
+                className={`rounded border px-2 py-0.5 text-[11px] font-medium ${bindingStateClass(studioBinding.status)}`}
+              >
+                {studioBinding.status}
+              </span>
+            </div>
+
+            {studioBinding.family && (
+              <div>
+                <SummaryLabel>Binding Kind</SummaryLabel>
+                <SummaryValue>{studioBinding.family}</SummaryValue>
+              </div>
+            )}
+
+            {studioBinding.transport && (
+              <div>
+                <SummaryLabel>Transport</SummaryLabel>
+                <SummaryValue>{studioBinding.transport}</SummaryValue>
+              </div>
+            )}
+
+            {studioBinding.endpoint && (
+              <div>
+                <SummaryLabel>Endpoint</SummaryLabel>
+                <SummaryValue>{studioBinding.endpoint}</SummaryValue>
+              </div>
+            )}
+
+            {typeof studioBinding.pollMs === 'number' && (
+              <div>
+                <SummaryLabel>Poll Interval (ms)</SummaryLabel>
+                <SummaryValue>{String(studioBinding.pollMs)}</SummaryValue>
+              </div>
+            )}
+
+            {typeof studioBinding.sampleRate === 'number' && (
+              <div>
+                <SummaryLabel>Sample Rate</SummaryLabel>
+                <SummaryValue>{String(studioBinding.sampleRate)}</SummaryValue>
+              </div>
+            )}
+
+            {typeof studioBinding.channels === 'number' && (
+              <div>
+                <SummaryLabel>Channels</SummaryLabel>
+                <SummaryValue>{String(studioBinding.channels)}</SummaryValue>
+              </div>
+            )}
+
+            {studioBinding.topic && (
+              <div>
+                <SummaryLabel>Topic</SummaryLabel>
+                <SummaryValue>{studioBinding.topic}</SummaryValue>
+              </div>
+            )}
+
+            {studioBinding.payloadFormat && (
+              <div>
+                <SummaryLabel>Payload Format</SummaryLabel>
+                <SummaryValue>{studioBinding.payloadFormat}</SummaryValue>
+              </div>
+            )}
+
+            {studioBinding.reason && (
+              <p className="text-xs text-slate-300 break-words">{studioBinding.reason}</p>
+            )}
+
+            <p className="text-[11px] text-slate-500">
+              Local binding validation only; backend/runtime behavior remains authoritative.
+            </p>
+          </div>
+        </SectionCard>
+      )}
+    </>
+  );
+}
+
+export function InspectorPanel() {
+  const [activeTab, setActiveTab] = useState<InspectorTabId>('selection');
+  const activeGraphTabId = useGraphTabsStore((state) => state.activeTabId);
+  const runtimeContext = useRuntimeSessionStore((state) =>
+    activeGraphTabId ? state.contextsByTabId[activeGraphTabId] : undefined,
+  );
+  const refreshSessionStateForTab = useRuntimeSessionStore((state) => state.refreshSessionStateForTab);
+  const getTabRuntimeView = useRuntimeSessionStore((state) => state.getTabRuntimeView);
+
+  const documentName = useEditorStore((state) => state.documentName);
+  const documentDescription = useEditorStore((state) => state.documentDescription);
+  const nodes = useEditorStore((state) => state.nodes);
+  const edges = useEditorStore((state) => state.edges);
+
+  const currentSubmissionContent = useMemo(() => {
+    const document = graphDocumentFromEditor({
+      metadata: {
+        name: documentName,
+        description: documentDescription,
+      },
+      nodes,
+      edges,
+    });
+    return toGrctrlContentSubmission(document).content;
+  }, [documentDescription, documentName, edges, nodes]);
+
+  const runtimeView = activeGraphTabId ? getTabRuntimeView(activeGraphTabId, currentSubmissionContent) : null;
+
+  const tabItems = useMemo(
+    () =>
+      [
+        { id: 'selection', label: 'Selection' },
+        { id: 'graph', label: 'Graph' },
+        { id: 'session', label: 'Session' },
+      ] satisfies Array<{ id: InspectorTabId; label: string }>,
+    [],
+  );
+
+  const recentActivity = runtimeContext?.activity.slice(0, 15) ?? [];
+
+  return (
+    <div className="h-full min-h-0 flex flex-col">
+      <PanelHeader title="Inspector" />
+
+      <div className="shrink-0 border-b border-slate-700 px-2 py-2">
+        <div className="grid grid-cols-3 gap-1">
+          {tabItems.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`rounded px-2 py-1 text-xs transition-colors ${
+                activeTab === tab.id
+                  ? 'bg-slate-700 text-slate-100'
+                  : 'bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 p-3 space-y-3 overflow-y-auto">
+        {activeTab === 'selection' && (
+          <SelectionTab
+            runtimeContext={runtimeContext}
+            graphDriftState={runtimeView?.graphDriftState}
+          />
+        )}
+
+        {activeTab === 'graph' && (
+          <>
+            <SectionCard>
+              <SummaryLabel>Local Graph</SummaryLabel>
+              <div className="space-y-2">
+                <div>
+                  <SummaryLabel>Name</SummaryLabel>
+                  <SummaryValue>{documentName}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Description</SummaryLabel>
+                  <SummaryValue>{documentDescription || 'N/A'}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Blocks</SummaryLabel>
+                  <SummaryValue>{String(nodes.length)}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Connections</SummaryLabel>
+                  <SummaryValue>{String(edges.length)}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Submission Snapshot</SummaryLabel>
+                  <SummaryValue>{graphSubmissionLabel(runtimeView?.graphSubmissionState)}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Submitted At</SummaryLabel>
+                  <SummaryValue>{formatTimestamp(new Date(runtimeView?.graphSubmissionUpdatedAt ?? '').getTime())}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Run Intent</SummaryLabel>
+                  <SummaryValue>{runIntentLabel(runtimeView?.runIntent)}</SummaryValue>
+                </div>
+              </div>
+            </SectionCard>
+          </>
+        )}
+
+        {activeTab === 'session' && (
+          <>
+            <SectionCard>
+              <SummaryLabel>Session</SummaryLabel>
+              <div className="space-y-2">
+                <div>
+                  <SummaryLabel>Session ID</SummaryLabel>
+                  <SummaryValue>{runtimeContext?.sessionId ?? 'none'}</SummaryValue>
+                </div>
+                <div className="flex items-center gap-2">
+                  <SummaryLabel>State</SummaryLabel>
+                  <StatusPill status={runtimeContext?.session?.state ?? (runtimeContext?.sessionId ? 'unknown' : 'unlinked')} />
+                </div>
+                <div>
+                  <SummaryLabel>Session Name</SummaryLabel>
+                  <SummaryValue>{runtimeContext?.session?.name ?? 'N/A'}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Session Created</SummaryLabel>
+                  <SummaryValue>{formatTimestamp(new Date(runtimeContext?.session?.createdAt ?? '').getTime())}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Session Updated</SummaryLabel>
+                  <SummaryValue>{formatTimestamp(new Date(runtimeContext?.session?.updatedAt ?? '').getTime())}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Session Refreshed</SummaryLabel>
+                  <SummaryValue>{formatTimestamp(new Date(runtimeContext?.sessionRefreshedAt ?? '').getTime())}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Graph/Session Sync</SummaryLabel>
+                  <SummaryValue>{runtimeView?.graphDriftState === 'out-of-sync' ? 'linked session stale' : 'linked session in sync'}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Last Error</SummaryLabel>
+                  <SummaryValue>{runtimeContext?.lastError ?? runtimeContext?.session?.lastError ?? 'none'}</SummaryValue>
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  disabled={!activeGraphTabId || !runtimeContext?.sessionId || runtimeContext?.busy}
+                  onClick={() => {
+                    if (activeGraphTabId) {
+                      void refreshSessionStateForTab(activeGraphTabId);
+                    }
+                  }}
+                  className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-100 hover:bg-slate-700 disabled:opacity-50"
+                >
+                  Refresh Session
+                </button>
+              </div>
+            </SectionCard>
+
+            {!runtimeContext?.sessionId && <EmptyState>No session linked to this tab yet.</EmptyState>}
+
+            {runtimeContext?.sessionId && (
+              <SectionCard>
+                <SummaryLabel>Recent Activity</SummaryLabel>
+                {recentActivity.length === 0 ? (
+                  <p className="text-sm text-slate-400">No activity yet.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {recentActivity.map((entry, index) => (
+                      <li key={`${entry.timestamp}-${index}`} className="rounded border border-slate-700 p-2">
+                        <p className="text-[11px] text-slate-400">{formatTimestamp(new Date(entry.timestamp).getTime())}</p>
+                        <p className="text-xs text-slate-100 break-words">{entry.message}</p>
+                        <p className={`text-[11px] ${entry.level === 'error' ? 'text-rose-300' : 'text-slate-500'}`}>action: {entry.action}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </SectionCard>
+            )}
+          </>
+        )}
+
+        {!activeGraphTabId && <EmptyState>No active graph tab selected.</EmptyState>}
+        {activeGraphTabId && !runtimeContext && <EmptyState>Execution context not initialized for this tab yet.</EmptyState>}
+      </div>
+    </div>
+  );
+}
