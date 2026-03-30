@@ -9,8 +9,12 @@ export const blockPortDtoSchema = z
     description: z.string().optional(),
     direction: z.string().optional(),
     cardinality_kind: z.string().optional(),
+    current_port_count: z.number().optional(),
+    render_port_count: z.number().optional(),
     min_port_count: z.number().optional(),
     max_port_count: z.number().optional(),
+    size_parameter: z.string().optional(),
+    handle_name_template: z.string().optional(),
     is_optional: z.boolean().optional(),
   })
   .passthrough();

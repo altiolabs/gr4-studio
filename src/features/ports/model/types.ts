@@ -7,8 +7,13 @@ export type SchemaPort = {
   isOptional?: boolean;
   description?: string;
   cardinalityKind: 'fixed' | 'dynamic';
+  isExplicitDynamicCollection?: boolean;
+  currentPortCount?: number;
+  renderPortCount?: number;
   minPortCount?: number;
   maxPortCount?: number;
+  sizeParameter?: string;
+  handleNameTemplate?: string;
 };
 
 export type RenderedPortInference = 'authoritative' | 'inferred' | 'collapsed';
@@ -18,6 +23,7 @@ export type RenderedPort = {
   direction: PortDirection;
   displayLabel: string;
   portId?: string;
+  handleId?: string;
   sourceSchemaName: string;
   cardinalityKind: 'fixed' | 'dynamic';
   inference: RenderedPortInference;
