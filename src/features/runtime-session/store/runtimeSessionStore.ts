@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { GraphDocument } from '../../graph-document/model/types';
 import { toGrctrlContentSubmission } from '../../runtime-submission/model/toGrctrlPayload';
+import type { BlockDetails } from '../../../lib/api/block-details';
 import { ApiClientError } from '../../../lib/api/client';
 import {
   createSession,
@@ -58,7 +59,11 @@ type RuntimeSessionState = {
   ensureTabContext: (tabId: string) => void;
   removeTabContext: (tabId: string) => void;
   setActiveTab: (tabId: string | null) => void;
-  runTab: (tabId: string, document: GraphDocument) => Promise<void>;
+  runTab: (
+    tabId: string,
+    document: GraphDocument,
+    options?: { blockDetailsByType?: ReadonlyMap<string, BlockDetails> },
+  ) => Promise<void>;
   stopSessionForTab: (tabId: string) => Promise<void>;
   restartSessionForTab: (tabId: string) => Promise<void>;
   deleteSessionForTab: (tabId: string) => Promise<void>;
@@ -455,11 +460,11 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
       set({ activeTabId: tabId });
     },
 
-    runTab: async (tabId, document) => {
+    runTab: async (tabId, document, options) => {
       const actionVersion = beginAction(tabId, 'start');
 
       try {
-        const submission = toGrctrlContentSubmission(document);
+        const submission = toGrctrlContentSubmission(document, options);
         const context = get().contextsByTabId[tabId] ?? createDefaultContext();
 
         const hasSubmissionDrift = context.lastSubmittedHash !== submission.contentHash;

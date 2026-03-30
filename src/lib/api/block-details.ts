@@ -22,6 +22,7 @@ export type BlockParameterMeta = {
   enumSource?: string;
   uiHint?: string;
   allowCustomValue?: boolean;
+  isCollectionLike?: boolean;
 };
 
 export type BlockPortMeta = {
@@ -57,6 +58,8 @@ function toText(value: string | number | boolean | null | undefined): string | u
 
 function normalizeParameter(param: ParameterMetaDto): BlockParameterMeta {
   const readOnly = isReadOnlyRuntimeMutability(param.runtime_mutability);
+  const valueType = param.type;
+  const isCollectionLike = Boolean(valueType && /(?:vector|tensor|collection|array|list)/i.test(valueType));
 
   return {
     name: param.name,
@@ -65,13 +68,14 @@ function normalizeParameter(param: ParameterMetaDto): BlockParameterMeta {
     defaultValue: toText(param.default),
     mutable: !readOnly,
     readOnly,
-    valueType: param.type,
+    valueType,
     valueKind: param.value_kind === 'enum' ? 'enum' : 'scalar',
     enumOptions: param.enum_options,
     enumLabels: param.enum_labels,
     enumSource: param.enum_source,
     uiHint: param.ui_hint,
     allowCustomValue: param.allow_custom_value,
+    isCollectionLike,
   };
 }
 

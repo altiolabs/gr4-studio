@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import { PanelHeader } from '../../components/panel-header';
 import { StatusPill } from '../../components/status-pill';
 import { formatTimestamp } from '../../lib/utils/ui-formatting';
@@ -20,6 +21,7 @@ import { toGrctrlContentSubmission } from '../runtime-submission/model/toGrctrlP
 import { buildStudioBindingView } from '../graph-editor/runtime/known-block-bindings';
 import { toCanonicalBlockDisplayName } from '../graph-editor/model/presentation';
 import type { BlockDetails, BlockParameterMeta } from '../../lib/api/block-details';
+import { getBlockDetails } from '../../lib/api/block-details';
 
 type InspectorTabId = 'selection' | 'graph' | 'session';
 
@@ -625,6 +627,24 @@ export function InspectorPanel() {
   const documentDescription = useEditorStore((state) => state.documentDescription);
   const nodes = useEditorStore((state) => state.nodes);
   const edges = useEditorStore((state) => state.edges);
+  const uniqueBlockTypes = useMemo(() => Array.from(new Set(nodes.map((node) => node.blockTypeId))), [nodes]);
+  const blockDetailQueries = useQueries({
+    queries: uniqueBlockTypes.map((blockTypeId) => ({
+      queryKey: ['block-details', blockTypeId],
+      queryFn: () => getBlockDetails(blockTypeId),
+      staleTime: 60_000,
+    })),
+  });
+  const blockDetailsByType = useMemo(() => {
+    const map = new Map<string, BlockDetails>();
+    uniqueBlockTypes.forEach((blockTypeId, index) => {
+      const query = blockDetailQueries[index];
+      if (query?.data) {
+        map.set(blockTypeId, query.data);
+      }
+    });
+    return map;
+  }, [blockDetailQueries, uniqueBlockTypes]);
 
   const currentSubmissionContent = useMemo(() => {
     const document = graphDocumentFromEditor({
@@ -635,8 +655,8 @@ export function InspectorPanel() {
       nodes,
       edges,
     });
-    return toGrctrlContentSubmission(document).content;
-  }, [documentDescription, documentName, edges, nodes]);
+    return toGrctrlContentSubmission(document, { blockDetailsByType }).content;
+  }, [blockDetailsByType, documentDescription, documentName, edges, nodes]);
 
   const runtimeView = activeGraphTabId ? getTabRuntimeView(activeGraphTabId, currentSubmissionContent) : null;
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toGrctrlContentSubmission } from './toGrctrlPayload';
 import type { GraphDocument } from '../../graph-document/model/types';
+import type { BlockDetails } from '../../../lib/api/block-details';
 
 function makeDocument(name: string, uiConstraintsValue: string): GraphDocument {
   return {
@@ -25,6 +26,63 @@ function makeDocument(name: string, uiConstraintsValue: string): GraphDocument {
       edges: [],
     },
   };
+}
+
+function makeVectorSettingsDocument(name: string): GraphDocument {
+  return {
+    format: 'gr4-studio.graph',
+    version: 1,
+    metadata: {
+      name,
+    },
+    graph: {
+      nodes: [
+        {
+          id: 'pfb_1',
+          blockType: 'gr::incubator::pfb::PfbArbResampler<float32>',
+          title: 'PfbArbResampler<float32>',
+          position: { x: 0, y: 0 },
+          parameters: {
+            taps: { kind: 'expression', value: '' },
+            gain: { kind: 'expression', value: '' },
+            name: { kind: 'expression', value: 'pfb_1' },
+          },
+        },
+      ],
+      edges: [],
+    },
+  };
+}
+
+function makeBlockDetailsMap(): ReadonlyMap<string, BlockDetails> {
+  return new Map([
+    [
+      'gr::incubator::pfb::PfbArbResampler<float32>',
+      {
+        blockTypeId: 'gr::incubator::pfb::PfbArbResampler<float32>',
+        displayName: 'PfbArbResampler<float32>',
+        parameters: [
+          {
+            name: 'taps',
+            label: 'taps',
+            mutable: true,
+            readOnly: false,
+            valueKind: 'scalar',
+            isCollectionLike: true,
+          },
+          {
+            name: 'gain',
+            label: 'gain',
+            mutable: true,
+            readOnly: false,
+            valueKind: 'scalar',
+          },
+        ],
+        inputPorts: [],
+        outputPorts: [],
+      },
+    ],
+  ]);
 }
 
 describe('toGrctrlContentSubmission', () => {
@@ -81,6 +139,24 @@ describe('toGrctrlContentSubmission', () => {
     const submission = toGrctrlContentSubmission(makeDocument('graph', ''));
     expect(submission.content).toContain('ui_constraints: {}');
     expect(submission.content).not.toContain('ui_constraints: ""');
+  });
+
+  it('omits unset collection-like parameters when block metadata marks them as collections', () => {
+    const submission = toGrctrlContentSubmission(makeVectorSettingsDocument('graph'), {
+      blockDetailsByType: makeBlockDetailsMap(),
+    });
+
+    expect(submission.content).not.toContain('taps: ""');
+    expect(submission.content).not.toContain('taps:');
+    expect(submission.content).toContain('gain: ""');
+  });
+
+  it('keeps blank scalar parameters serialized when metadata does not mark them as collections', () => {
+    const document = makeVectorSettingsDocument('graph');
+    const submission = toGrctrlContentSubmission(document);
+
+    expect(submission.content).toContain('taps: ""');
+    expect(submission.content).toContain('gain: ""');
   });
 
   it('produces deterministic output and hash for equivalent documents', () => {
