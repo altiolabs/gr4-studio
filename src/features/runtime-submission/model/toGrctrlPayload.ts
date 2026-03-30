@@ -1,4 +1,5 @@
 import type { GraphDocument } from '../../graph-document/model/types';
+import type { BlockDetails, BlockParameterMeta } from '../../../lib/api/block-details';
 import type { GrcExport } from './types';
 
 function stableHash(input: string): string {
@@ -46,14 +47,50 @@ function renderParameterValue(name: string, rawValue: string): string {
   return sanitizeScalar(trimmed);
 }
 
+type ToGrctrlContentSubmissionOptions = {
+  blockDetailsByType?: ReadonlyMap<string, BlockDetails>;
+};
+
+function getBlockParameterMeta(
+  blockDetailsByType: ReadonlyMap<string, BlockDetails> | undefined,
+  blockType: string,
+  parameterName: string,
+): BlockParameterMeta | undefined {
+  const blockDetails = blockDetailsByType?.get(blockType);
+  return blockDetails?.parameters.find((parameter) => parameter.name === parameterName);
+}
+
+function shouldOmitParameter(
+  blockDetailsByType: ReadonlyMap<string, BlockDetails> | undefined,
+  blockType: string,
+  name: string,
+  rawValue: string,
+): boolean {
+  if (name === 'ui_constraints') {
+    return false;
+  }
+
+  const trimmed = rawValue.trim();
+  if (trimmed) {
+    return false;
+  }
+
+  const parameterMeta = getBlockParameterMeta(blockDetailsByType, blockType, name);
+  return Boolean(parameterMeta?.isCollectionLike);
+}
+
 function indent(lines: string[], spaces = 2): string[] {
   const prefix = ' '.repeat(spaces);
   return lines.map((line) => `${prefix}${line}`);
 }
 
-function serializeGraphDocumentToInlineGrc(document: GraphDocument): string {
+function serializeGraphDocumentToInlineGrc(
+  document: GraphDocument,
+  options?: ToGrctrlContentSubmissionOptions,
+): string {
   const nodes = [...document.graph.nodes].sort((left, right) => left.id.localeCompare(right.id));
   const edges = [...document.graph.edges].sort((left, right) => left.id.localeCompare(right.id));
+  const blockDetailsByType = options?.blockDetailsByType;
 
   const lines: string[] = [];
   lines.push(`# gr4-studio inline grc`);
@@ -76,6 +113,9 @@ function serializeGraphDocumentToInlineGrc(document: GraphDocument): string {
           if (name === 'name') {
             return;
           }
+          if (shouldOmitParameter(blockDetailsByType, node.blockType, name, parameter.value)) {
+            return;
+          }
           lines.push(...indent([`    ${name}: ${renderParameterValue(name, parameter.value)}`]));
         });
       }
@@ -96,8 +136,11 @@ function serializeGraphDocumentToInlineGrc(document: GraphDocument): string {
   return `${lines.join('\n')}\n`;
 }
 
-export function toGrctrlContentSubmission(document: GraphDocument): GrcExport {
-  const content = serializeGraphDocumentToInlineGrc(document);
+export function toGrctrlContentSubmission(
+  document: GraphDocument,
+  options?: ToGrctrlContentSubmissionOptions,
+): GrcExport {
+  const content = serializeGraphDocumentToInlineGrc(document, options);
 
   return {
     graphName: document.metadata.name,

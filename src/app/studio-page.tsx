@@ -228,11 +228,6 @@ export function StudioPage() {
     },
     [replaceGraph],
   );
-  const currentSubmissionContent = useMemo(
-    () => toGrctrlContentSubmission(serializedSnapshot.document).content,
-    [serializedSnapshot.document],
-  );
-
   const sessionByTabId = useMemo(
     () =>
       Object.fromEntries(
@@ -281,6 +276,10 @@ export function StudioPage() {
     });
     return map;
   }, [blockDetailQueries, uniqueBlockTypes]);
+  const currentSubmissionContent = useMemo(
+    () => toGrctrlContentSubmission(serializedSnapshot.document, { blockDetailsByType }).content,
+    [blockDetailsByType, serializedSnapshot.document],
+  );
   const mergedWorkspacePanels = useMemo(
     () =>
       mergeSavedAndDerivedStudioPanels({
@@ -713,7 +712,7 @@ export function StudioPage() {
     }
 
     const document = graphDocumentFromEditor(currentSnapshot);
-    void runTab(activeTabId, document);
+    void runTab(activeTabId, document, { blockDetailsByType });
   };
 
   const applyLayoutEditorSplitDrop = (
