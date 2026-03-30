@@ -1,5 +1,6 @@
-import { Handle, Position, type Node, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals, type Node, type NodeProps } from '@xyflow/react';
 import type { CSSProperties } from 'react';
+import { useEffect } from 'react';
 import type { RenderedPort } from '../ports/model/types';
 import { getPortTypeColor } from '../ports/model/typeColors';
 import type { FlowNodeData } from './model/types';
@@ -78,7 +79,7 @@ function ConnectablePortBadge({ port, index, total, side }: PortBadgeProps) {
 
   return (
     <Handle
-      id={port.portId}
+      id={port.handleId ?? port.portId}
       key={`${side}:${port.key}`}
       type={side === 'left' ? 'target' : 'source'}
       position={side === 'left' ? Position.Left : Position.Right}
@@ -126,9 +127,19 @@ function CollapsedPortBadge({ port, index, total, side }: PortBadgeProps) {
 export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
   const inputPorts = data.renderedInputPorts;
   const outputPorts = data.renderedOutputPorts;
+  const updateNodeInternals = useUpdateNodeInternals();
+  const handleSignature = [
+    ...inputPorts.map((port) => `${port.key}:${port.handleId ?? port.portId ?? ''}`),
+    ...outputPorts.map((port) => `${port.key}:${port.handleId ?? port.portId ?? ''}`),
+  ].join('|');
   const requiredHeightPx = requiredNodeHeightForPorts(
     Math.max(inputPorts.length, outputPorts.length),
   );
+
+  useEffect(() => {
+    updateNodeInternals(data.instanceId);
+  }, [data.instanceId, handleSignature, updateNodeInternals]);
+
   return (
     <div
       className="relative min-w-56 isolate group"

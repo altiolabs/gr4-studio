@@ -28,8 +28,13 @@ export type BlockPortMeta = {
   name: string;
   direction: 'input' | 'output' | 'unknown';
   cardinalityKind: 'fixed' | 'dynamic';
+  isExplicitDynamicCollection?: boolean;
+  currentPortCount?: number;
+  renderPortCount?: number;
   minPortCount?: number;
   maxPortCount?: number;
+  sizeParameter?: string;
+  handleNameTemplate?: string;
   domain?: string;
   valueType?: string;
   isOptional?: boolean;
@@ -74,13 +79,28 @@ function normalizePort(port: PortMetaDto, direction: 'input' | 'output'): BlockP
   const normalizedDirection =
     port.direction === 'input' || port.direction === 'output' ? port.direction : direction;
   const normalizedCardinality = port.cardinality_kind === 'dynamic' ? 'dynamic' : 'fixed';
+  const normalizedMaxPortCount =
+    port.max_port_count !== undefined && port.max_port_count >= 0 ? port.max_port_count : undefined;
+  const isExplicitDynamicCollection =
+    port.cardinality_kind !== undefined ||
+    port.current_port_count !== undefined ||
+    port.render_port_count !== undefined ||
+    port.min_port_count !== undefined ||
+    port.max_port_count !== undefined ||
+    port.size_parameter !== undefined ||
+    port.handle_name_template !== undefined;
 
   return {
     name: port.name,
     direction: normalizedDirection,
     cardinalityKind: normalizedCardinality,
+    isExplicitDynamicCollection,
+    currentPortCount: port.current_port_count,
+    renderPortCount: port.render_port_count,
     minPortCount: port.min_port_count,
-    maxPortCount: port.max_port_count,
+    maxPortCount: normalizedMaxPortCount,
+    sizeParameter: port.size_parameter,
+    handleNameTemplate: port.handle_name_template,
     valueType: port.type,
     isOptional: port.is_optional,
     optional: port.is_optional,

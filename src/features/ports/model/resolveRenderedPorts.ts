@@ -89,6 +89,14 @@ function tryParseNonNegativeInteger(value: string): number | null {
   return parsed;
 }
 
+function normalizePortCount(value: number | undefined): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+
+  return Math.trunc(value);
+}
+
 function clampDynamicCount(count: number, schemaPort: SchemaPort): number {
   const min = Math.max(schemaPort.minPortCount ?? 0, 0);
   const maxFromSchema = schemaPort.maxPortCount;
@@ -106,6 +114,32 @@ function clampDynamicCount(count: number, schemaPort: SchemaPort): number {
   return Math.max(min, Math.min(count, upperBound));
 }
 
+function toReactFlowHandleId(portId: string): string {
+  const safeToken = Array.from(portId)
+    .map((char) => (/^[A-Za-z0-9_-]$/.test(char) ? char : `_${char.codePointAt(0)?.toString(16)}_`))
+    .join('');
+
+  return `handle_${safeToken}`;
+}
+
+function renderHandleName(schemaPort: SchemaPort, index: number): string {
+  const template = schemaPort.handleNameTemplate;
+  if (template) {
+    return template.replace(/\$\{index\}/g, String(index));
+  }
+
+  return `${schemaPort.name}[${index}]`;
+}
+
+function renderHandlePortId(schemaPort: SchemaPort, index: number): string {
+  const template = schemaPort.handleNameTemplate;
+  if (template) {
+    return template.replace(/\$\{index\}/g, String(index));
+  }
+
+  return `${schemaPort.name}#${index}`;
+}
+
 function exactDynamicCountFromSchema(schemaPort: SchemaPort): number | null {
   const min = schemaPort.minPortCount;
   const max = schemaPort.maxPortCount;
@@ -116,6 +150,30 @@ function exactDynamicCountFromSchema(schemaPort: SchemaPort): number | null {
   }
 
   return null;
+}
+
+function explicitDynamicCount(
+  schemaPort: SchemaPort,
+  parameterValues: Record<string, string>,
+): number | null {
+  const sizeParameter = schemaPort.sizeParameter?.trim();
+  if (sizeParameter) {
+    const normalized = normalizeParamMap(parameterValues);
+    const rawValue = normalized[sizeParameter.toLowerCase()];
+    if (rawValue !== undefined) {
+      const parsed = tryParseNonNegativeInteger(rawValue);
+      if (parsed !== null) {
+        return clampDynamicCount(parsed, schemaPort);
+      }
+    }
+  }
+
+  const renderPortCount = normalizePortCount(schemaPort.renderPortCount);
+  if (renderPortCount !== null) {
+    return clampDynamicCount(renderPortCount, schemaPort);
+  }
+
+  return exactDynamicCountFromSchema(schemaPort);
 }
 
 function inferredDynamicCount(schemaPort: SchemaPort, parameterValues: Record<string, string>): number | null {
@@ -140,11 +198,13 @@ function inferredDynamicCount(schemaPort: SchemaPort, parameterValues: Record<st
 }
 
 function fixedRenderedPort(schemaPort: SchemaPort): RenderedPort {
+  const portId = schemaPort.name;
   return {
-    key: `${schemaPort.direction}:${schemaPort.name}`,
+    key: `${schemaPort.direction}:${portId}`,
     direction: schemaPort.direction,
     displayLabel: schemaPort.name,
-    portId: schemaPort.name,
+    portId,
+    handleId: toReactFlowHandleId(portId),
     sourceSchemaName: schemaPort.name,
     cardinalityKind: 'fixed',
     inference: 'authoritative',
@@ -177,10 +237,11 @@ function expandedDynamicRenderedPorts(
   inference: 'authoritative' | 'inferred',
 ): RenderedPort[] {
   return Array.from({ length: count }).map((_, index) => ({
-    key: `${schemaPort.direction}:${schemaPort.name}#${index}`,
+    key: `${schemaPort.direction}:${renderHandlePortId(schemaPort, index)}`,
     direction: schemaPort.direction,
-    displayLabel: `${schemaPort.name}[${index}]`,
-    portId: `${schemaPort.name}#${index}`,
+    displayLabel: renderHandleName(schemaPort, index),
+    portId: renderHandlePortId(schemaPort, index),
+    handleId: toReactFlowHandleId(renderHandlePortId(schemaPort, index)),
     sourceSchemaName: schemaPort.name,
     cardinalityKind: 'dynamic',
     inference,
@@ -194,6 +255,15 @@ function expandedDynamicRenderedPorts(
 function resolveOne(schemaPort: SchemaPort, parameterValues: Record<string, string>): RenderedPort[] {
   if (schemaPort.cardinalityKind === 'fixed') {
     return [fixedRenderedPort(schemaPort)];
+  }
+
+  if (schemaPort.isExplicitDynamicCollection) {
+    const explicitCount = explicitDynamicCount(schemaPort, parameterValues);
+    if (explicitCount !== null) {
+      return expandedDynamicRenderedPorts(schemaPort, explicitCount, 'authoritative');
+    }
+
+    return [collapsedDynamicRenderedPort(schemaPort)];
   }
 
   const exactFromSchema = exactDynamicCountFromSchema(schemaPort);

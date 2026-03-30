@@ -41,8 +41,13 @@ function toSchemaPorts(details: BlockDetails): SchemaPort[] {
       name: port.name,
       direction: port.direction as 'input' | 'output',
       cardinalityKind: port.cardinalityKind,
+      isExplicitDynamicCollection: port.isExplicitDynamicCollection,
+      currentPortCount: port.currentPortCount,
+      renderPortCount: port.renderPortCount,
       minPortCount: port.minPortCount,
       maxPortCount: port.maxPortCount,
+      sizeParameter: port.sizeParameter,
+      handleNameTemplate: port.handleNameTemplate,
       typeName: port.valueType,
       isOptional: port.isOptional,
       description: port.description,
@@ -115,7 +120,19 @@ function toFlowEdge(edge: EditorGraphEdge): Edge {
 type NodePortTypeMap = {
   inputTypes: Map<string, string | undefined>;
   outputTypes: Map<string, string | undefined>;
+  inputHandleIdsByPortId: Map<string, string>;
+  outputHandleIdsByPortId: Map<string, string>;
+  inputPortIdsByHandleId: Map<string, string>;
+  outputPortIdsByHandleId: Map<string, string>;
 };
+
+function toReactFlowHandleId(portId: string): string {
+  const safeToken = Array.from(portId)
+    .map((char) => (/^[A-Za-z0-9_-]$/.test(char) ? char : `_${char.codePointAt(0)?.toString(16)}_`))
+    .join('');
+
+  return `handle_${safeToken}`;
+}
 
 function buildNodePortTypeMap(nodes: Node<FlowNodeData>[]): Map<string, NodePortTypeMap> {
   return new Map(
@@ -127,10 +144,30 @@ function buildNodePortTypeMap(nodes: Node<FlowNodeData>[]): Map<string, NodePort
             .filter((port) => typeof port.portId === 'string')
             .map((port) => [port.portId as string, port.typeName]),
         ),
+        inputHandleIdsByPortId: new Map(
+          node.data.renderedInputPorts
+            .filter((port) => typeof port.portId === 'string')
+            .map((port) => [port.portId as string, port.handleId ?? port.portId ?? '']),
+        ),
+        inputPortIdsByHandleId: new Map(
+          node.data.renderedInputPorts
+            .filter((port) => typeof port.portId === 'string')
+            .map((port) => [port.handleId ?? port.portId ?? '', port.portId as string]),
+        ),
         outputTypes: new Map(
           node.data.renderedOutputPorts
             .filter((port) => typeof port.portId === 'string')
             .map((port) => [port.portId as string, port.typeName]),
+        ),
+        outputHandleIdsByPortId: new Map(
+          node.data.renderedOutputPorts
+            .filter((port) => typeof port.portId === 'string')
+            .map((port) => [port.portId as string, port.handleId ?? port.portId ?? '']),
+        ),
+        outputPortIdsByHandleId: new Map(
+          node.data.renderedOutputPorts
+            .filter((port) => typeof port.portId === 'string')
+            .map((port) => [port.handleId ?? port.portId ?? '', port.portId as string]),
         ),
       },
     ]),
@@ -160,10 +197,16 @@ function toStyledFlowEdge(
   const targetNodePorts = nodePortTypeMap.get(edge.targetInstanceId);
   const sourceType = edge.sourcePort ? sourceNodePorts?.outputTypes.get(edge.sourcePort) : undefined;
   const targetType = edge.targetPort ? targetNodePorts?.inputTypes.get(edge.targetPort) : undefined;
+  const sourceHandle = edge.sourcePort ? sourceNodePorts?.outputHandleIdsByPortId.get(edge.sourcePort) : undefined;
+  const targetHandle = edge.targetPort ? targetNodePorts?.inputHandleIdsByPortId.get(edge.targetPort) : undefined;
   const isMismatched = arePortTypesMismatched(sourceType, targetType);
 
   return {
-    ...toFlowEdge(edge),
+    ...toFlowEdge({
+      ...edge,
+      sourcePort: sourceHandle ?? edge.sourcePort,
+      targetPort: targetHandle ?? edge.targetPort,
+    }),
     style: isMismatched
       ? {
           stroke: '#ff2d2d',
@@ -180,6 +223,7 @@ function buildFallbackRenderedPort(portId: string, direction: 'input' | 'output'
     direction,
     displayLabel: portId,
     portId,
+    handleId: toReactFlowHandleId(portId),
     sourceSchemaName: portId,
     cardinalityKind: 'fixed',
     inference: 'inferred',
@@ -261,12 +305,14 @@ function buildRenderedNodeSignature(nodes: FlowGraphNode[]): string {
       inputPorts: node.data.renderedInputPorts.map((port) => ({
         key: port.key,
         portId: port.portId ?? null,
+        handleId: port.handleId ?? null,
         typeName: port.typeName ?? null,
         connectable: port.connectable,
       })),
       outputPorts: node.data.renderedOutputPorts.map((port) => ({
         key: port.key,
         portId: port.portId ?? null,
+        handleId: port.handleId ?? null,
         typeName: port.typeName ?? null,
         connectable: port.connectable,
       })),
@@ -423,14 +469,25 @@ export function GraphEditorPanel({
         return;
       }
 
+      const sourceNodePorts = nodePortTypeMap.get(connection.source);
+      const targetNodePorts = nodePortTypeMap.get(connection.target);
+      const sourcePort =
+        (connection.sourceHandle && sourceNodePorts?.outputPortIdsByHandleId.get(connection.sourceHandle)) ||
+        connection.sourceHandle ||
+        undefined;
+      const targetPort =
+        (connection.targetHandle && targetNodePorts?.inputPortIdsByHandleId.get(connection.targetHandle)) ||
+        connection.targetHandle ||
+        undefined;
+
       addEdge({
         sourceInstanceId: connection.source,
         targetInstanceId: connection.target,
-        sourcePort: connection.sourceHandle ?? undefined,
-        targetPort: connection.targetHandle ?? undefined,
+        sourcePort,
+        targetPort,
       });
     },
-    [addEdge],
+    [addEdge, nodePortTypeMap],
   );
 
   const onEdgesChange = useCallback(
