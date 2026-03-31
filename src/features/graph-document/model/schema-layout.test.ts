@@ -98,4 +98,79 @@ describe('graph document schema split-tree layout', () => {
       activePanelId: 'panel-a',
     });
   });
+
+  it('parses control panels and widget bindings without loss', () => {
+    const document = parseGraphDocument({
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: {
+        name: 'Graph',
+        studio: {
+          panels: [
+            {
+              id: 'panel-control',
+              kind: 'control',
+              title: 'Controls',
+              visible: true,
+              widgets: [
+                {
+                  id: 'gain',
+                  kind: 'parameter',
+                  label: 'Gain',
+                  inputKind: 'number',
+                  binding: {
+                    nodeId: 'node-a',
+                    parameterName: 'gain',
+                  },
+                  mode: 'staged',
+                },
+              ],
+            },
+          ],
+          layout: {
+            version: 2,
+            root: {
+              kind: 'pane',
+              panelId: 'panel-control',
+            },
+            activePanelId: 'panel-control',
+          },
+        },
+      },
+      graph: {
+        nodes: [],
+        edges: [],
+      },
+    });
+
+    expect(document.metadata.studio?.panels).toEqual([
+      {
+        id: 'panel-control',
+        kind: 'control',
+        title: 'Controls',
+        visible: true,
+        widgets: [
+          {
+            id: 'gain',
+            kind: 'parameter',
+            label: 'Gain',
+            inputKind: 'number',
+            binding: {
+              nodeId: 'node-a',
+              parameterName: 'gain',
+            },
+            mode: 'staged',
+          },
+        ],
+      },
+    ]);
+    expect(document.metadata.studio?.layout).toEqual({
+      version: 2,
+      root: {
+        kind: 'pane',
+        panelId: 'panel-control',
+      },
+      activePanelId: 'panel-control',
+    });
+  });
 });

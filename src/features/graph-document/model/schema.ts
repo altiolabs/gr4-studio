@@ -5,7 +5,14 @@ import {
   type GraphDocument,
 } from './types';
 import { normalizeStudioLayoutSpec } from './studio-layout';
-import type { StudioLayoutNode, StudioLayoutSpec } from './studio-workspace';
+import type {
+  StudioControlPanelSpec,
+  StudioControlWidgetSpec,
+  StudioDataPanelSpec,
+  StudioLayoutNode,
+  StudioLayoutSpec,
+  StudioPanelSpec,
+} from './studio-workspace';
 
 const studioPlotPaletteSchema = z.union([
   z.object({
@@ -27,7 +34,23 @@ const studioPlotStyleConfigSchema = z.object({
   palette: studioPlotPaletteSchema.optional(),
 });
 
-const studioPanelSpecSchema = z.object({
+const studioControlWidgetBindingSchema = z.object({
+  nodeId: z.string().min(1),
+  parameterName: z.string().min(1),
+});
+
+const studioControlWidgetSpecSchema: z.ZodType<StudioControlWidgetSpec> = z.object({
+  id: z.string().min(1),
+  kind: z.literal('parameter'),
+  binding: studioControlWidgetBindingSchema,
+  label: z.string().optional(),
+  inputKind: z.enum(['text', 'number', 'slider', 'boolean', 'enum']),
+  enumOptions: z.array(z.string().min(1)).optional(),
+  enumLabels: z.record(z.string(), z.string()).optional(),
+  mode: z.enum(['staged', 'immediate']).optional(),
+});
+
+const studioDataPanelSpecSchema: z.ZodType<StudioDataPanelSpec> = z.object({
   id: z.string().min(1),
   nodeId: z.string().min(1),
   kind: z.enum(['series', 'series2d', 'image', 'audio']),
@@ -36,6 +59,21 @@ const studioPanelSpecSchema = z.object({
   previewOnCanvas: z.boolean(),
   plotStyle: studioPlotStyleConfigSchema.optional(),
 });
+
+const studioControlPanelSpecSchema: z.ZodType<StudioControlPanelSpec> = z.object({
+  id: z.string().min(1),
+  kind: z.literal('control'),
+  title: z.string().optional(),
+  visible: z.boolean(),
+  previewOnCanvas: z.literal(false).optional(),
+  widgets: z.array(studioControlWidgetSpecSchema),
+  nodeId: z.string().optional(),
+});
+
+const studioPanelSpecSchema: z.ZodType<StudioPanelSpec> = z.union([
+  studioDataPanelSpecSchema,
+  studioControlPanelSpecSchema,
+]);
 
 const studioLayoutNodeSchema: z.ZodType<StudioLayoutNode> = z.lazy(() =>
   z.union([

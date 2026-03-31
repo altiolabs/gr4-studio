@@ -27,6 +27,7 @@ import { buildDefaultStudioPlotPalettes } from '../features/application/plotting
 import { BlockCatalogPanel } from '../features/block-catalog/block-catalog-panel';
 import { useBlockCatalogQuery } from '../features/block-catalog/hooks/use-block-catalog-query';
 import { BlockPropertiesModal } from '../features/block-properties/block-properties-modal';
+import { resolveControlPanelWidgetBindings } from '../features/control-panels/control-panel-binding-resolution';
 import { graphDocumentFromEditor } from '../features/graph-document/model/fromEditor';
 import {
   applySplitDropToLayout,
@@ -48,6 +49,15 @@ import { deriveDefaultStudioPanelsFromNodes } from '../features/workspace/model/
 import { buildEffectiveStudioLayout } from '../features/workspace/model/layout';
 import { mergeSavedAndDerivedStudioPanels } from '../features/workspace/model/panel-merge';
 import { buildDisambiguatedPanelTitles } from '../features/workspace/model/panel-titles';
+import {
+  addEmptyControlPanelToPanels,
+  renameControlPanelTitle,
+  moveControlWidgetInPanel,
+  removeControlWidgetFromPanel,
+  moveControlWidgetToPanel,
+  updateControlWidgetInputKind,
+  updateControlWidgetLabel,
+} from '../features/control-panels/control-panel-authoring';
 import { PlotStyleModal } from '../features/workspace/plot-style-modal';
 import type { StudioPlotStyleConfig } from '../features/graph-document/model/studio-workspace';
 import { getBlockDetails, type BlockDetails } from '../lib/api/block-details';
@@ -292,6 +302,17 @@ export function StudioPage() {
     () => (studioPlotPalettes && studioPlotPalettes.length > 0 ? studioPlotPalettes : buildDefaultStudioPlotPalettes()),
     [studioPlotPalettes],
   );
+  const activeCenterView: CenterViewMode = activeTabId ? centerViewByTabId[activeTabId] ?? 'graph' : 'graph';
+  const runtimeView = activeTabId ? getTabRuntimeView(activeTabId, currentSubmissionContent) : null;
+  const activeRuntimeContext = activeTabId ? runtimeContextsByTabId[activeTabId] : null;
+  const controlWidgetRuntime =
+    activeRuntimeContext && runtimeView
+      ? {
+          sessionId: activeRuntimeContext.sessionId,
+          executionState: runtimeView.executionState,
+          graphDriftState: runtimeView.graphDriftState,
+        }
+      : null;
   const workspacePanelEntries = useMemo<WorkspacePanelViewModel[]>(() => {
     const nodeById = new Map(nodes.map((node) => [node.instanceId, node]));
     const nodePanelTitlesById = buildDisambiguatedPanelTitles(
@@ -303,8 +324,34 @@ export function StudioPage() {
     );
 
     return mergedWorkspacePanels.map((panel) => {
+      if (!panel.nodeId) {
+        if (panel.kind === 'control') {
+          return {
+            panel,
+            controlWidgets: resolveControlPanelWidgetBindings({
+              panel,
+              nodeById,
+              blockDetailsByType,
+              runtime: controlWidgetRuntime,
+            }),
+          };
+        }
+        return { panel };
+      }
+
       const sourceNode = nodeById.get(panel.nodeId);
       if (!sourceNode) {
+        if (panel.kind === 'control') {
+          return {
+            panel,
+            controlWidgets: resolveControlPanelWidgetBindings({
+              panel,
+              nodeById,
+              blockDetailsByType,
+              runtime: controlWidgetRuntime,
+            }),
+          };
+        }
         return { panel };
       }
 
@@ -314,6 +361,16 @@ export function StudioPage() {
       );
       const bindingView = buildStudioBindingView(sourceNode.blockTypeId, effectiveParameterValues);
 
+      const controlWidgets =
+        panel.kind === 'control'
+          ? resolveControlPanelWidgetBindings({
+              panel,
+              nodeById,
+              blockDetailsByType,
+              runtime: controlWidgetRuntime,
+            })
+          : undefined;
+
       return {
         panel,
         studioPlotPalettes: effectiveStudioPlotPalettes,
@@ -321,22 +378,20 @@ export function StudioPage() {
         nodeDisplayName: sourceNode.displayName,
         nodeBlockTypeId: sourceNode.blockTypeId,
         nodeParameters: effectiveParameterValues,
+        controlWidgets,
         bindingStatus: bindingView.status,
         bindingTransport: bindingView.transport,
         bindingEndpoint: bindingView.endpoint,
         bindingPollMs: bindingView.pollMs,
       };
     });
-  }, [blockDetailsByType, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes]);
+  }, [blockDetailsByType, controlWidgetRuntime, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes]);
 
   const workspaceLayout = useMemo(
     () => buildEffectiveStudioLayout(studioLayout, mergedWorkspacePanels),
     [mergedWorkspacePanels, studioLayout],
   );
 
-  const activeCenterView: CenterViewMode = activeTabId ? centerViewByTabId[activeTabId] ?? 'graph' : 'graph';
-  const runtimeView = activeTabId ? getTabRuntimeView(activeTabId, currentSubmissionContent) : null;
-  const activeRuntimeContext = activeTabId ? runtimeContextsByTabId[activeTabId] : null;
   const activePlotStyleEditorEntry = useMemo(
     () =>
       plotStyleEditorPanelId
@@ -740,6 +795,49 @@ export function StudioPage() {
     setStudioLayout(nextLayout);
   };
 
+  const createEmptyControlPanel = () => {
+    const result = addEmptyControlPanelToPanels(mergedWorkspacePanels);
+    setStudioPanels(result.panels);
+    setStudioLayout({
+      ...buildEffectiveStudioLayout(studioLayout, result.panels),
+      activePanelId: result.panelId,
+    });
+  };
+
+  const renameControlPanel = (panelId: string, title: string) => {
+    setStudioPanels(renameControlPanelTitle(mergedWorkspacePanels, panelId, title));
+  };
+
+  const updateControlWidgetLabelInWorkspace = (panelId: string, widgetId: string, label: string) => {
+    setStudioPanels(updateControlWidgetLabel(mergedWorkspacePanels, panelId, widgetId, label));
+  };
+
+  const updateControlWidgetInputKindInWorkspace = (
+    panelId: string,
+    widgetId: string,
+    inputKind: 'text' | 'number' | 'slider' | 'boolean' | 'enum',
+  ) => {
+    setStudioPanels(updateControlWidgetInputKind(mergedWorkspacePanels, panelId, widgetId, inputKind));
+  };
+
+  const moveControlWidgetInWorkspace = (panelId: string, widgetId: string, direction: 'up' | 'down') => {
+    setStudioPanels(moveControlWidgetInPanel(mergedWorkspacePanels, panelId, widgetId, direction));
+  };
+
+  const removeControlWidgetInWorkspace = (panelId: string, widgetId: string) => {
+    setStudioPanels(removeControlWidgetFromPanel(mergedWorkspacePanels, panelId, widgetId));
+  };
+
+  const moveControlWidgetToPanelInWorkspace = (panelId: string, widgetId: string, targetPanelId: string) => {
+    setStudioPanels(
+      moveControlWidgetToPanel(mergedWorkspacePanels, {
+        sourcePanelId: panelId,
+        targetPanelId,
+        widgetId,
+      }),
+    );
+  };
+
   const updatePanelPlotStyle = (panelId: string, plotStyle: StudioPlotStyleConfig | undefined) => {
     const nextPanels = mergedWorkspacePanels.map((panel) => {
       if (panel.id !== panelId) {
@@ -995,6 +1093,13 @@ export function StudioPage() {
                 onSplitDrop={applyLayoutEditorSplitDrop}
                 onSplitSizesChange={applyLayoutEditorSplitSizes}
                 onOpenPanelPlotStyleEditor={(entry) => setPlotStyleEditorPanelId(entry.panel.id)}
+                onCreateControlPanel={createEmptyControlPanel}
+                onRenameControlPanel={renameControlPanel}
+                onUpdateControlWidgetLabel={updateControlWidgetLabelInWorkspace}
+                onUpdateControlWidgetInputKind={updateControlWidgetInputKindInWorkspace}
+                onMoveControlWidget={moveControlWidgetInWorkspace}
+                onRemoveControlWidget={removeControlWidgetInWorkspace}
+                onMoveControlWidgetToPanel={moveControlWidgetToPanelInWorkspace}
               />
             ) : (
               <ApplicationView

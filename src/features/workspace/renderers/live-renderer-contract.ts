@@ -2,7 +2,7 @@ import type { StudioPanelKind } from '../../graph-document/model/studio-workspac
 
 export type WorkspaceLivePanelIdentity = {
   panelId: string;
-  nodeId: string;
+  nodeId?: string;
   kind: StudioPanelKind;
   title?: string;
 };

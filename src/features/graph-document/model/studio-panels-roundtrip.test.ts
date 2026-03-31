@@ -54,4 +54,51 @@ describe('studio panel metadata round-trip', () => {
     expect(restored.metadata.studioLayout).toEqual(snapshot.metadata.studioLayout);
     expect(restored.metadata.studioPlotPalettes).toEqual(snapshot.metadata.studioPlotPalettes);
   });
+
+  it('preserves control panels and widgets between editor snapshot and graph document', () => {
+    const snapshot = {
+      metadata: {
+        name: 'Graph',
+        studioPanels: [
+          {
+            id: 'studio-control:node-1',
+            kind: 'control' as const,
+            title: 'Controls',
+            visible: true,
+            widgets: [
+              {
+                id: 'gain',
+                kind: 'parameter' as const,
+                label: 'Gain',
+                inputKind: 'number' as const,
+                binding: {
+                  nodeId: 'node-1',
+                  parameterName: 'gain',
+                },
+                mode: 'immediate' as const,
+              },
+              {
+                id: 'enabled',
+                kind: 'parameter' as const,
+                label: 'Enabled',
+                inputKind: 'boolean' as const,
+                binding: {
+                  nodeId: 'node-2',
+                  parameterName: 'enabled',
+                },
+              },
+            ],
+          },
+        ],
+      },
+      nodes: [],
+      edges: [],
+    };
+
+    const document = graphDocumentFromEditor(snapshot);
+    expect(document.metadata.studio?.panels).toEqual(snapshot.metadata.studioPanels);
+
+    const restored = editorGraphFromDocument(document);
+    expect(restored.metadata.studioPanels).toEqual(snapshot.metadata.studioPanels);
+  });
 });

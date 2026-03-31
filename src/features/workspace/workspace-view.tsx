@@ -20,6 +20,8 @@ import { collectLayoutPaneIds } from '../graph-document/model/studio-layout';
 import type { SplitDropPosition } from '../graph-document/model/studio-layout';
 import type { ReactNode } from 'react';
 import type { SplitNodePath } from '../graph-document/model/studio-layout';
+import { ControlPanelView } from '../control-panels/control-panel-view';
+import type { ResolvedControlWidget } from '../control-panels/control-panel-binding-resolution';
 
 export type WorkspacePanelViewModel = {
   panel: StudioPanelSpec;
@@ -28,10 +30,24 @@ export type WorkspacePanelViewModel = {
   nodeDisplayName?: string;
   nodeBlockTypeId?: string;
   nodeParameters?: Readonly<Record<string, string>>;
+  controlWidgets?: readonly ResolvedControlWidget[];
   bindingStatus?: 'unsupported' | 'unconfigured' | 'configured' | 'invalid';
   bindingTransport?: string;
   bindingEndpoint?: string;
   bindingPollMs?: number;
+};
+
+export type WorkspacePanelEditHandlers = {
+  onRenameControlPanel?: (panelId: string, title: string) => void;
+  onUpdateControlWidgetLabel?: (panelId: string, widgetId: string, label: string) => void;
+  onUpdateControlWidgetInputKind?: (
+    panelId: string,
+    widgetId: string,
+    inputKind: 'text' | 'number' | 'slider' | 'boolean' | 'enum',
+  ) => void;
+  onMoveControlWidget?: (panelId: string, widgetId: string, direction: 'up' | 'down') => void;
+  onRemoveControlWidget?: (panelId: string, widgetId: string) => void;
+  onMoveControlWidgetToPanel?: (panelId: string, widgetId: string, targetPanelId: string) => void;
 };
 
 type WorkspaceViewProps = {
@@ -40,7 +56,8 @@ type WorkspaceViewProps = {
   onSplitDrop?: (draggedPanelId: string, targetPanelId: string, position: SplitDropPosition) => void;
   onSplitSizesChange?: (splitPath: SplitNodePath, sizes: number[]) => void;
   onOpenPanelPlotStyleEditor?: (entry: WorkspacePanelViewModel) => void;
-};
+  onCreateControlPanel?: () => void;
+} & WorkspacePanelEditHandlers;
 
 const edgeDropCollisionDetection: CollisionDetection = (args) => {
   const edgeTargets = args.droppableContainers.filter((container) =>
@@ -60,12 +77,30 @@ function LayoutEditorPane({
   entry,
   isActive,
   dragHandleProps,
+  controlPanelOptions,
   onOpenPanelPlotStyleEditor,
+  onRenameControlPanel,
+  onUpdateControlWidgetLabel,
+  onUpdateControlWidgetInputKind,
+  onMoveControlWidget,
+  onRemoveControlWidget,
+  onMoveControlWidgetToPanel,
 }: {
   entry: WorkspacePanelViewModel;
   isActive: boolean;
   dragHandleProps?: Record<string, unknown>;
+  controlPanelOptions: readonly { id: string; title?: string; widgetCount: number }[];
   onOpenPanelPlotStyleEditor?: (entry: WorkspacePanelViewModel) => void;
+  onRenameControlPanel?: (panelId: string, title: string) => void;
+  onUpdateControlWidgetLabel?: (panelId: string, widgetId: string, label: string) => void;
+  onUpdateControlWidgetInputKind?: (
+    panelId: string,
+    widgetId: string,
+    inputKind: 'text' | 'number' | 'slider' | 'boolean' | 'enum',
+  ) => void;
+  onMoveControlWidget?: (panelId: string, widgetId: string, direction: 'up' | 'down') => void;
+  onRemoveControlWidget?: (panelId: string, widgetId: string) => void;
+  onMoveControlWidgetToPanel?: (panelId: string, widgetId: string, targetPanelId: string) => void;
 }) {
   const { panel } = entry;
   const paneTitle = entry.nodePanelTitle ?? panel.title ?? entry.nodeDisplayName ?? panel.nodeId;
@@ -85,32 +120,71 @@ function LayoutEditorPane({
           <span className="inline-flex h-5 w-4 items-center justify-center rounded border border-slate-600/70 bg-slate-800/70 text-[9px] leading-none text-slate-300">
             ::
           </span>
-          <h3 className="text-sm font-semibold text-slate-100 truncate" title={paneTitle}>
-            {paneTitle}
-          </h3>
+          {panel.kind === 'control' && onRenameControlPanel ? (
+            <input
+              type="text"
+              defaultValue={panel.title ?? ''}
+              placeholder="Controls"
+              onPointerDown={(event) => event.stopPropagation()}
+              onBlur={(event) => onRenameControlPanel(panel.id, event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.currentTarget.blur();
+                }
+              }}
+              className="min-w-0 max-w-[14rem] rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm font-semibold text-slate-100 outline-none focus:border-cyan-500"
+            />
+          ) : (
+            <h3 className="text-sm font-semibold text-slate-100 truncate" title={paneTitle}>
+              {paneTitle}
+            </h3>
+          )}
         </div>
         <span className="shrink-0 rounded border border-slate-600 bg-slate-800 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-200">
           {panel.kind}
         </span>
       </header>
       <div className="flex-1 p-3">
-        <div className="h-full min-h-[6.5rem] rounded border border-dashed border-slate-700/90 bg-slate-950/40 px-2 py-2 flex flex-col justify-between gap-2">
-          {isPlotPanel && onOpenPanelPlotStyleEditor ? (
-            <div className="flex items-center justify-start">
-              <button
-                type="button"
-                onClick={() => onOpenPanelPlotStyleEditor(entry)}
-                className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
-              >
-                Plot Style…
-              </button>
-            </div>
-          ) : null}
-          <span className="text-xs text-slate-400">Pane preview</span>
-          <span className="text-[10px] text-slate-500 truncate" title={panel.nodeId}>
-            {panel.nodeId}
-          </span>
-        </div>
+        {panel.kind === 'control' ? (
+          <div className="h-full min-h-[6.5rem] rounded border border-dashed border-slate-700/90 bg-slate-950/40 px-2 py-2 space-y-2">
+            <ControlPanelView
+              panelId={panel.id}
+              widgets={entry.controlWidgets ?? []}
+              isEditable={Boolean(
+                onUpdateControlWidgetLabel ||
+                  onUpdateControlWidgetInputKind ||
+                  onMoveControlWidget ||
+                  onRemoveControlWidget ||
+                  onMoveControlWidgetToPanel,
+              )}
+              isPanelSelected={isActive}
+              controlPanelOptions={controlPanelOptions}
+              onUpdateWidgetLabel={onUpdateControlWidgetLabel}
+              onUpdateWidgetInputKind={onUpdateControlWidgetInputKind}
+              onMoveWidget={onMoveControlWidget}
+              onRemoveWidget={onRemoveControlWidget}
+              onMoveWidgetToPanel={onMoveControlWidgetToPanel}
+            />
+          </div>
+        ) : (
+          <div className="h-full min-h-[6.5rem] rounded border border-dashed border-slate-700/90 bg-slate-950/40 px-2 py-2 flex flex-col justify-between gap-2">
+            {isPlotPanel && onOpenPanelPlotStyleEditor ? (
+              <div className="flex items-center justify-start">
+                <button
+                  type="button"
+                  onClick={() => onOpenPanelPlotStyleEditor(entry)}
+                  className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800"
+                >
+                  Plot Style…
+                </button>
+              </div>
+            ) : null}
+            <span className="text-xs text-slate-400">Pane preview</span>
+            <span className="text-[10px] text-slate-500 truncate" title={panel.nodeId}>
+              {panel.nodeId}
+            </span>
+          </div>
+        )}
       </div>
     </article>
   );
@@ -186,12 +260,30 @@ function LayoutTreePaneNode({
   entry,
   activePanelId,
   activeDragPanelId,
+  controlPanelOptions,
   onOpenPanelPlotStyleEditor,
+  onRenameControlPanel,
+  onUpdateControlWidgetLabel,
+  onUpdateControlWidgetInputKind,
+  onMoveControlWidget,
+  onRemoveControlWidget,
+  onMoveControlWidgetToPanel,
 }: {
   entry: WorkspacePanelViewModel;
   activePanelId?: string;
   activeDragPanelId: string | null;
+  controlPanelOptions: readonly { id: string; title?: string; widgetCount: number }[];
   onOpenPanelPlotStyleEditor?: (entry: WorkspacePanelViewModel) => void;
+  onRenameControlPanel?: (panelId: string, title: string) => void;
+  onUpdateControlWidgetLabel?: (panelId: string, widgetId: string, label: string) => void;
+  onUpdateControlWidgetInputKind?: (
+    panelId: string,
+    widgetId: string,
+    inputKind: 'text' | 'number' | 'slider' | 'boolean' | 'enum',
+  ) => void;
+  onMoveControlWidget?: (panelId: string, widgetId: string, direction: 'up' | 'down') => void;
+  onRemoveControlWidget?: (panelId: string, widgetId: string) => void;
+  onMoveControlWidgetToPanel?: (panelId: string, widgetId: string, targetPanelId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef } = useDraggable({
     id: entry.panel.id,
@@ -206,7 +298,14 @@ function LayoutTreePaneNode({
         entry={entry}
         isActive={activePanelId === entry.panel.id}
         dragHandleProps={{ ...listeners, ...attributes }}
+        controlPanelOptions={controlPanelOptions}
         onOpenPanelPlotStyleEditor={onOpenPanelPlotStyleEditor}
+        onRenameControlPanel={onRenameControlPanel}
+        onUpdateControlWidgetLabel={onUpdateControlWidgetLabel}
+        onUpdateControlWidgetInputKind={onUpdateControlWidgetInputKind}
+        onMoveControlWidget={onMoveControlWidget}
+        onRemoveControlWidget={onRemoveControlWidget}
+        onMoveControlWidgetToPanel={onMoveControlWidgetToPanel}
       />
       <DropTarget position="left" targetPanelId={entry.panel.id} activeDragPanelId={activeDragPanelId} />
       <DropTarget position="right" targetPanelId={entry.panel.id} activeDragPanelId={activeDragPanelId} />
@@ -222,16 +321,34 @@ function renderLayoutTreeNode({
   visibleEntryByPanelId,
   activePanelId,
   activeDragPanelId,
+  controlPanelOptions,
   onSplitSizesChange,
   onOpenPanelPlotStyleEditor,
+  onRenameControlPanel,
+  onUpdateControlWidgetLabel,
+  onUpdateControlWidgetInputKind,
+  onMoveControlWidget,
+  onRemoveControlWidget,
+  onMoveControlWidgetToPanel,
 }: {
   node: StudioLayoutNode;
   nodePath: readonly number[];
   visibleEntryByPanelId: ReadonlyMap<string, WorkspacePanelViewModel>;
   activePanelId?: string;
   activeDragPanelId: string | null;
+  controlPanelOptions: readonly { id: string; title?: string; widgetCount: number }[];
   onSplitSizesChange?: (splitPath: SplitNodePath, sizes: number[]) => void;
   onOpenPanelPlotStyleEditor?: (entry: WorkspacePanelViewModel) => void;
+  onRenameControlPanel?: (panelId: string, title: string) => void;
+  onUpdateControlWidgetLabel?: (panelId: string, widgetId: string, label: string) => void;
+  onUpdateControlWidgetInputKind?: (
+    panelId: string,
+    widgetId: string,
+    inputKind: 'text' | 'number' | 'slider' | 'boolean' | 'enum',
+  ) => void;
+  onMoveControlWidget?: (panelId: string, widgetId: string, direction: 'up' | 'down') => void;
+  onRemoveControlWidget?: (panelId: string, widgetId: string) => void;
+  onMoveControlWidgetToPanel?: (panelId: string, widgetId: string, targetPanelId: string) => void;
 }): ReactNode {
   if (node.kind === 'pane') {
     const entry = visibleEntryByPanelId.get(node.panelId);
@@ -243,7 +360,14 @@ function renderLayoutTreeNode({
         entry={entry}
         activePanelId={activePanelId}
         activeDragPanelId={activeDragPanelId}
+        controlPanelOptions={controlPanelOptions}
         onOpenPanelPlotStyleEditor={onOpenPanelPlotStyleEditor}
+        onRenameControlPanel={onRenameControlPanel}
+        onUpdateControlWidgetLabel={onUpdateControlWidgetLabel}
+        onUpdateControlWidgetInputKind={onUpdateControlWidgetInputKind}
+        onMoveControlWidget={onMoveControlWidget}
+        onRemoveControlWidget={onRemoveControlWidget}
+        onMoveControlWidgetToPanel={onMoveControlWidgetToPanel}
       />
     );
   }
@@ -257,8 +381,15 @@ function renderLayoutTreeNode({
         visibleEntryByPanelId,
         activePanelId,
         activeDragPanelId,
+        controlPanelOptions,
         onSplitSizesChange,
         onOpenPanelPlotStyleEditor,
+        onRenameControlPanel,
+        onUpdateControlWidgetLabel,
+        onUpdateControlWidgetInputKind,
+        onMoveControlWidget,
+        onRemoveControlWidget,
+        onMoveControlWidgetToPanel,
       }),
     }))
     .filter((item) => item.node !== null);
@@ -349,6 +480,13 @@ export function WorkspaceView({
   onSplitDrop,
   onSplitSizesChange,
   onOpenPanelPlotStyleEditor,
+  onCreateControlPanel,
+  onRenameControlPanel,
+  onUpdateControlWidgetLabel,
+  onUpdateControlWidgetInputKind,
+  onMoveControlWidget,
+  onRemoveControlWidget,
+  onMoveControlWidgetToPanel,
 }: WorkspaceViewProps) {
   const [activeDragPanelId, setActiveDragPanelId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -360,6 +498,15 @@ export function WorkspaceView({
   );
   const visibleEntries = panelEntries.filter((entry) => entry.panel.visible);
   const visibleEntryByPanelId = new Map(visibleEntries.map((entry) => [entry.panel.id, entry]));
+  const controlPanelEntries = panelEntries.filter(
+    (entry): entry is WorkspacePanelViewModel & { panel: Extract<StudioPanelSpec, { kind: 'control' }> } =>
+      entry.panel.kind === 'control',
+  );
+  const controlPanelOptions = controlPanelEntries.map((entry) => ({
+    id: entry.panel.id,
+    title: entry.panel.title,
+    widgetCount: entry.panel.widgets.length,
+  }));
   const visiblePaneCount = collectLayoutPaneIds(layout.root).filter((panelId) =>
     visibleEntryByPanelId.has(panelId),
   ).length;
@@ -371,6 +518,13 @@ export function WorkspaceView({
     activeDragPanelId,
     onSplitSizesChange,
     onOpenPanelPlotStyleEditor,
+    onRenameControlPanel,
+    onUpdateControlWidgetLabel,
+    onUpdateControlWidgetInputKind,
+    onMoveControlWidget,
+    onRemoveControlWidget,
+    onMoveControlWidgetToPanel,
+    controlPanelOptions,
   });
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -415,6 +569,15 @@ export function WorkspaceView({
           <p className="mt-1 text-xs text-slate-400">
             Add supported Studio sink blocks to generate default layout panels.
           </p>
+          {onCreateControlPanel && (
+            <button
+              type="button"
+              onClick={onCreateControlPanel}
+              className="mt-4 rounded border border-emerald-700/70 bg-emerald-900/30 px-3 py-1.5 text-xs text-emerald-100 hover:bg-emerald-800/40"
+            >
+              New control panel
+            </button>
+          )}
         </div>
       </div>
     );
@@ -423,10 +586,23 @@ export function WorkspaceView({
   return (
     <div className="h-full w-full p-4 overflow-auto">
       <div className="rounded border border-border bg-panel p-3 h-full min-h-[24rem] flex flex-col">
-        <h2 className="text-sm font-semibold text-slate-100">Layout Editor</h2>
-        <p className="mt-1 text-xs text-slate-400">
-          {visiblePaneCount} visible panel{visiblePaneCount === 1 ? '' : 's'}
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-100">Layout Editor</h2>
+            <p className="mt-1 text-xs text-slate-400">
+              {visiblePaneCount} visible panel{visiblePaneCount === 1 ? '' : 's'}
+            </p>
+          </div>
+          {onCreateControlPanel && (
+            <button
+              type="button"
+              onClick={onCreateControlPanel}
+              className="rounded border border-emerald-700/70 bg-emerald-900/30 px-3 py-1.5 text-xs text-emerald-100 hover:bg-emerald-800/40"
+            >
+              New control panel
+            </button>
+          )}
+        </div>
         <DndContext
           sensors={sensors}
           collisionDetection={edgeDropCollisionDetection}
