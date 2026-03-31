@@ -35,6 +35,7 @@ Rules:
 - `StudioSeriesSink`
 - `Studio2DSeriesSink`
 - `StudioDataSetSink`
+- `StudioPowerSpectrumSink`
 - `StudioAudioMonitor`
 - `StudioImageSink`
 
@@ -43,6 +44,7 @@ The code currently registers concrete type variants for each family, for example
 - `gr::studio::StudioSeriesSink<...>`
 - `gr::studio::Studio2DSeriesSink<...>`
 - `gr::studio::StudioDataSetSink<...>`
+- `gr::studio::StudioPowerSpectrumSink<...>`
 - `gr::studio::StudioAudioMonitor<...>`
 - `gr::studio::StudioImageSink<...>`
 
@@ -102,6 +104,7 @@ Rendering is handled separately:
 
 - scalar series -> live `series` renderer path
 - `series2d-xy-json-v1` and `dataset-xy-json-v1` -> XY/vector plot path
+- `StudioPowerSpectrumSink` uses the `dataset-xy-json-v1` path for FFT-based spectrum rendering
 - image and audio panel kinds -> separate renderers
 
 Payload details live in:

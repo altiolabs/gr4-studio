@@ -189,6 +189,26 @@ describe('derivePlotPanelSpec', () => {
     expect(spec?.view.xMode).toBe('frequency');
   });
 
+  it('derives dataset-xy payload format from StudioPowerSpectrumSink IDs', () => {
+    const spec = derivePlotPanelSpec(
+      makeSeriesEntry({
+        panel: {
+          id: 'studio-panel:node-spectrum',
+          nodeId: 'node-spectrum',
+          kind: 'series2d',
+          title: 'Spectrum',
+          visible: true,
+          previewOnCanvas: false,
+        },
+        nodeBlockTypeId: 'gr::studio::StudioPowerSpectrumSink<float32>',
+      }),
+    );
+
+    expect(spec?.kind).toBe('timeseries');
+    expect(spec?.source.payloadFormat).toBe('dataset-xy-json-v1');
+    expect(spec?.view.xMode).toBe('frequency');
+  });
+
   it('derives fixed axis ranges when autoscale is disabled', () => {
     const spec = derivePlotPanelSpec(
       makeSeriesEntry({
