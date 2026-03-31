@@ -3,8 +3,8 @@ import { useQueries } from '@tanstack/react-query';
 import {
   applyNodeChanges,
   Background,
-  Controls,
   ReactFlow,
+  useReactFlow,
   type Connection,
   type Edge,
   type EdgeChange,
@@ -33,6 +33,48 @@ const nodeTypes = {
 };
 
 type FlowGraphNode = Node<FlowNodeData>;
+
+function GraphCanvasControls() {
+  const reactFlow = useReactFlow();
+
+  return (
+    <div className="absolute bottom-3 left-3 z-20 overflow-hidden rounded-xl border border-slate-700/80 bg-slate-950/90 p-0.5 shadow-[0_10px_30px_rgba(0,0,0,0.28)] backdrop-blur">
+      <div className="flex flex-col gap-1">
+        <button
+          type="button"
+          title="Zoom in"
+          onClick={() => reactFlow.zoomIn({ duration: 160 })}
+          className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-100 transition-colors hover:border-slate-500 hover:bg-slate-800"
+        >
+          <span className="text-sm leading-none">+</span>
+        </button>
+        <button
+          type="button"
+          title="Zoom out"
+          onClick={() => reactFlow.zoomOut({ duration: 160 })}
+          className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-100 transition-colors hover:border-slate-500 hover:bg-slate-800"
+        >
+          <span className="text-sm leading-none">−</span>
+        </button>
+        <button
+          type="button"
+          title="Fit view"
+          onClick={() => {
+            void reactFlow.fitView({ duration: 180, padding: 0.2 });
+          }}
+          className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-100 transition-colors hover:border-slate-500 hover:bg-slate-800"
+        >
+          <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M3 2.5A.5.5 0 0 0 2.5 3v2a.5.5 0 0 0 1 0V3.5H5a.5.5 0 0 0 0-1H3Zm8 0a.5.5 0 0 0 0 1h1.5V5a.5.5 0 0 0 1 0V3a.5.5 0 0 0-.5-.5H11ZM2.5 11v2A.5.5 0 0 0 3 13.5h2a.5.5 0 0 0 0-1H3.5V11a.5.5 0 0 0-1 0Zm11 0v1.5H12a.5.5 0 0 0 0 1h2a.5.5 0 0 0 .5-.5v-2a.5.5 0 0 0-1 0ZM5.25 5.25l-.94-.94A.5.5 0 0 0 3.5 4.66l.94.94a.5.5 0 1 0 .71-.71Zm5.5 0a.5.5 0 0 0 .71.71l.94-.94a.5.5 0 1 0-.71-.71l-.94.94ZM4.67 12.5l-.94.94a.5.5 0 1 0 .71.71l.94-.94a.5.5 0 1 0-.71-.71Zm6.66 0a.5.5 0 0 0-.71.71l.94.94a.5.5 0 1 0 .71-.71l-.94-.94Z"
+            />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function toSchemaPorts(details: BlockDetails): SchemaPort[] {
   return [...details.inputPorts, ...details.outputPorts]
@@ -571,7 +613,7 @@ export function GraphEditorPanel({
         onEdgeDoubleClick={(_, edge) => removeEdge(edge.id)}
       >
         <Background gap={16} size={1} color="#334155" />
-        <Controls />
+        <GraphCanvasControls />
       </ReactFlow>
     </div>
   );
