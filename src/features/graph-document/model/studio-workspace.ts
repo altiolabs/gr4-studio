@@ -1,6 +1,6 @@
 // StudioPanelSpec describes one panel definition (what exists).
 // It is panel identity + source + display intent, independent of arrangement.
-export type StudioPanelKind = 'series' | 'series2d' | 'image' | 'audio';
+export type StudioPanelKind = 'series' | 'series2d' | 'image' | 'audio' | 'control';
 
 export type StudioPlotPaletteRef = {
   kind: 'builtin' | 'studio';
@@ -24,15 +24,46 @@ export type StudioPlotPaletteSpec = {
   colors: string[];
 };
 
-export type StudioPanelSpec = {
+export type StudioControlWidgetBinding = {
+  nodeId: string;
+  parameterName: string;
+};
+
+export type StudioControlWidgetInputKind = 'text' | 'number' | 'slider' | 'boolean' | 'enum';
+
+export type StudioControlWidgetSpec = {
+  id: string;
+  kind: 'parameter';
+  binding: StudioControlWidgetBinding;
+  label?: string;
+  inputKind: StudioControlWidgetInputKind;
+  enumOptions?: string[];
+  enumLabels?: Record<string, string>;
+  mode?: 'staged' | 'immediate';
+};
+
+export type StudioControlPanelSpec = {
+  id: string;
+  kind: 'control';
+  title?: string;
+  visible: boolean;
+  previewOnCanvas?: false;
+  nodeId?: string;
+  plotStyle?: StudioPlotStyleConfig;
+  widgets: StudioControlWidgetSpec[];
+};
+
+export type StudioDataPanelSpec = {
   id: string;
   nodeId: string;
-  kind: StudioPanelKind;
+  kind: Exclude<StudioPanelKind, 'control'>;
   title?: string;
   visible: boolean;
   previewOnCanvas: boolean;
   plotStyle?: StudioPlotStyleConfig;
 };
+
+export type StudioPanelSpec = StudioDataPanelSpec | StudioControlPanelSpec;
 
 export type StudioLayoutNode =
   | {

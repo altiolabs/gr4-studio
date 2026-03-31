@@ -8,7 +8,7 @@ type PanelSourceNode = {
   displayName: string;
 };
 
-const PANEL_KIND_BY_FAMILY: Readonly<Record<string, StudioPanelKind>> = {
+const PANEL_KIND_BY_FAMILY: Readonly<Record<string, Exclude<StudioPanelKind, 'control'>>> = {
   series: 'series',
   series2d: 'series2d',
   image: 'image',

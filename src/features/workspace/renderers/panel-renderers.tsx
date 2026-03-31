@@ -59,15 +59,12 @@ function AudioPlaceholderRenderer({ liveContext }: { liveContext: WorkspaceLiveR
   );
 }
 
-const RENDERER_BY_KIND: Record<
-  StudioPanelKind,
-  (props: { liveContext: WorkspaceLiveRendererContext }) => ReactElement
-> = {
+const RENDERER_BY_KIND = {
   series: SeriesLiveRenderer,
   series2d: Series2DPlaceholderRenderer,
   image: ImagePlaceholderRenderer,
   audio: AudioPlaceholderRenderer,
-};
+} as Record<StudioPanelKind, (props: { liveContext: WorkspaceLiveRendererContext }) => ReactElement>;
 
 export function WorkspacePanelRenderer({ kind, liveContext }: WorkspacePanelRendererProps) {
   const Component = RENDERER_BY_KIND[kind];

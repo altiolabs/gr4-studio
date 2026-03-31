@@ -4,6 +4,13 @@ import { isAdvancedParameterName, isAdvancedUiHint } from '../../lib/utils/param
 import { useEditorStore } from '../graph-editor/store/editorStore';
 import { useBlockDetailsQuery } from '../inspector/hooks/use-block-details-query';
 import { toCanonicalBlockDisplayName } from '../graph-editor/model/presentation';
+import type { StudioPanelSpec } from '../graph-document/model/studio-workspace';
+import {
+  addControlWidgetToPanels,
+  buildControlWidgetSpec,
+  isControlWidgetParameterTarget,
+  removeControlWidgetFromPanel,
+} from '../control-panels/control-panel-authoring';
 
 type BlockPropertiesModalProps = {
   instanceId: string;
@@ -13,6 +20,7 @@ type BlockPropertiesModalProps = {
 type ModalTab = 'general' | 'readonly' | 'advanced' | 'documentation';
 
 type DraftMap = Record<string, string>;
+const EMPTY_STUDIO_PANELS: readonly StudioPanelSpec[] = [];
 const CUSTOM_ENUM_VALUE = '__custom__';
 
 function isAdvancedParameterMeta(parameter: BlockParameterMeta): boolean {
@@ -40,10 +48,13 @@ function buildInitialDraftValues(
 export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesModalProps) {
   const block = useEditorStore((state) => state.getNodeById(instanceId));
   const updateNodeParameters = useEditorStore((state) => state.updateNodeParameters);
+  const studioPanels = useEditorStore((state) => state.studioPanels);
+  const setStudioPanels = useEditorStore((state) => state.setStudioPanels);
 
   const [activeTab, setActiveTab] = useState<ModalTab>('general');
   const [draftValues, setDraftValues] = useState<DraftMap>({});
   const [isDraftInitialized, setIsDraftInitialized] = useState(false);
+  const [pendingControlParameter, setPendingControlParameter] = useState<BlockParameterMeta | null>(null);
 
   const blockDetailsQuery = useBlockDetailsQuery(block?.blockTypeId);
 
@@ -63,6 +74,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
     setActiveTab('general');
     setDraftValues({});
     setIsDraftInitialized(false);
+    setPendingControlParameter(null);
   }, [instanceId]);
 
   useEffect(() => {
@@ -81,6 +93,22 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
 
     return blockDetailsQuery.data.parameters;
   }, [blockDetailsQuery.data]);
+  const controlPanels = useMemo(
+    () => (studioPanels ?? EMPTY_STUDIO_PANELS).filter((panel) => panel.kind === 'control'),
+    [studioPanels],
+  );
+  const findControlWidgetBinding = (parameterName: string) =>
+    (studioPanels ?? EMPTY_STUDIO_PANELS)
+      .filter((panel): panel is Extract<StudioPanelSpec, { kind: 'control' }> => panel.kind === 'control')
+      .map((panel) => ({
+        panel,
+        widget: panel.widgets.find(
+          (widget) => widget.binding.nodeId === blockInstanceId && widget.binding.parameterName === parameterName,
+        ),
+      }))
+      .find((entry): entry is { panel: Extract<StudioPanelSpec, { kind: 'control' }>; widget: NonNullable<typeof entry.widget> } =>
+        Boolean(entry.widget),
+      ) ?? null;
   const editableParameters = useMemo(
     () =>
       parameterRows.filter(
@@ -110,6 +138,46 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
       ...prev,
       [parameterName]: value,
     }));
+  };
+
+  const addControlForParameterToPanel = (parameter: BlockParameterMeta, targetPanelId?: string) => {
+    if (!blockDetailsQuery.data || !isControlWidgetParameterTarget(parameter)) {
+      return;
+    }
+
+    const widget = buildControlWidgetSpec({
+      nodeId: blockInstanceId,
+      parameter,
+    });
+    const nextPanels = addControlWidgetToPanels(studioPanels, { widget, targetPanelId });
+
+    if (nextPanels !== studioPanels) {
+      setStudioPanels(nextPanels);
+    }
+
+    setPendingControlParameter(null);
+  };
+
+  const handleControlAction = (parameter: BlockParameterMeta) => {
+    const binding = findControlWidgetBinding(parameter.name);
+    if (binding) {
+      setStudioPanels(
+        removeControlWidgetFromPanel(studioPanels, binding.panel.id, binding.widget.id),
+      );
+      return;
+    }
+
+    if (controlPanels.length === 0) {
+      addControlForParameterToPanel(parameter);
+      return;
+    }
+
+    if (controlPanels.length === 1) {
+      addControlForParameterToPanel(parameter, controlPanels[0].id);
+      return;
+    }
+
+    setPendingControlParameter(parameter);
   };
 
   const renderParameterValueInput = (parameter: BlockParameterMeta, disabled: boolean) => {
@@ -196,6 +264,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
   }
 
   const canonicalDisplayName = toCanonicalBlockDisplayName(block.displayName, block.blockTypeId);
+  const blockInstanceId = block.instanceId;
 
   return (
     <div
@@ -233,6 +302,53 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
         </div>
 
         <div className="max-h-[60vh] overflow-y-auto p-4 space-y-3">
+          {pendingControlParameter && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/70 p-4">
+              <div className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 shadow-2xl">
+                <div className="border-b border-slate-700 px-4 py-3">
+                  <p className="text-sm font-medium text-slate-100">Choose control panel</p>
+                  <p className="text-[11px] text-slate-400">
+                    {pendingControlParameter.label} · {pendingControlParameter.name}
+                  </p>
+                </div>
+                <div className="space-y-3 px-4 py-3">
+                  <p className="text-sm text-slate-400">Pick where to place this control.</p>
+                  <div className="space-y-2">
+                    {controlPanels.map((panel) => (
+                      <button
+                        key={panel.id}
+                        type="button"
+                        onClick={() => addControlForParameterToPanel(pendingControlParameter, panel.id)}
+                        className="flex w-full items-center justify-between rounded border border-slate-600 bg-slate-950 px-3 py-2 text-left text-sm text-slate-100 hover:border-cyan-500 hover:bg-slate-900"
+                      >
+                        <span className="truncate">{panel.title?.trim() || 'Controls'}</span>
+                        <span className="ml-3 shrink-0 text-[11px] text-slate-400">
+                          {panel.widgets.length} widget{panel.widgets.length === 1 ? '' : 's'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPendingControlParameter(null)}
+                      className="rounded border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100 hover:bg-slate-700"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addControlForParameterToPanel(pendingControlParameter)}
+                      className="rounded border border-emerald-700/70 bg-emerald-900/35 px-3 py-1.5 text-sm text-emerald-100 hover:bg-emerald-800/45"
+                    >
+                      New control panel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {blockDetailsQuery.isPending && (
             <p className="text-sm text-slate-400">Loading block details...</p>
           )}
@@ -247,23 +363,46 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                 <p className="text-sm text-slate-400">This block has no editable parameters in General.</p>
               ) : (
                 editableParameters.map((parameter) => {
+                  const binding = findControlWidgetBinding(parameter.name);
+
                   return (
                     <div
                       key={parameter.name}
-                      className="rounded border border-slate-700 bg-slate-800/60 p-2 space-y-1"
+                      className="rounded border border-slate-700 bg-slate-800/60 p-2 space-y-2"
                     >
-                      <label className="block text-xs font-medium text-slate-200">{parameter.label}</label>
-                      {renderParameterValueInput(parameter, false)}
-                      <div className="text-[11px] text-slate-400">
-                        {parameter.valueType ? `Type: ${parameter.valueType} | ` : ''}
-                        {parameter.defaultValue !== undefined
-                          ? `Default: ${parameter.defaultValue} | `
-                          : 'Default: none | '}
-                        {parameter.valueKind === 'enum' ? 'enum' : 'scalar'}
-                        {parameter.enumSource ? ` | Source: ${parameter.enumSource}` : ''}
-                        {parameter.uiHint ? ` | UI: ${parameter.uiHint}` : ''}
-                        {' | '}
-                        editable
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <label className="block text-xs font-medium text-slate-200">{parameter.label}</label>
+                          <div className="text-[11px] text-slate-400">
+                            {parameter.valueType ? `Type: ${parameter.valueType} | ` : ''}
+                            {parameter.defaultValue !== undefined
+                              ? `Default: ${parameter.defaultValue} | `
+                              : 'Default: none | '}
+                            {parameter.valueKind === 'enum' ? 'enum' : 'scalar'}
+                            {parameter.enumSource ? ` | Source: ${parameter.enumSource}` : ''}
+                            {parameter.uiHint ? ` | UI: ${parameter.uiHint}` : ''}
+                            {' | '}
+                            editable
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleControlAction(parameter)}
+                          disabled={!isControlWidgetParameterTarget(parameter)}
+                          title={binding ? 'Remove control' : 'Add control'}
+                          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border text-sm leading-none ${
+                            binding
+                              ? 'border-rose-700/70 bg-rose-900/30 text-rose-100 hover:bg-rose-800/40'
+                              : 'border-emerald-700/70 bg-emerald-900/35 text-emerald-100 hover:bg-emerald-800/45'
+                          } disabled:cursor-not-allowed disabled:opacity-40`}
+                        >
+                          {binding ? '−' : '+'}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          {renderParameterValueInput(parameter, false)}
+                        </div>
                       </div>
                       {parameter.description && (
                         <div className="text-[11px] text-slate-500">{parameter.description}</div>
@@ -318,28 +457,48 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
               ) : (
                 advancedParameters.map((parameter) => {
                   const isEditable = !parameter.readOnly && parameter.mutable;
+                  const binding = findControlWidgetBinding(parameter.name);
 
                   return (
                     <div
                       key={parameter.name}
-                      className="rounded border border-slate-700 bg-slate-800/60 p-2 space-y-1"
+                      className="rounded border border-slate-700 bg-slate-800/60 p-2 space-y-2"
                     >
-                      <label className="block text-xs font-medium text-slate-200">{parameter.label}</label>
-                      {renderParameterValueInput(parameter, !isEditable)}
-                      <div className="text-[11px] text-slate-400">
-                        {parameter.valueType ? `Type: ${parameter.valueType} | ` : ''}
-                        {parameter.defaultValue !== undefined
-                          ? `Default: ${parameter.defaultValue} | `
-                          : 'Default: none | '}
-                        {parameter.valueKind === 'enum' ? 'enum' : 'scalar'}
-                        {parameter.enumSource ? ` | Source: ${parameter.enumSource}` : ''}
-                        {parameter.uiHint ? ` | UI: ${parameter.uiHint}` : ''}
-                        {' | '}
-                        {isEditable ? 'editable (advanced)' : 'read-only (advanced)'}
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <label className="block text-xs font-medium text-slate-200">{parameter.label}</label>
+                          <div className="text-[11px] text-slate-400">
+                            {parameter.valueType ? `Type: ${parameter.valueType} | ` : ''}
+                            {parameter.defaultValue !== undefined
+                              ? `Default: ${parameter.defaultValue} | `
+                              : 'Default: none | '}
+                            {parameter.valueKind === 'enum' ? 'enum' : 'scalar'}
+                            {parameter.enumSource ? ` | Source: ${parameter.enumSource}` : ''}
+                            {parameter.uiHint ? ` | UI: ${parameter.uiHint}` : ''}
+                            {' | '}
+                            {isEditable ? 'editable (advanced)' : 'read-only (advanced)'}
+                          </div>
+                        </div>
                       </div>
-                      {parameter.description && (
-                        <div className="text-[11px] text-slate-500">{parameter.description}</div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleControlAction(parameter)}
+                          disabled={!isControlWidgetParameterTarget(parameter)}
+                          title={binding ? 'Remove control' : 'Add control'}
+                          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border text-sm leading-none ${
+                            binding
+                              ? 'border-rose-700/70 bg-rose-900/30 text-rose-100 hover:bg-rose-800/40'
+                              : 'border-emerald-700/70 bg-emerald-900/35 text-emerald-100 hover:bg-emerald-800/45'
+                          } disabled:cursor-not-allowed disabled:opacity-40`}
+                        >
+                          {binding ? '−' : '+'}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          {renderParameterValueInput(parameter, !isEditable)}
+                        </div>
+                      </div>
+                      {parameter.description && <div className="text-[11px] text-slate-500">{parameter.description}</div>}
                     </div>
                   );
                 })

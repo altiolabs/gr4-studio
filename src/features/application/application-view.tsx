@@ -7,6 +7,7 @@ import { derivePlotPanelSpec } from './plotting/model/panel-spec';
 import { WorkspacePanelRenderer } from '../workspace/renderers/panel-renderers';
 import type { WorkspaceLiveRendererContext } from '../workspace/renderers/live-renderer-contract';
 import type { WorkspacePanelViewModel } from '../workspace/workspace-view';
+import { ControlPanelView } from '../control-panels/control-panel-view';
 
 type ApplicationViewProps = {
   panelEntries: readonly WorkspacePanelViewModel[];
@@ -23,6 +24,24 @@ function ApplicationPanelShell({
 }) {
   const { panel } = entry;
   const plotSpec = useMemo(() => derivePlotPanelSpec(entry), [entry]);
+  if (panel.kind === 'control') {
+    const shellTitle = entry.nodePanelTitle ?? panel.title ?? entry.nodeDisplayName ?? panel.id;
+    return (
+      <article className="h-full rounded-lg bg-slate-950/35 overflow-hidden flex flex-col min-h-0">
+        <header className="px-3 py-2 border-b border-slate-800/80 bg-slate-900/55">
+          <h3 className="text-sm font-semibold text-slate-100 truncate" title={shellTitle}>
+            {shellTitle}
+          </h3>
+        </header>
+        <div className="p-2 flex-1 min-h-0">
+          <div className="h-full rounded border border-slate-700 bg-slate-950/50 p-3">
+            <ControlPanelView widgets={entry.controlWidgets ?? []} />
+          </div>
+        </div>
+      </article>
+    );
+  }
+
   const shellTitle =
     plotSpec?.view.title ?? entry.nodePanelTitle ?? panel.title ?? entry.nodeDisplayName ?? panel.nodeId;
   const liveContext: WorkspaceLiveRendererContext = {
