@@ -11,6 +11,7 @@ import {
   type Node,
   type NodeChange,
 } from '@xyflow/react';
+import { SelectionMode } from '@xyflow/system';
 import '@xyflow/react/dist/style.css';
 import { getBlockDetails, type BlockDetails } from '../../lib/api/block-details';
 import { useBlockCatalogQuery } from '../block-catalog/hooks/use-block-catalog-query';
@@ -382,7 +383,6 @@ export function GraphEditorPanel({
   const applyFlowEdgeChanges = useEditorStore((state) => state.applyFlowEdgeChanges);
   const selectNode = useEditorStore((state) => state.selectNode);
   const setNodePosition = useEditorStore((state) => state.setNodePosition);
-  const removeNode = useEditorStore((state) => state.removeNode);
   const addEdge = useEditorStore((state) => state.addEdge);
   const removeEdge = useEditorStore((state) => state.removeEdge);
   const copyNodesToClipboard = useEditorStore((state) => state.copyNodesToClipboard);
@@ -471,6 +471,8 @@ export function GraphEditorPanel({
   const renderedNodeSignature = useMemo(() => buildRenderedNodeSignature(nodes), [nodes]);
   const [flowNodes, setFlowNodes] = useState<FlowGraphNode[]>(nodes);
   const latestSemanticNodesRef = useRef(nodes);
+  const latestFlowNodesRef = useRef(flowNodes);
+  const pendingPasteSelectionRef = useRef<string[] | null>(null);
   const selectedFlowNodeIds = useMemo(
     () => flowNodes.filter((node) => node.selected).map((node) => node.id),
     [flowNodes],
@@ -487,28 +489,37 @@ export function GraphEditorPanel({
   }, [renderedNodeSignature, storeNodeSignature]);
 
   useEffect(() => {
-    setFlowNodes((current) =>
-      current.map((node) =>
-        node.selected === (node.id === selectedNodeId)
-          ? node
-          : {
-              ...node,
-              selected: node.id === selectedNodeId,
-            },
-      ),
-    );
-  }, [selectedNodeId]);
+    latestFlowNodesRef.current = flowNodes;
+  }, [flowNodes]);
+
+  useEffect(() => {
+    const pendingSelection = pendingPasteSelectionRef.current;
+    if (!pendingSelection) {
+      return;
+    }
+
+    const selectedIds = new Set(pendingSelection);
+    setFlowNodes((current) => current.map((node) => ({ ...node, selected: selectedIds.has(node.id) })));
+    pendingPasteSelectionRef.current = null;
+  }, [editorNodes, editorEdges]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<FlowGraphNode>[]) => {
       setFlowNodes((current) => applyNodeChanges(changes, current));
 
-      const persistedChanges = changes.filter((change) => change.type !== 'position');
+      const persistedChanges = changes.filter((change) => change.type === 'remove');
       if (persistedChanges.length > 0) {
         applyFlowNodeChanges(persistedChanges as NodeChange[]);
       }
     },
     [applyFlowNodeChanges],
+  );
+
+  const onSelectionChange = useCallback(
+    ({ nodes: selectedNodes }: { nodes: FlowGraphNode[] }) => {
+      selectNode(selectedNodes[selectedNodes.length - 1]?.id ?? null);
+    },
+    [selectNode],
   );
 
   const onConnect = useCallback(
@@ -547,9 +558,17 @@ export function GraphEditorPanel({
 
   const onNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: FlowGraphNode) => {
-      setNodePosition(node.id, node.position);
+      const idsToPersist = selectedFlowNodeIds.length > 0 ? selectedFlowNodeIds : [node.id];
+      const currentNodesById = new Map(latestFlowNodesRef.current.map((entry) => [entry.id, entry]));
+
+      idsToPersist.forEach((id) => {
+        const current = currentNodesById.get(id);
+        if (current) {
+          setNodePosition(id, current.position);
+        }
+      });
     },
-    [setNodePosition],
+    [selectedFlowNodeIds, setNodePosition],
   );
 
   useEffect(() => {
@@ -589,26 +608,30 @@ export function GraphEditorPanel({
       }
 
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') {
-        if (!pasteClipboard()) {
+        const pasted = pasteClipboard();
+        if (!pasted) {
           return;
         }
+        pendingPasteSelectionRef.current = pasted.nodeIds;
         event.preventDefault();
         return;
       }
 
-      if (!selectedNodeId) {
+      const idsToRemove = selectedFlowNodeIds.length > 0 ? selectedFlowNodeIds : selectedNodeId ? [selectedNodeId] : [];
+      if (idsToRemove.length === 0) {
         return;
       }
 
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
-        removeNode(selectedNodeId);
+        setFlowNodes((current) => current.filter((node) => !idsToRemove.includes(node.id)));
+        applyFlowNodeChanges(idsToRemove.map((id) => ({ id, type: 'remove' } as NodeChange)));
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [copyNodesToClipboard, isBlockPropertiesOpen, pasteClipboard, removeNode, selectedFlowNodeIds, selectedNodeId]);
+  }, [applyFlowNodeChanges, copyNodesToClipboard, isBlockPropertiesOpen, pasteClipboard, selectedFlowNodeIds, selectedNodeId]);
 
   return (
     <div className="relative h-full w-full">
@@ -628,8 +651,19 @@ export function GraphEditorPanel({
         nodes={flowNodes}
         edges={flowEdges}
         nodeTypes={nodeTypes}
-        onPaneClick={() => selectNode(null)}
-        onNodeClick={(_, node) => selectNode(node.id)}
+        onPaneClick={() => {
+          setFlowNodes((current) =>
+            current.map((node) =>
+              node.selected
+                ? {
+                    ...node,
+                    selected: false,
+                  }
+                : node,
+            ),
+          );
+          selectNode(null);
+        }}
         onNodeDragStop={onNodeDragStop}
         onNodeDoubleClick={(_, node) => {
           selectNode(node.id);
@@ -639,6 +673,8 @@ export function GraphEditorPanel({
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
         onEdgeDoubleClick={(_, edge) => removeEdge(edge.id)}
+        onSelectionChange={onSelectionChange}
+        selectionMode={SelectionMode.Partial}
       >
         <Background gap={16} size={1} color="#334155" />
         <GraphCanvasControls />
