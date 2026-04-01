@@ -13,11 +13,11 @@ import {
   toRuntimeSettingsErrorMessage,
 } from './runtime-settings-model';
 import { useEditorStore } from '../graph-editor/store/editorStore';
-import { useGraphTabsStore } from '../graph-tabs/store/graphTabsStore';
+import { useGraphTabsStore, type EditorSnapshot } from '../graph-tabs/store/graphTabsStore';
 import type { RuntimeSettingsValue } from '../../lib/api/block-settings';
 import { useRuntimeSessionStore } from '../runtime-session/store/runtimeSessionStore';
-import { graphDocumentFromEditor } from '../graph-document/model/fromEditor';
-import { toGrctrlContentSubmission } from '../runtime-submission/model/toGrctrlPayload';
+import { buildCurrentGraphSubmissionFromEditorSnapshot } from '../runtime-submission/model/current-graph-submission';
+import { canDownloadCurrentGraph, downloadCurrentGraphAsGr4c } from '../document-file/gr4c-download';
 import { buildStudioBindingView } from '../graph-editor/runtime/known-block-bindings';
 import { toCanonicalBlockDisplayName } from '../graph-editor/model/presentation';
 import type { BlockDetails, BlockParameterMeta } from '../../lib/api/block-details';
@@ -617,6 +617,9 @@ function SelectionTab({
 export function InspectorPanel() {
   const [activeTab, setActiveTab] = useState<InspectorTabId>('selection');
   const activeGraphTabId = useGraphTabsStore((state) => state.activeTabId);
+  const activeGraphTab = useGraphTabsStore((state) =>
+    state.activeTabId ? state.tabs.find((tab) => tab.id === state.activeTabId) ?? null : null,
+  );
   const runtimeContext = useRuntimeSessionStore((state) =>
     activeGraphTabId ? state.contextsByTabId[activeGraphTabId] : undefined,
   );
@@ -625,8 +628,14 @@ export function InspectorPanel() {
 
   const documentName = useEditorStore((state) => state.documentName);
   const documentDescription = useEditorStore((state) => state.documentDescription);
+  const studioPanels = useEditorStore((state) => state.studioPanels);
+  const studioVariables = useEditorStore((state) => state.studioVariables);
+  const studioLayout = useEditorStore((state) => state.studioLayout);
+  const studioPlotPalettes = useEditorStore((state) => state.studioPlotPalettes);
+  const application = useEditorStore((state) => state.application);
   const nodes = useEditorStore((state) => state.nodes);
   const edges = useEditorStore((state) => state.edges);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const uniqueBlockTypes = useMemo(() => Array.from(new Set(nodes.map((node) => node.blockTypeId))), [nodes]);
   const blockDetailQueries = useQueries({
     queries: uniqueBlockTypes.map((blockTypeId) => ({
@@ -646,19 +655,55 @@ export function InspectorPanel() {
     return map;
   }, [blockDetailQueries, uniqueBlockTypes]);
 
-  const currentSubmissionContent = useMemo(() => {
-    const document = graphDocumentFromEditor({
+  const currentSnapshot: EditorSnapshot = useMemo(
+    () => ({
       metadata: {
         name: documentName,
         description: documentDescription,
+        studioPanels,
+        studioVariables,
+        studioLayout,
+        studioPlotPalettes,
+        application,
       },
       nodes,
       edges,
-    });
-    return toGrctrlContentSubmission(document, { blockDetailsByType }).content;
-  }, [blockDetailsByType, documentDescription, documentName, edges, nodes]);
+    }),
+    [
+      application,
+      documentDescription,
+      documentName,
+      edges,
+      nodes,
+      studioLayout,
+      studioPanels,
+      studioPlotPalettes,
+      studioVariables,
+    ],
+  );
+
+  const currentSubmissionContent = useMemo(
+    () => buildCurrentGraphSubmissionFromEditorSnapshot(currentSnapshot, { blockDetailsByType }).content,
+    [blockDetailsByType, currentSnapshot],
+  );
 
   const runtimeView = activeGraphTabId ? getTabRuntimeView(activeGraphTabId, currentSubmissionContent) : null;
+  const canExportCurrentGraph = canDownloadCurrentGraph(activeGraphTab);
+
+  const handleDownloadGrc = () => {
+    const result = downloadCurrentGraphAsGr4c({
+      activeGraphName: activeGraphTab?.title,
+      buildSubmission: () => buildCurrentGraphSubmissionFromEditorSnapshot(currentSnapshot, { blockDetailsByType }),
+      win: window,
+    });
+
+    if (result.kind === 'error') {
+      setDownloadError(result.message);
+      return;
+    }
+
+    setDownloadError(null);
+  };
 
   const tabItems = useMemo(
     () =>
@@ -737,6 +782,18 @@ export function InspectorPanel() {
                   <SummaryValue>{runIntentLabel(runtimeView?.runIntent)}</SummaryValue>
                 </div>
               </div>
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleDownloadGrc}
+                  disabled={!canExportCurrentGraph}
+                  title={canExportCurrentGraph ? 'Download the current graph as a .gr4c file.' : 'No active graph to export.'}
+                  className="rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-100 hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Download .gr4c
+                </button>
+              </div>
+              {downloadError && <p className="text-sm text-rose-300">{downloadError}</p>}
             </SectionCard>
           </>
         )}

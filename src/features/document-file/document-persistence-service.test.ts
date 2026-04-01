@@ -618,6 +618,30 @@ describe('document persistence service', () => {
     }
   });
 
+  it('Open picker only advertises .gr4s as a native Studio graph file', async () => {
+    const showOpenFilePicker = vi.fn().mockResolvedValue([]);
+    const service = createDocumentPersistenceService({
+      win: {
+        showOpenFilePicker,
+      } as unknown as Window,
+    });
+
+    await service.openDocument(createCapabilities());
+
+    expect(showOpenFilePicker).toHaveBeenCalledTimes(1);
+    expect(showOpenFilePicker.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        types: [
+          expect.objectContaining({
+            accept: {
+              'application/json': ['.gr4s'],
+            },
+          }),
+        ],
+      }),
+    );
+  });
+
   it('fallback Open cancel returns canceled', async () => {
     let capturedInput: { oncancel: (() => void) | null; click: () => void } | null = null;
     const service = createDocumentPersistenceService({
