@@ -169,6 +169,7 @@ const graphNodeSchema = z.object({
   id: z.string().min(1),
   blockType: z.string().min(1),
   title: z.string().optional(),
+  executionMode: z.enum(['active', 'disabled', 'bypassed']).optional(),
   position: z.object({
     x: z.number(),
     y: z.number(),

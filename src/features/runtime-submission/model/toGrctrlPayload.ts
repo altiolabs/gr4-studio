@@ -1,8 +1,9 @@
-import type { GraphDocument } from '../../graph-document/model/types';
+import type { GraphDocument, GraphDocumentEdge, GraphDocumentNode, GraphParameterValue } from '../../graph-document/model/types';
+import type { BlockDetails } from '../../../lib/api/block-details';
 import type { GrcExport } from './types';
 import { resolveGraphVariables } from '../../variables/model/resolveGraphVariables';
 import type { JsonPrimitive } from '../../variables/model/types';
-import type { BlockDetails } from '../../../lib/api/block-details';
+import { createEdgeId } from '../../graph-editor/model/nodeFactory';
 
 function stableHash(input: string): string {
   let hash = 2166136261;
@@ -54,6 +55,82 @@ function renderParameterValue(name: string, rawValue: JsonPrimitive | undefined)
   return sanitizeScalar(trimmed);
 }
 
+type ToGrctrlContentSubmissionOptions = {
+  blockDetailsByType?: ReadonlyMap<string, BlockDetails>;
+};
+
+function buildRuntimeGraph(document: GraphDocument): {
+  nodes: GraphDocumentNode[];
+  edges: GraphDocumentEdge[];
+} {
+  const disabledNodeIds = new Set(
+    document.graph.nodes.filter((node) => (node.executionMode ?? 'active') === 'disabled').map((node) => node.id),
+  );
+  const bypassedNodeIds = new Set(
+    document.graph.nodes
+      .filter((node) => (node.executionMode ?? 'active') === 'bypassed' && !disabledNodeIds.has(node.id))
+      .map((node) => node.id),
+  );
+
+  const nodes = document.graph.nodes.filter(
+    (node) => !disabledNodeIds.has(node.id) && (node.executionMode ?? 'active') !== 'bypassed',
+  );
+  let edges = document.graph.edges.filter(
+    (edge) => !disabledNodeIds.has(edge.source.nodeId) && !disabledNodeIds.has(edge.target.nodeId),
+  );
+
+  const existingEdgeIds = new Set(edges.map((edge) => edge.id));
+  while (bypassedNodeIds.size > 0) {
+    let progressed = false;
+    for (const nodeId of Array.from(bypassedNodeIds)) {
+      const incoming = edges.filter((edge) => edge.target.nodeId === nodeId);
+      const outgoing = edges.filter((edge) => edge.source.nodeId === nodeId);
+      if (incoming.length === 0 && outgoing.length === 0) {
+        bypassedNodeIds.delete(nodeId);
+        progressed = true;
+        continue;
+      }
+
+      edges = edges.filter((edge) => edge.source.nodeId !== nodeId && edge.target.nodeId !== nodeId);
+      incoming.forEach((inputEdge) => {
+        outgoing.forEach((outputEdge) => {
+          const nextEdgeId = createEdgeId(
+            inputEdge.source.nodeId,
+            outputEdge.target.nodeId,
+            inputEdge.source.portId,
+            outputEdge.target.portId,
+          );
+          if (existingEdgeIds.has(nextEdgeId)) {
+            return;
+          }
+
+          existingEdgeIds.add(nextEdgeId);
+          edges.push({
+            id: nextEdgeId,
+            source: {
+              nodeId: inputEdge.source.nodeId,
+              portId: inputEdge.source.portId,
+            },
+            target: {
+              nodeId: outputEdge.target.nodeId,
+              portId: outputEdge.target.portId,
+            },
+          });
+        });
+      });
+
+      bypassedNodeIds.delete(nodeId);
+      progressed = true;
+    }
+
+    if (!progressed) {
+      break;
+    }
+  }
+
+  return { nodes, edges };
+}
+
 function shouldOmitParameter(name: string, rawValue: JsonPrimitive | undefined): boolean {
   if (name === 'ui_constraints') {
     return false;
@@ -75,16 +152,14 @@ function indent(lines: string[], spaces = 2): string[] {
   return lines.map((line) => `${prefix}${line}`);
 }
 
-type ToGrctrlContentSubmissionOptions = {
-  blockDetailsByType?: ReadonlyMap<string, BlockDetails>;
-};
-
 function serializeGraphDocumentToInlineGrc(
   document: GraphDocument,
   options?: ToGrctrlContentSubmissionOptions,
 ): string {
-  const nodes = [...document.graph.nodes].sort((left, right) => left.id.localeCompare(right.id));
-  const edges = [...document.graph.edges].sort((left, right) => left.id.localeCompare(right.id));
+  const runtimeGraph = buildRuntimeGraph(document);
+  const nodes = [...runtimeGraph.nodes].sort((left, right) => left.id.localeCompare(right.id));
+  const edges = [...runtimeGraph.edges].sort((left, right) => left.id.localeCompare(right.id));
+  const blockDetailsByType = options?.blockDetailsByType;
   const resolved = resolveGraphVariables(document);
 
   const lines: string[] = [];
@@ -102,14 +177,14 @@ function serializeGraphDocumentToInlineGrc(
       lines.push(...indent([`  parameters:`]));
       lines.push(...indent([`    name: ${sanitizeScalar(node.id)}`]));
 
-      const parameterEntries = new Map<string, { kind: 'literal' | 'expression'; value?: JsonPrimitive; expr?: string }>();
+      const parameterEntries = new Map<string, GraphParameterValue>();
       Object.entries(node.parameters)
         .sort(([left], [right]) => left.localeCompare(right))
         .forEach(([name, parameter]) => {
           parameterEntries.set(name, parameter);
         });
 
-      const blockDetails = options?.blockDetailsByType?.get(node.blockType);
+      const blockDetails = blockDetailsByType?.get(node.blockType);
       if (blockDetails) {
         blockDetails.parameters.forEach((parameter) => {
           if (parameter.name === 'name' || parameterEntries.has(parameter.name)) {
@@ -131,8 +206,9 @@ function serializeGraphDocumentToInlineGrc(
           if (name === 'name') {
             return;
           }
+
           const resolvedParameter = resolved.parametersByNodeId[node.id]?.[name];
-          const fallbackValue = parameter.kind === 'literal' ? parameter.value : '';
+          const fallbackValue = parameter.kind === 'literal' ? parameter.value : undefined;
           const parameterValue = resolvedParameter?.state === 'resolved' ? resolvedParameter.value : fallbackValue;
           if (shouldOmitParameter(name, parameterValue)) {
             return;
@@ -150,7 +226,11 @@ function serializeGraphDocumentToInlineGrc(
     edges.forEach((edge) => {
       const sourcePort = edge.source.portId ?? 'out';
       const targetPort = edge.target.portId ?? 'in';
-      lines.push(...indent([`- [${sanitizeScalar(edge.source.nodeId)}, ${sanitizeScalar(sourcePort)}, ${sanitizeScalar(edge.target.nodeId)}, ${sanitizeScalar(targetPort)}]`]));
+      lines.push(
+        ...indent([
+          `- [${sanitizeScalar(edge.source.nodeId)}, ${sanitizeScalar(sourcePort)}, ${sanitizeScalar(edge.target.nodeId)}, ${sanitizeScalar(targetPort)}]`,
+        ]),
+      );
     });
   }
 

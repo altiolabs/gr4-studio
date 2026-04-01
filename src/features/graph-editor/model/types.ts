@@ -1,4 +1,5 @@
 import type { RenderedPort } from '../../ports/model/types';
+import type { NodeExecutionMode } from '../../graph-document/model/types';
 
 export type GraphPoint = {
   x: number;
@@ -24,6 +25,7 @@ export type EditorGraphNode = {
   blockTypeId: string;
   displayName: string;
   category?: string;
+  executionMode?: NodeExecutionMode;
   parameters: EditorNodeParameterDrafts;
   position: GraphPoint;
 };
@@ -46,6 +48,7 @@ export type FlowNodeData = {
   parameterValues: Record<string, string>;
   parameterLines: string[];
   parameterOverflowCount: number;
+  executionMode: NodeExecutionMode;
   renderedInputPorts: RenderedPort[];
   renderedOutputPorts: RenderedPort[];
   supportsRuntimeVisualization: boolean;

@@ -211,4 +211,82 @@ describe('toGrctrlContentSubmission', () => {
 
     expect(left.contentHash).not.toBe(right.contentHash);
   });
+
+  it('omits disabled nodes and rewires bypassed linear nodes in the runtime export', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: { name: 'runtime-modes' },
+      graph: {
+        nodes: [
+          {
+            id: 'source',
+            blockType: 'gr::testing::NullSource<float32>',
+            title: 'Source',
+            position: { x: 0, y: 0 },
+            parameters: {},
+          },
+          {
+            id: 'mid',
+            blockType: 'gr::testing::Middle<float32>',
+            title: 'Mid',
+            executionMode: 'bypassed',
+            position: { x: 100, y: 0 },
+            parameters: {},
+          },
+          {
+            id: 'sink',
+            blockType: 'gr::testing::NullSink<float32>',
+            title: 'Sink',
+            position: { x: 200, y: 0 },
+            parameters: {},
+          },
+          {
+            id: 'tail',
+            blockType: 'gr::testing::NullSink<float32>',
+            title: 'Tail',
+            position: { x: 300, y: 0 },
+            parameters: {},
+          },
+          {
+            id: 'disabled',
+            blockType: 'gr::testing::NullSink<float32>',
+            title: 'Disabled',
+            executionMode: 'disabled',
+            position: { x: 400, y: 0 },
+            parameters: {},
+          },
+        ],
+        edges: [
+          {
+            id: 'edge-1',
+            source: { nodeId: 'source', portId: 'out' },
+            target: { nodeId: 'mid', portId: 'in' },
+          },
+          {
+            id: 'edge-2',
+            source: { nodeId: 'mid', portId: 'out' },
+            target: { nodeId: 'sink', portId: 'in' },
+          },
+          {
+            id: 'edge-3',
+            source: { nodeId: 'sink', portId: 'out' },
+            target: { nodeId: 'tail', portId: 'in' },
+          },
+          {
+            id: 'edge-4',
+            source: { nodeId: 'tail', portId: 'out' },
+            target: { nodeId: 'disabled', portId: 'in' },
+          },
+        ],
+      },
+    };
+
+    const submission = toGrctrlContentSubmission(document);
+    expect(submission.content).not.toContain('mid');
+    expect(submission.content).not.toContain('disabled');
+    expect(submission.content).toContain('- [source, out, sink, in]');
+    expect(submission.content).toContain('- [sink, out, tail, in]');
+    expect(submission.content).not.toContain('- [source, out, mid, in]');
+  });
 });

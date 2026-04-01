@@ -19,6 +19,7 @@ import { normalizeTypeName } from '../ports/model/typeColors';
 import { resolveRenderedPorts } from '../ports/model/resolveRenderedPorts';
 import type { RenderedPort, SchemaPort } from '../ports/model/types';
 import type { EditorGraphEdge, EditorGraphNode, FlowNodeData } from './model/types';
+import { getNodeExecutionMode, isLinearBypassableBlock } from './model/node-execution';
 import {
   buildBlockCardSummary,
   toCanonicalBlockDisplayName,
@@ -123,6 +124,7 @@ function toFlowNodeData(
     : fallbackRenderedPorts;
   const cardSummary = buildBlockCardSummary(node, blockDetails);
   const supportsRuntimeVisualization = isHttpTimeSeriesSink(node.blockTypeId);
+  const executionMode = getNodeExecutionMode(node.executionMode);
 
   return {
     id: node.instanceId,
@@ -136,6 +138,7 @@ function toFlowNodeData(
       shortDisplayName: shortDisplayNameOverride ?? cardSummary.shortDisplayName,
       missingFromCatalog,
       category: node.category,
+      executionMode,
       parameterValues,
       parameterLines: cardSummary.parameterLines,
       parameterOverflowCount: cardSummary.parameterOverflowCount,
@@ -333,6 +336,7 @@ function buildStoreNodeSignature(nodes: EditorGraphNode[]): string {
       displayName: node.displayName,
       blockTypeId: node.blockTypeId,
       category: node.category ?? null,
+      executionMode: node.executionMode ?? 'active',
       parameters: node.parameters,
     })),
   );
@@ -361,6 +365,7 @@ function buildRenderedNodeSignature(nodes: FlowGraphNode[]): string {
       })),
       parameterLines: node.data.parameterLines,
       parameterOverflowCount: node.data.parameterOverflowCount,
+      executionMode: node.data.executionMode,
       runtimeOpen: node.data.isRuntimeVisualizationOpen,
     })),
   );
@@ -383,6 +388,7 @@ export function GraphEditorPanel({
   const applyFlowEdgeChanges = useEditorStore((state) => state.applyFlowEdgeChanges);
   const selectNode = useEditorStore((state) => state.selectNode);
   const setNodePosition = useEditorStore((state) => state.setNodePosition);
+  const setNodeExecutionMode = useEditorStore((state) => state.setNodeExecutionMode);
   const addEdge = useEditorStore((state) => state.addEdge);
   const removeEdge = useEditorStore((state) => state.removeEdge);
   const copyNodesToClipboard = useEditorStore((state) => state.copyNodesToClipboard);
@@ -522,6 +528,23 @@ export function GraphEditorPanel({
     [selectNode],
   );
 
+  const getTargetNodeIds = useCallback(() => {
+    return selectedFlowNodeIds.length > 0 ? selectedFlowNodeIds : selectedNodeId ? [selectedNodeId] : [];
+  }, [selectedFlowNodeIds, selectedNodeId]);
+
+  const isBypassableNodeId = useCallback(
+    (nodeId: string) => {
+      const flowNode = latestFlowNodesRef.current.find((entry) => entry.id === nodeId);
+      if (flowNode) {
+        return flowNode.data.renderedInputPorts.length === 1 && flowNode.data.renderedOutputPorts.length === 1;
+      }
+
+      const node = editorNodes.find((entry) => entry.instanceId === nodeId);
+      return isLinearBypassableBlock(blockDetailsByType.get(node?.blockTypeId ?? ''));
+    },
+    [blockDetailsByType, editorNodes],
+  );
+
   const onConnect = useCallback(
     (connection: Connection) => {
       if (!connection.source || !connection.target) {
@@ -598,7 +621,7 @@ export function GraphEditorPanel({
       }
 
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c') {
-        const nodeIds = selectedFlowNodeIds.length > 0 ? selectedFlowNodeIds : selectedNodeId ? [selectedNodeId] : [];
+        const nodeIds = getTargetNodeIds();
         if (nodeIds.length === 0) {
           return;
         }
@@ -617,7 +640,7 @@ export function GraphEditorPanel({
         return;
       }
 
-      const idsToRemove = selectedFlowNodeIds.length > 0 ? selectedFlowNodeIds : selectedNodeId ? [selectedNodeId] : [];
+      const idsToRemove = getTargetNodeIds();
       if (idsToRemove.length === 0) {
         return;
       }
@@ -626,12 +649,51 @@ export function GraphEditorPanel({
         event.preventDefault();
         setFlowNodes((current) => current.filter((node) => !idsToRemove.includes(node.id)));
         applyFlowNodeChanges(idsToRemove.map((id) => ({ id, type: 'remove' } as NodeChange)));
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      if (key === 'd' || key === 'e' || key === 'b') {
+        const bypassableIds = idsToRemove.filter((nodeId) => isBypassableNodeId(nodeId));
+        const canBypass = key !== 'b' || bypassableIds.length > 0;
+
+        if (!canBypass) {
+          return;
+        }
+
+        event.preventDefault();
+        idsToRemove.forEach((nodeId) => {
+          if (key === 'b') {
+            if (!isBypassableNodeId(nodeId)) {
+              return;
+            }
+
+            const node = editorNodes.find((entry) => entry.instanceId === nodeId);
+            const currentMode = getNodeExecutionMode(node?.executionMode);
+            setNodeExecutionMode(nodeId, currentMode === 'bypassed' ? 'active' : 'bypassed');
+            return;
+          }
+
+          setNodeExecutionMode(nodeId, key === 'd' ? 'disabled' : 'active');
+        });
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [applyFlowNodeChanges, copyNodesToClipboard, isBlockPropertiesOpen, pasteClipboard, selectedFlowNodeIds, selectedNodeId]);
+  }, [
+    applyFlowNodeChanges,
+    blockDetailsByType,
+    copyNodesToClipboard,
+    editorNodes,
+    getTargetNodeIds,
+    isBypassableNodeId,
+    isBlockPropertiesOpen,
+    pasteClipboard,
+    selectedFlowNodeIds,
+    selectedNodeId,
+    setNodeExecutionMode,
+  ]);
 
   return (
     <div className="relative h-full w-full">
