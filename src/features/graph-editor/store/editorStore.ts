@@ -10,6 +10,11 @@ import {
   createEdgeId,
   getNextNodePosition,
 } from '../model/nodeFactory';
+import {
+  buildGraphClipboardPayload,
+  pasteGraphClipboardPayload,
+  type GraphClipboardPayload,
+} from '../model/clipboard';
 import type {
   EditorCatalogBlock,
   EditorGraphEdge,
@@ -35,6 +40,8 @@ type EditorState = {
   studioLayout?: StudioLayoutSpec;
   studioPlotPalettes?: StudioPlotPaletteSpec[];
   application?: ApplicationSpec;
+  clipboard: GraphClipboardPayload | null;
+  clipboardPasteSequence: number;
   selectedNodeId: string | null;
   nextNodeSequence: number;
   getNodeById: (instanceId: string) => EditorGraphNode | undefined;
@@ -94,6 +101,8 @@ type EditorState = {
   addVariable: (input?: { name?: string; binding?: ExpressionBinding }) => string;
   updateVariable: (variableId: string, patch: Partial<Pick<StudioVariable, 'name' | 'binding'>>) => void;
   removeVariable: (variableId: string) => void;
+  copyNodesToClipboard: (nodeIds: readonly string[]) => void;
+  pasteClipboard: () => { nodeIds: string[] } | null;
 };
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -106,6 +115,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   studioLayout: undefined,
   studioPlotPalettes: undefined,
   application: undefined,
+  clipboard: null,
+  clipboardPasteSequence: 0,
   selectedNodeId: null,
   nextNodeSequence: 1,
   getNodeById: (instanceId) => {
@@ -182,7 +193,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       return Number.isFinite(value) ? Math.max(max, value) : max;
     }, 0);
 
-    set({
+    set((state) => ({
       nodes,
       edges,
       documentName: metadata.name,
@@ -192,9 +203,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       studioLayout: metadata.studioLayout,
       studioPlotPalettes: metadata.studioPlotPalettes,
       application: metadata.application,
+      clipboard: state.clipboard,
+      clipboardPasteSequence: state.clipboardPasteSequence,
       selectedNodeId: null,
       nextNodeSequence: Math.max(maxSuffix + 1, nodes.length + 1, 1),
-    });
+    }));
   },
   addNodeFromCatalogItem: (block) => {
     const { nextNodeSequence, nodes } = get();
@@ -523,5 +536,41 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({
       studioVariables: (state.studioVariables ?? []).filter((variable) => variable.id !== variableId),
     }));
+  },
+  copyNodesToClipboard: (nodeIds) => {
+    set((state) => {
+      const clipboard = buildGraphClipboardPayload(state.nodes, state.edges, nodeIds);
+      if (!clipboard) {
+        return {};
+      }
+
+      return {
+        clipboard,
+      };
+    });
+  },
+  pasteClipboard: () => {
+    const state = get();
+    if (!state.clipboard) {
+      return null;
+    }
+
+    const pasted = pasteGraphClipboardPayload(state.clipboard, {
+      existingNodeIds: state.nodes.map((node) => node.instanceId),
+      pasteSequence: state.clipboardPasteSequence,
+    });
+
+    if (pasted.nodes.length === 0) {
+      return null;
+    }
+
+    set((current) => ({
+      nodes: [...current.nodes, ...pasted.nodes],
+      edges: [...current.edges, ...pasted.edges],
+      selectedNodeId: pasted.selectedNodeIds[0] ?? current.selectedNodeId,
+      clipboardPasteSequence: current.clipboardPasteSequence + 1,
+    }));
+
+    return { nodeIds: pasted.selectedNodeIds };
   },
 }));
