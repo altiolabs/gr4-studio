@@ -19,6 +19,11 @@ describe('deriveDefaultStudioPanelsFromNodes', () => {
         blockTypeId: 'gr::studio::StudioSeriesSink',
         displayName: 'Near Miss',
       },
+      {
+        instanceId: 'node-spectrum',
+        blockTypeId: 'gr::studio::StudioPowerSpectrumSink<float32>',
+        displayName: 'Spectrum',
+      },
     ]);
 
     expect(panels).toEqual([
@@ -27,6 +32,14 @@ describe('deriveDefaultStudioPanelsFromNodes', () => {
         nodeId: 'node-series',
         kind: 'series',
         title: 'Series Sink',
+        visible: true,
+        previewOnCanvas: false,
+      },
+      {
+        id: 'studio-panel:node-spectrum',
+        nodeId: 'node-spectrum',
+        kind: 'series2d',
+        title: 'Spectrum',
         visible: true,
         previewOnCanvas: false,
       },

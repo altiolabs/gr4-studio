@@ -92,6 +92,7 @@ Semantics:
 
 - DataSet semantics remain sink/runtime-side.
 - Payload normalizes to one XY trace for plotting.
+- `StudioPowerSpectrumSink` uses this contract to publish FFT frequency bins against averaged power values.
 
 Frontend routing:
 

@@ -16,7 +16,7 @@ describe('known Studio block bindings', () => {
     expect(lookupStudioKnownBlockBinding('StudioSeriesSink')).toBeNull();
   });
 
-  it('contains placeholder entries for four initial families', () => {
+  it('contains placeholder entries for the registered Studio families', () => {
     const families = STUDIO_KNOWN_BLOCK_BINDINGS.map((binding) => binding.family).sort();
     expect(families).toEqual([
       'audio',
@@ -28,6 +28,10 @@ describe('known Studio block bindings', () => {
       'series',
       'series',
       'series',
+      'series2d',
+      'series2d',
+      'series2d',
+      'series2d',
       'series2d',
       'series2d',
       'series2d',
@@ -152,6 +156,23 @@ describe('known Studio block bindings', () => {
       transport: 'http_poll',
       endpoint: 'http://127.0.0.1:18084/snapshot',
       pollMs: 100,
+    });
+
+    const powerSpectrumConfigured = buildStudioBindingView('gr::studio::StudioPowerSpectrumSink<float32>', {
+      transport: 'http_snapshot',
+      endpoint: 'http://127.0.0.1:18086/snapshot',
+      poll_ms: '150',
+      sample_rate: '48000',
+      topic: 'spectrum',
+    });
+    expect(powerSpectrumConfigured).toMatchObject({
+      status: 'configured',
+      family: 'series2d',
+      payloadFormat: 'dataset-xy-json-v1',
+      transport: 'http_snapshot',
+      endpoint: 'http://127.0.0.1:18086/snapshot',
+      sampleRate: 48000,
+      topic: 'spectrum',
     });
 
     const imageConfigured = buildStudioBindingView('gr::studio::StudioImageSink<uint8>', {
