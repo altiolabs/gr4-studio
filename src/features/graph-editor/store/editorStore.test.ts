@@ -33,9 +33,12 @@ describe('editorStore flow change application', () => {
       documentName: 'Test',
       documentDescription: undefined,
       studioPanels: undefined,
+      studioVariables: undefined,
       studioLayout: undefined,
       studioPlotPalettes: undefined,
       application: undefined,
+      clipboard: null,
+      clipboardPasteSequence: 0,
       selectedNodeId: null,
       nextNodeSequence: 3,
     });
@@ -82,5 +85,40 @@ describe('editorStore flow change application', () => {
     useEditorStore.getState().applyFlowEdgeChanges(changes);
 
     expect(useEditorStore.getState().edges).toEqual([]);
+  });
+
+  it('copies a selected subgraph and pastes it into a different graph snapshot', () => {
+    useEditorStore.getState().copyNodesToClipboard(['node-1', 'node-2']);
+
+    useEditorStore.getState().replaceGraph({
+      nodes: [
+        {
+          instanceId: 'node-a',
+          blockTypeId: 'test.block',
+          displayName: 'Node A',
+          category: 'Test',
+          parameters: {},
+          position: { x: 100, y: 100 },
+        },
+      ],
+      edges: [],
+      metadata: {
+        name: 'Other graph',
+        description: undefined,
+        studioPanels: undefined,
+        studioVariables: undefined,
+        studioLayout: undefined,
+        studioPlotPalettes: undefined,
+        application: undefined,
+      },
+    });
+
+    const pasted = useEditorStore.getState().pasteClipboard();
+    expect(pasted?.nodeIds).toHaveLength(2);
+
+    const nodeIds = useEditorStore.getState().nodes.map((entry) => entry.instanceId);
+    expect(nodeIds).toContain('node-a');
+    expect(nodeIds.some((id) => id.startsWith('node-1-copy'))).toBe(true);
+    expect(nodeIds.some((id) => id.startsWith('node-2-copy'))).toBe(true);
   });
 });

@@ -385,6 +385,8 @@ export function GraphEditorPanel({
   const removeNode = useEditorStore((state) => state.removeNode);
   const addEdge = useEditorStore((state) => state.addEdge);
   const removeEdge = useEditorStore((state) => state.removeEdge);
+  const copyNodesToClipboard = useEditorStore((state) => state.copyNodesToClipboard);
+  const pasteClipboard = useEditorStore((state) => state.pasteClipboard);
   const [openRuntimeVisualizationId, setOpenRuntimeVisualizationId] = useState<string | null>(null);
 
   const onOpenRuntimeVisualization = useCallback((instanceId: string) => {
@@ -469,6 +471,10 @@ export function GraphEditorPanel({
   const renderedNodeSignature = useMemo(() => buildRenderedNodeSignature(nodes), [nodes]);
   const [flowNodes, setFlowNodes] = useState<FlowGraphNode[]>(nodes);
   const latestSemanticNodesRef = useRef(nodes);
+  const selectedFlowNodeIds = useMemo(
+    () => flowNodes.filter((node) => node.selected).map((node) => node.id),
+    [flowNodes],
+  );
 
   useEffect(() => {
     // Keep the most recent semantic node payload available without forcing a local-flow reset every render.
@@ -559,7 +565,7 @@ export function GraphEditorPanel({
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!selectedNodeId || isBlockPropertiesOpen) {
+      if (isBlockPropertiesOpen) {
         return;
       }
 
@@ -572,6 +578,28 @@ export function GraphEditorPanel({
         return;
       }
 
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'c') {
+        const nodeIds = selectedFlowNodeIds.length > 0 ? selectedFlowNodeIds : selectedNodeId ? [selectedNodeId] : [];
+        if (nodeIds.length === 0) {
+          return;
+        }
+        event.preventDefault();
+        copyNodesToClipboard(nodeIds);
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'v') {
+        if (!pasteClipboard()) {
+          return;
+        }
+        event.preventDefault();
+        return;
+      }
+
+      if (!selectedNodeId) {
+        return;
+      }
+
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
         removeNode(selectedNodeId);
@@ -580,7 +608,7 @@ export function GraphEditorPanel({
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isBlockPropertiesOpen, removeNode, selectedNodeId]);
+  }, [copyNodesToClipboard, isBlockPropertiesOpen, pasteClipboard, removeNode, selectedFlowNodeIds, selectedNodeId]);
 
   return (
     <div className="relative h-full w-full">
