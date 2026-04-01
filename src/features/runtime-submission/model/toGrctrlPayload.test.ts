@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toGrctrlContentSubmission } from './toGrctrlPayload';
 import type { GraphDocument } from '../../graph-document/model/types';
+import type { BlockDetails } from '../../../lib/api/block-details';
 
 function makeDocument(name: string, uiConstraintsValue: string): GraphDocument {
   return {
@@ -50,6 +51,45 @@ function makeVectorSettingsDocument(name: string): GraphDocument {
       ],
       edges: [],
     },
+  };
+}
+
+function makeStudioSeriesSinkDetails(): BlockDetails {
+  return {
+    blockTypeId: 'gr::studio::StudioSeriesSink<float32>',
+    displayName: 'StudioSeriesSink<float32>',
+    description: 'Studio series sink',
+    parameters: [
+      {
+        name: 'autoscale',
+        label: 'autoscale',
+        defaultValue: 'true',
+        mutable: true,
+        readOnly: false,
+        valueType: 'bool',
+        valueKind: 'scalar',
+      },
+      {
+        name: 'endpoint',
+        label: 'endpoint',
+        defaultValue: 'http://127.0.0.1:18080/snapshot',
+        mutable: true,
+        readOnly: false,
+        valueType: 'string',
+        valueKind: 'scalar',
+      },
+      {
+        name: 'poll_ms',
+        label: 'poll_ms',
+        defaultValue: '250',
+        mutable: true,
+        readOnly: false,
+        valueType: 'int',
+        valueKind: 'scalar',
+      },
+    ],
+    inputPorts: [],
+    outputPorts: [],
   };
 }
 
@@ -125,6 +165,36 @@ describe('toGrctrlContentSubmission', () => {
 
     expect(submission.content).not.toContain('taps:');
     expect(submission.content).toContain('gain: 1');
+  });
+
+  it('fills missing parameters from block details defaults when available', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: { name: 'studio-series-sink' },
+      graph: {
+        nodes: [
+          {
+            id: 'sink_1',
+            blockType: 'gr::studio::StudioSeriesSink<float32>',
+            title: 'StudioSeriesSink<float32>',
+            position: { x: 0, y: 0 },
+            parameters: {
+              name: { kind: 'expression', expr: 'sink_1' },
+            },
+          },
+        ],
+        edges: [],
+      },
+    };
+
+    const submission = toGrctrlContentSubmission(document, {
+      blockDetailsByType: new Map([[ 'gr::studio::StudioSeriesSink<float32>', makeStudioSeriesSinkDetails() ]]),
+    });
+
+    expect(submission.content).toContain('autoscale: true');
+    expect(submission.content).toContain('endpoint: "http://127.0.0.1:18080/snapshot"');
+    expect(submission.content).toContain('poll_ms: 250');
   });
 
   it('produces deterministic output and hash for equivalent documents', () => {

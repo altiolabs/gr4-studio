@@ -45,7 +45,7 @@ import { InspectorPanel } from '../features/inspector/inspector-panel';
 import { GlobalSessionsDrawer } from '../features/runtime-session/components/global-sessions-drawer';
 import { useRuntimeSessionStore } from '../features/runtime-session/store/runtimeSessionStore';
 import { setBlockSettings } from '../lib/api/block-settings';
-import { toGrctrlContentSubmission } from '../features/runtime-submission/model/toGrctrlPayload';
+import { buildCurrentGraphSubmissionFromEditorSnapshot } from '../features/runtime-submission/model/current-graph-submission';
 import { WorkspaceView, type WorkspacePanelViewModel } from '../features/workspace/workspace-view';
 import { resolveGraphVariables } from '../features/variables/model/resolveGraphVariables';
 import { deriveDefaultStudioPanelsFromNodes } from '../features/workspace/model/panel-derivation';
@@ -299,8 +299,8 @@ export function StudioPage() {
     return map;
   }, [blockDetailQueries, uniqueBlockTypes]);
   const currentSubmissionContent = useMemo(
-    () => toGrctrlContentSubmission(serializedSnapshot.document, { blockDetailsByType }).content,
-    [blockDetailsByType, serializedSnapshot.document],
+    () => buildCurrentGraphSubmissionFromEditorSnapshot(currentSnapshot, { blockDetailsByType }).content,
+    [blockDetailsByType, currentSnapshot],
   );
   const resolvedGraph = useMemo(
     () => resolveGraphVariables(serializedSnapshot.document),

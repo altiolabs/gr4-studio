@@ -2,6 +2,7 @@ import type { GraphDocument } from '../../graph-document/model/types';
 import type { GrcExport } from './types';
 import { resolveGraphVariables } from '../../variables/model/resolveGraphVariables';
 import type { JsonPrimitive } from '../../variables/model/types';
+import type { BlockDetails } from '../../../lib/api/block-details';
 
 function stableHash(input: string): string {
   let hash = 2166136261;
@@ -74,11 +75,14 @@ function indent(lines: string[], spaces = 2): string[] {
   return lines.map((line) => `${prefix}${line}`);
 }
 
+type ToGrctrlContentSubmissionOptions = {
+  blockDetailsByType?: ReadonlyMap<string, BlockDetails>;
+};
+
 function serializeGraphDocumentToInlineGrc(
   document: GraphDocument,
-  options?: unknown,
+  options?: ToGrctrlContentSubmissionOptions,
 ): string {
-  void options;
   const nodes = [...document.graph.nodes].sort((left, right) => left.id.localeCompare(right.id));
   const edges = [...document.graph.edges].sort((left, right) => left.id.localeCompare(right.id));
   const resolved = resolveGraphVariables(document);
@@ -98,9 +102,32 @@ function serializeGraphDocumentToInlineGrc(
       lines.push(...indent([`  parameters:`]));
       lines.push(...indent([`    name: ${sanitizeScalar(node.id)}`]));
 
-      const parameterEntries = Object.entries(node.parameters).sort(([left], [right]) => left.localeCompare(right));
-      if (parameterEntries.length > 0) {
-        parameterEntries.forEach(([name, parameter]) => {
+      const parameterEntries = new Map<string, { kind: 'literal' | 'expression'; value?: JsonPrimitive; expr?: string }>();
+      Object.entries(node.parameters)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .forEach(([name, parameter]) => {
+          parameterEntries.set(name, parameter);
+        });
+
+      const blockDetails = options?.blockDetailsByType?.get(node.blockType);
+      if (blockDetails) {
+        blockDetails.parameters.forEach((parameter) => {
+          if (parameter.name === 'name' || parameterEntries.has(parameter.name)) {
+            return;
+          }
+          if (parameter.defaultValue === undefined) {
+            return;
+          }
+          parameterEntries.set(parameter.name, {
+            kind: 'literal',
+            value: parameter.defaultValue,
+          });
+        });
+      }
+
+      const sortedParameterEntries = [...parameterEntries.entries()].sort(([left], [right]) => left.localeCompare(right));
+      if (sortedParameterEntries.length > 0) {
+        sortedParameterEntries.forEach(([name, parameter]) => {
           if (name === 'name') {
             return;
           }
@@ -132,7 +159,7 @@ function serializeGraphDocumentToInlineGrc(
 
 export function toGrctrlContentSubmission(
   document: GraphDocument,
-  options?: unknown,
+  options?: ToGrctrlContentSubmissionOptions,
 ): GrcExport {
   const content = serializeGraphDocumentToInlineGrc(document, options);
 

@@ -12,7 +12,7 @@ const ACCEPT_TYPES = [
   {
     description: 'gr4-studio graph document',
     accept: {
-      'application/json': ['.gr4s', '.grc', '.json'],
+      'application/json': ['.gr4s'],
     },
   },
 ];
@@ -209,7 +209,7 @@ function pickUploadedFile(win: Window): Promise<File | null> {
   return new Promise((resolve) => {
     const input = win.document.createElement('input');
     input.type = 'file';
-    input.accept = '.gr4s,.grc,.json,application/json';
+    input.accept = '.gr4s,application/json';
     const finalize = (file: File | null) => {
       input.onchange = null;
       input.oncancel = null;
