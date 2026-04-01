@@ -4,6 +4,8 @@ import type { ExpressionBinding } from '../../variables/model/types';
 export const GRAPH_DOCUMENT_FORMAT = 'gr4-studio.graph';
 export const GRAPH_DOCUMENT_VERSION = 1 as const;
 
+export type NodeRotation = 0 | 90 | 180 | 270;
+
 export type NodeExecutionMode = 'active' | 'disabled' | 'bypassed';
 
 export type GraphParameterValue = ExpressionBinding;
@@ -13,6 +15,7 @@ export type GraphDocumentNode = {
   blockType: string;
   title?: string;
   executionMode?: NodeExecutionMode;
+  rotation?: NodeRotation;
   position: {
     x: number;
     y: number;

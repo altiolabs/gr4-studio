@@ -20,6 +20,7 @@ import { resolveRenderedPorts } from '../ports/model/resolveRenderedPorts';
 import type { RenderedPort, SchemaPort } from '../ports/model/types';
 import type { EditorGraphEdge, EditorGraphNode, FlowNodeData } from './model/types';
 import { getNodeExecutionMode, isLinearBypassableBlock } from './model/node-execution';
+import { rotateNodeRotation } from './model/node-rotation';
 import {
   buildBlockCardSummary,
   toCanonicalBlockDisplayName,
@@ -125,6 +126,7 @@ function toFlowNodeData(
   const cardSummary = buildBlockCardSummary(node, blockDetails);
   const supportsRuntimeVisualization = isHttpTimeSeriesSink(node.blockTypeId);
   const executionMode = getNodeExecutionMode(node.executionMode);
+  const rotation = node.rotation ?? 0;
 
   return {
     id: node.instanceId,
@@ -139,6 +141,7 @@ function toFlowNodeData(
       missingFromCatalog,
       category: node.category,
       executionMode,
+      rotation,
       parameterValues,
       parameterLines: cardSummary.parameterLines,
       parameterOverflowCount: cardSummary.parameterOverflowCount,
@@ -311,22 +314,22 @@ function buildFallbackPortMap(edges: EditorGraphEdge[]): Map<string, { inputs: R
 function mergeFlowNodes(current: FlowGraphNode[], next: FlowGraphNode[]): FlowGraphNode[] {
   const currentById = new Map(current.map((node) => [node.id, node]));
 
-  return next.map((node) => {
-    const previous = currentById.get(node.id);
-    if (!previous) {
-      return node;
-    }
+    return next.map((node) => {
+      const previous = currentById.get(node.id);
+      if (!previous) {
+        return node;
+      }
 
     // Preserve React Flow-managed internals like measured dimensions while refreshing semantic data.
-    return {
-      ...previous,
-      ...node,
-      position: node.position,
-      selected: node.selected,
-      data: node.data,
-    };
-  });
-}
+      return {
+        ...previous,
+        ...node,
+        position: node.position,
+        selected: previous.selected,
+        data: node.data,
+      };
+    });
+  }
 
 function buildStoreNodeSignature(nodes: EditorGraphNode[]): string {
   return JSON.stringify(
@@ -337,6 +340,7 @@ function buildStoreNodeSignature(nodes: EditorGraphNode[]): string {
       blockTypeId: node.blockTypeId,
       category: node.category ?? null,
       executionMode: node.executionMode ?? 'active',
+      rotation: node.rotation ?? 0,
       parameters: node.parameters,
     })),
   );
@@ -366,6 +370,7 @@ function buildRenderedNodeSignature(nodes: FlowGraphNode[]): string {
       parameterLines: node.data.parameterLines,
       parameterOverflowCount: node.data.parameterOverflowCount,
       executionMode: node.data.executionMode,
+      rotation: node.data.rotation,
       runtimeOpen: node.data.isRuntimeVisualizationOpen,
     })),
   );
@@ -532,6 +537,8 @@ export function GraphEditorPanel({
     return selectedFlowNodeIds.length > 0 ? selectedFlowNodeIds : selectedNodeId ? [selectedNodeId] : [];
   }, [selectedFlowNodeIds, selectedNodeId]);
 
+  const setNodeRotation = useEditorStore((state) => state.setNodeRotation);
+
   const isBypassableNodeId = useCallback(
     (nodeId: string) => {
       const flowNode = latestFlowNodesRef.current.find((entry) => entry.id === nodeId);
@@ -653,6 +660,17 @@ export function GraphEditorPanel({
       }
 
       const key = event.key.toLowerCase();
+      if (key === 'arrowleft' || key === 'arrowright') {
+        const direction = key === 'arrowright' ? 'right' : 'left';
+        event.preventDefault();
+        idsToRemove.forEach((nodeId) => {
+          const node = editorNodes.find((entry) => entry.instanceId === nodeId);
+          const currentRotation = node?.rotation ?? 0;
+          setNodeRotation(nodeId, rotateNodeRotation(currentRotation, direction));
+        });
+        return;
+      }
+
       if (key === 'd' || key === 'e' || key === 'b') {
         const bypassableIds = idsToRemove.filter((nodeId) => isBypassableNodeId(nodeId));
         const canBypass = key !== 'b' || bypassableIds.length > 0;
@@ -693,6 +711,7 @@ export function GraphEditorPanel({
     selectedFlowNodeIds,
     selectedNodeId,
     setNodeExecutionMode,
+    setNodeRotation,
   ]);
 
   return (

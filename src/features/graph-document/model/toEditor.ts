@@ -33,6 +33,7 @@ export function editorGraphFromDocument(document: GraphDocument): EditorGraphRep
       displayName: node.title ?? node.blockType,
       category: undefined,
       executionMode: node.executionMode ?? 'active',
+      rotation: node.rotation ?? 0,
       position: {
         x: node.position.x,
         y: node.position.y,

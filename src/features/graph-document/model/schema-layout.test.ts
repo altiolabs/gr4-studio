@@ -200,4 +200,29 @@ describe('graph document schema split-tree layout', () => {
 
     expect(document.graph.nodes[0].executionMode).toBe('disabled');
   });
+
+  it('parses node rotations on graph nodes', () => {
+    const document = parseGraphDocument({
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: {
+        name: 'Graph',
+      },
+      graph: {
+        nodes: [
+          {
+            id: 'node-a',
+            blockType: 'test.block',
+            title: 'Node A',
+            rotation: 270,
+            position: { x: 1, y: 2 },
+            parameters: {},
+          },
+        ],
+        edges: [],
+      },
+    });
+
+    expect(document.graph.nodes[0].rotation).toBe(270);
+  });
 });

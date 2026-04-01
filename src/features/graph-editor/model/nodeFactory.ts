@@ -7,6 +7,7 @@ import type {
   GraphPoint,
 } from './types';
 import { DEFAULT_NODE_EXECUTION_MODE } from './node-execution';
+import { DEFAULT_NODE_ROTATION } from './node-rotation';
 
 function sanitizeIdSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_]/g, '_');
@@ -45,6 +46,7 @@ export function createEditorNode(
     displayName: catalogBlock.displayName,
     category: catalogBlock.category,
     executionMode: DEFAULT_NODE_EXECUTION_MODE,
+    rotation: DEFAULT_NODE_ROTATION,
     parameters: {},
     position,
   };

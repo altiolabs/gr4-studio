@@ -170,6 +170,7 @@ const graphNodeSchema = z.object({
   blockType: z.string().min(1),
   title: z.string().optional(),
   executionMode: z.enum(['active', 'disabled', 'bypassed']).optional(),
+  rotation: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).optional(),
   position: z.object({
     x: z.number(),
     y: z.number(),

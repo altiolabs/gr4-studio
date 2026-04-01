@@ -1,5 +1,5 @@
 import type { RenderedPort } from '../../ports/model/types';
-import type { NodeExecutionMode } from '../../graph-document/model/types';
+import type { NodeExecutionMode, NodeRotation } from '../../graph-document/model/types';
 
 export type GraphPoint = {
   x: number;
@@ -26,6 +26,7 @@ export type EditorGraphNode = {
   displayName: string;
   category?: string;
   executionMode?: NodeExecutionMode;
+  rotation?: NodeRotation;
   parameters: EditorNodeParameterDrafts;
   position: GraphPoint;
 };
@@ -49,6 +50,7 @@ export type FlowNodeData = {
   parameterLines: string[];
   parameterOverflowCount: number;
   executionMode: NodeExecutionMode;
+  rotation: NodeRotation;
   renderedInputPorts: RenderedPort[];
   renderedOutputPorts: RenderedPort[];
   supportsRuntimeVisualization: boolean;

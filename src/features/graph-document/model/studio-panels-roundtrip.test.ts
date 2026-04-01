@@ -129,4 +129,30 @@ describe('studio panel metadata round-trip', () => {
     const restored = editorGraphFromDocument(document);
     expect(restored.nodes[0].executionMode).toBe('bypassed');
   });
+
+  it('preserves node rotations between editor snapshot and graph document', () => {
+    const snapshot = {
+      metadata: {
+        name: 'Graph',
+      },
+      nodes: [
+        {
+          instanceId: 'node-1',
+          blockTypeId: 'test.block',
+          displayName: 'Node 1',
+          category: 'Test',
+          rotation: 90 as const,
+          parameters: {},
+          position: { x: 5, y: 10 },
+        },
+      ],
+      edges: [],
+    };
+
+    const document = graphDocumentFromEditor(snapshot);
+    expect(document.graph.nodes[0].rotation).toBe(90);
+
+    const restored = editorGraphFromDocument(document);
+    expect(restored.nodes[0].rotation).toBe(90);
+  });
 });
