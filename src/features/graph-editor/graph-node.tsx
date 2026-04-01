@@ -128,6 +128,7 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
   const inputPorts = data.renderedInputPorts;
   const outputPorts = data.renderedOutputPorts;
   const updateNodeInternals = useUpdateNodeInternals();
+  const executionMode = data.executionMode ?? 'active';
   const handleSignature = [
     ...inputPorts.map((port) => `${port.key}:${port.handleId ?? port.portId ?? ''}`),
     ...outputPorts.map((port) => `${port.key}:${port.handleId ?? port.portId ?? ''}`),
@@ -187,16 +188,24 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
 
       <div
         className={`relative z-10 h-full rounded-md border px-3 py-2 shadow-sm transition ${
-          data.missingFromCatalog
+          executionMode === 'disabled'
             ? selected
-              ? 'border-rose-300 bg-slate-800 ring-1 ring-rose-300/70 shadow-[0_0_0_1px_rgba(244,63,94,0.65),0_0_18px_rgba(244,63,94,0.45)]'
-              : 'border-rose-600 bg-slate-900 shadow-[0_0_0_1px_rgba(225,29,72,0.35)]'
-            : selected
-              ? 'border-emerald-300 bg-slate-800 ring-1 ring-emerald-200/70 shadow-[0_0_0_1px_rgba(16,185,129,0.55),0_0_18px_rgba(16,185,129,0.45)]'
-              : 'border-slate-700 bg-slate-900'
+              ? 'border-slate-500 bg-slate-800/55 opacity-70 ring-1 ring-slate-400/55'
+              : 'border-slate-700 bg-slate-900/70 opacity-70'
+            : executionMode === 'bypassed'
+              ? selected
+                ? 'border-amber-300 bg-slate-800 ring-1 ring-amber-200/70 shadow-[0_0_0_1px_rgba(245,158,11,0.55),0_0_18px_rgba(245,158,11,0.35)]'
+                : 'border-amber-700 bg-slate-900 shadow-[0_0_0_1px_rgba(180,83,9,0.35)]'
+              : data.missingFromCatalog
+                ? selected
+                  ? 'border-rose-300 bg-slate-800 ring-1 ring-rose-300/70 shadow-[0_0_0_1px_rgba(244,63,94,0.65),0_0_18px_rgba(244,63,94,0.45)]'
+                  : 'border-rose-600 bg-slate-900 shadow-[0_0_0_1px_rgba(225,29,72,0.35)]'
+                : selected
+                  ? 'border-emerald-300 bg-slate-800 ring-1 ring-emerald-200/70 shadow-[0_0_0_1px_rgba(16,185,129,0.55),0_0_18px_rgba(16,185,129,0.45)]'
+                  : 'border-slate-700 bg-slate-900'
         }`}
         style={{ minHeight: `${requiredHeightPx}px` }}
-        title={`${data.displayName}\n${data.blockTypeId}`}
+        title={`${data.displayName}\n${data.blockTypeId}${executionMode === 'active' ? '' : `\nMode: ${executionMode}`}`}
       >
         {data.supportsRuntimeVisualization && (
           <button
@@ -212,6 +221,17 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
         )}
 
         <div className="text-sm font-medium text-slate-100">{data.shortDisplayName}</div>
+        {executionMode !== 'active' && (
+          <div
+            className={`mt-1 inline-flex rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+              executionMode === 'disabled'
+                ? 'border-slate-600 bg-slate-800 text-slate-300'
+                : 'border-amber-600 bg-amber-950/45 text-amber-200'
+            }`}
+          >
+            {executionMode === 'disabled' ? 'Disabled' : 'Bypassed'}
+          </div>
+        )}
         {data.parameterLines.length > 0 ? (
           <div className="mt-2 grid grid-cols-2 gap-1">
             {data.parameterLines.map((line) => (

@@ -90,6 +90,7 @@ type EditorState = {
   applyFlowEdgeChanges: (changes: EdgeChange[]) => void;
   selectNode: (nodeId: string | null) => void;
   setNodePosition: (nodeId: string, position: GraphPoint) => void;
+  setNodeExecutionMode: (nodeId: string, executionMode: 'active' | 'disabled' | 'bypassed') => void;
   removeNode: (nodeId: string) => void;
   addEdge: (input: AddEdgeInput) => void;
   removeEdge: (edgeId: string) => void;
@@ -338,6 +339,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     set((state) => ({
       nodes: state.nodes.map((node) =>
         node.instanceId === nodeId ? { ...node, position: { ...position } } : node,
+      ),
+    }));
+  },
+  setNodeExecutionMode: (nodeId, executionMode) => {
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.instanceId === nodeId
+          ? {
+              ...node,
+              executionMode,
+            }
+          : node,
       ),
     }));
   },

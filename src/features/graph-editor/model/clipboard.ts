@@ -6,6 +6,7 @@ export type GraphClipboardNode = {
   blockTypeId: string;
   displayName: string;
   category?: string;
+  executionMode?: EditorGraphNode['executionMode'];
   parameters: EditorGraphNode['parameters'];
   position: {
     x: number;
@@ -60,6 +61,7 @@ export function buildGraphClipboardPayload(
       blockTypeId: node.blockTypeId,
       displayName: node.displayName,
       category: node.category,
+      executionMode: node.executionMode,
       parameters: Object.entries(node.parameters).reduce<EditorGraphNode['parameters']>(
         (acc, [name, draft]) => {
           acc[name] = { ...draft };
@@ -106,6 +108,7 @@ export function pasteGraphClipboardPayload(
       blockTypeId: node.blockTypeId,
       displayName: node.displayName,
       category: node.category,
+      executionMode: node.executionMode,
       parameters: Object.entries(node.parameters).reduce<EditorGraphNode['parameters']>(
         (acc, [name, draft]) => {
           acc[name] = { ...draft };

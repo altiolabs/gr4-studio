@@ -8,6 +8,7 @@ function makeNode(instanceId: string, x: number, y: number): EditorGraphNode {
     blockTypeId: 'test.block',
     displayName: instanceId,
     category: 'Test',
+    executionMode: instanceId === 'node-2' ? 'bypassed' : 'active',
     parameters: {
       frequency: { value: '1000', bindingKind: 'literal' },
     },
@@ -66,6 +67,8 @@ describe('graph clipboard helpers', () => {
     expect(pasted.selectedNodeIds).toHaveLength(2);
     expect(pasted.nodes[0].instanceId).toBe('node-1-copy');
     expect(pasted.nodes[1].instanceId).toBe('node-2-copy');
+    expect(pasted.nodes[0].executionMode).toBe('active');
+    expect(pasted.nodes[1].executionMode).toBe('bypassed');
     expect(pasted.nodes[0].position).toEqual({ x: 34, y: 44 });
     expect(pasted.nodes[1].position).toEqual({ x: 64, y: 74 });
     expect(pasted.edges).toEqual([

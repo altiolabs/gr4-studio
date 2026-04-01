@@ -6,6 +6,7 @@ import type {
   EditorNodeParameterDrafts,
   GraphPoint,
 } from './types';
+import { DEFAULT_NODE_EXECUTION_MODE } from './node-execution';
 
 function sanitizeIdSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_]/g, '_');
@@ -43,6 +44,7 @@ export function createEditorNode(
     blockTypeId: catalogBlock.blockTypeId,
     displayName: catalogBlock.displayName,
     category: catalogBlock.category,
+    executionMode: DEFAULT_NODE_EXECUTION_MODE,
     parameters: {},
     position,
   };
