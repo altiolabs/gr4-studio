@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toGrctrlContentSubmission } from './toGrctrlPayload';
 import type { GraphDocument } from '../../graph-document/model/types';
-import type { BlockDetails } from '../../../lib/api/block-details';
 
 function makeDocument(name: string, uiConstraintsValue: string): GraphDocument {
   return {
@@ -52,37 +51,6 @@ function makeVectorSettingsDocument(name: string): GraphDocument {
       edges: [],
     },
   };
-}
-
-function makeBlockDetailsMap(): ReadonlyMap<string, BlockDetails> {
-  return new Map([
-    [
-      'gr::incubator::pfb::PfbArbResampler<float32>',
-      {
-        blockTypeId: 'gr::incubator::pfb::PfbArbResampler<float32>',
-        displayName: 'PfbArbResampler<float32>',
-        parameters: [
-          {
-            name: 'taps',
-            label: 'taps',
-            mutable: true,
-            readOnly: false,
-            valueKind: 'scalar',
-            isCollectionLike: true,
-          },
-          {
-            name: 'gain',
-            label: 'gain',
-            mutable: true,
-            readOnly: false,
-            valueKind: 'scalar',
-          },
-        ],
-        inputPorts: [],
-        outputPorts: [],
-      },
-    ],
-  ]);
 }
 
 describe('toGrctrlContentSubmission', () => {
@@ -141,22 +109,22 @@ describe('toGrctrlContentSubmission', () => {
     expect(submission.content).not.toContain('ui_constraints: ""');
   });
 
-  it('omits unset collection-like parameters when block metadata marks them as collections', () => {
-    const submission = toGrctrlContentSubmission(makeVectorSettingsDocument('graph'), {
-      blockDetailsByType: makeBlockDetailsMap(),
-    });
+  it('omits blank parameters from export instead of sending empty strings', () => {
+    const submission = toGrctrlContentSubmission(makeVectorSettingsDocument('graph'));
 
     expect(submission.content).not.toContain('taps: ""');
     expect(submission.content).not.toContain('taps:');
-    expect(submission.content).toContain('gain: ""');
+    expect(submission.content).not.toContain('gain: ""');
+    expect(submission.content).not.toContain('gain:');
   });
 
-  it('keeps blank scalar parameters serialized when metadata does not mark them as collections', () => {
+  it('continues to serialize non-empty scalar parameters normally', () => {
     const document = makeVectorSettingsDocument('graph');
+    document.graph.nodes[0].parameters.gain = { kind: 'expression', expr: '1.0' };
     const submission = toGrctrlContentSubmission(document);
 
-    expect(submission.content).toContain('taps: ""');
-    expect(submission.content).toContain('gain: ""');
+    expect(submission.content).not.toContain('taps:');
+    expect(submission.content).toContain('gain: 1');
   });
 
   it('produces deterministic output and hash for equivalent documents', () => {

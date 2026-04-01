@@ -1,5 +1,4 @@
 import type { GraphDocument } from '../../graph-document/model/types';
-import type { BlockDetails, BlockParameterMeta } from '../../../lib/api/block-details';
 import type { GrcExport } from './types';
 import { resolveGraphVariables } from '../../variables/model/resolveGraphVariables';
 import type { JsonPrimitive } from '../../variables/model/types';
@@ -32,7 +31,7 @@ function sanitizeScalar(value: JsonPrimitive): string {
   return trimmed;
 }
 
-function renderParameterValue(name: string, rawValue: JsonPrimitive): string {
+function renderParameterValue(name: string, rawValue: JsonPrimitive | undefined): string {
   const trimmed = typeof rawValue === 'string' ? rawValue.trim() : String(rawValue ?? '').trim();
   if (name === 'ui_constraints') {
     if (!trimmed) {
@@ -54,36 +53,20 @@ function renderParameterValue(name: string, rawValue: JsonPrimitive): string {
   return sanitizeScalar(trimmed);
 }
 
-type ToGrctrlContentSubmissionOptions = {
-  blockDetailsByType?: ReadonlyMap<string, BlockDetails>;
-};
-
-function getBlockParameterMeta(
-  blockDetailsByType: ReadonlyMap<string, BlockDetails> | undefined,
-  blockType: string,
-  parameterName: string,
-): BlockParameterMeta | undefined {
-  const blockDetails = blockDetailsByType?.get(blockType);
-  return blockDetails?.parameters.find((parameter) => parameter.name === parameterName);
-}
-
-function shouldOmitParameter(
-  blockDetailsByType: ReadonlyMap<string, BlockDetails> | undefined,
-  blockType: string,
-  name: string,
-  rawValue: string,
-): boolean {
+function shouldOmitParameter(name: string, rawValue: JsonPrimitive | undefined): boolean {
   if (name === 'ui_constraints') {
     return false;
   }
 
-  const trimmed = rawValue.trim();
-  if (trimmed) {
-    return false;
+  if (rawValue === null || rawValue === undefined) {
+    return true;
   }
 
-  const parameterMeta = getBlockParameterMeta(blockDetailsByType, blockType, name);
-  return Boolean(parameterMeta?.isCollectionLike);
+  if (typeof rawValue === 'string') {
+    return rawValue.trim().length === 0;
+  }
+
+  return false;
 }
 
 function indent(lines: string[], spaces = 2): string[] {
@@ -93,11 +76,11 @@ function indent(lines: string[], spaces = 2): string[] {
 
 function serializeGraphDocumentToInlineGrc(
   document: GraphDocument,
-  options?: ToGrctrlContentSubmissionOptions,
+  options?: unknown,
 ): string {
+  void options;
   const nodes = [...document.graph.nodes].sort((left, right) => left.id.localeCompare(right.id));
   const edges = [...document.graph.edges].sort((left, right) => left.id.localeCompare(right.id));
-  const blockDetailsByType = options?.blockDetailsByType;
   const resolved = resolveGraphVariables(document);
 
   const lines: string[] = [];
@@ -123,12 +106,11 @@ function serializeGraphDocumentToInlineGrc(
           }
           const resolvedParameter = resolved.parametersByNodeId[node.id]?.[name];
           const fallbackValue = parameter.kind === 'literal' ? parameter.value : '';
-          const parameterValue =
-            resolvedParameter?.state === 'resolved' ? resolvedParameter.value : fallbackValue;
-          if (shouldOmitParameter(blockDetailsByType, node.blockType, name, String(parameterValue ?? ''))) {
+          const parameterValue = resolvedParameter?.state === 'resolved' ? resolvedParameter.value : fallbackValue;
+          if (shouldOmitParameter(name, parameterValue)) {
             return;
           }
-          lines.push(...indent([`    ${name}: ${renderParameterValue(name, parameterValue ?? '')}`]));
+          lines.push(...indent([`    ${name}: ${renderParameterValue(name, parameterValue)}`]));
         });
       }
     });
@@ -150,7 +132,7 @@ function serializeGraphDocumentToInlineGrc(
 
 export function toGrctrlContentSubmission(
   document: GraphDocument,
-  options?: ToGrctrlContentSubmissionOptions,
+  options?: unknown,
 ): GrcExport {
   const content = serializeGraphDocumentToInlineGrc(document, options);
 
