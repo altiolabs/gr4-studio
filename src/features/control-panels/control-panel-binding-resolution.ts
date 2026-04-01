@@ -4,12 +4,15 @@ import type {
   StudioControlPanelSpec,
   StudioControlWidgetInputKind,
   StudioControlWidgetSpec,
+  StudioControlWidgetBinding,
 } from '../graph-document/model/studio-workspace';
 import type { ExecutionState, GraphDriftState } from '../runtime-session/store/runtimeSessionStore';
+import type { ResolvedGraphVariables } from '../variables/model/resolveGraphVariables';
 
 export type ControlWidgetBindingState =
   | 'missing_node'
   | 'missing_parameter'
+  | 'missing_variable'
   | 'incompatible_widget'
   | 'offline'
   | 'stopped'
@@ -25,10 +28,7 @@ type ControlWidgetRuntimeState = {
 export type ResolvedControlWidget = {
   id: string;
   label: string;
-  binding: {
-    nodeId: string;
-    parameterName: string;
-  };
+  binding: StudioControlWidgetBinding;
   inputKind: StudioControlWidgetInputKind;
   runtimeSessionId?: string | null;
   currentValue: string;
@@ -39,6 +39,7 @@ export type ResolvedControlWidget = {
   nodeDisplayName?: string;
   nodeBlockTypeId?: string;
   parameterMeta?: BlockParameterMeta;
+  variableName?: string;
 };
 
 function isNumericTypeName(valueType?: string): boolean {
@@ -86,6 +87,16 @@ function isCompatibleWidget(widget: StudioControlWidgetSpec, parameterMeta?: Blo
   return false;
 }
 
+function stringifyResolvedValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  return String(value);
+}
+
 function deriveRuntimeState(runtime?: ControlWidgetRuntimeState | null): { state: ControlWidgetBindingState; reason: string } {
   if (!runtime?.sessionId) {
     return {
@@ -118,42 +129,80 @@ export function resolveControlPanelWidgetBindings(input: {
   panel: StudioControlPanelSpec;
   nodeById: ReadonlyMap<string, EditorGraphNode>;
   blockDetailsByType: ReadonlyMap<string, BlockDetails>;
+  resolvedGraph?: ResolvedGraphVariables;
   runtime?: ControlWidgetRuntimeState | null;
 }): ResolvedControlWidget[] {
   return input.panel.widgets.map((widget) => {
-    const label = widget.label?.trim() || widget.binding.parameterName;
-    const node = input.nodeById.get(widget.binding.nodeId);
+    const label =
+      widget.label?.trim() ||
+      (widget.binding.kind === 'parameter' ? widget.binding.parameterName : widget.binding.variableName);
+    if (widget.binding.kind === 'variable') {
+      const variableResolution = input.resolvedGraph?.variablesByName[widget.binding.variableName];
+      const displayValue =
+        variableResolution?.value ??
+        (variableResolution?.binding.kind === 'expression'
+          ? variableResolution.binding.expr
+          : variableResolution?.binding.value);
+      if (!variableResolution) {
+        return {
+          id: widget.id,
+          label: widget.label?.trim() || widget.binding.variableName,
+          binding: widget.binding,
+          inputKind: widget.inputKind,
+          runtimeSessionId: null,
+          currentValue: '',
+          state: 'missing_variable' as const,
+          variableName: widget.binding.variableName,
+          reason: `Variable ${widget.binding.variableName} was not found in the current graph.`,
+        };
+      }
+
+      return {
+        id: widget.id,
+        label: widget.label?.trim() || widget.binding.variableName,
+        binding: widget.binding,
+        inputKind: widget.inputKind,
+        runtimeSessionId: null,
+        currentValue: stringifyResolvedValue(displayValue),
+        state: 'ready' as const,
+        variableName: widget.binding.variableName,
+        reason: variableResolution.reason ?? 'Variable is available for editing.',
+      };
+    }
+
+    const binding = widget.binding;
+    const node = input.nodeById.get(binding.nodeId);
     if (!node) {
       return {
         id: widget.id,
         label,
-        binding: widget.binding,
+        binding,
         inputKind: widget.inputKind,
         runtimeSessionId: input.runtime?.sessionId ?? null,
         currentValue: '',
         state: 'missing_node' as const,
-        reason: `Node ${widget.binding.nodeId} was not found in the current graph.`,
+        reason: `Node ${binding.nodeId} was not found in the current graph.`,
       };
     }
 
-    const parameterEntry = node.parameters[widget.binding.parameterName];
+    const parameterEntry = node.parameters[binding.parameterName];
     if (!parameterEntry) {
       return {
         id: widget.id,
         label,
-        binding: widget.binding,
+        binding,
         inputKind: widget.inputKind,
         runtimeSessionId: input.runtime?.sessionId ?? null,
         currentValue: '',
         state: 'missing_parameter' as const,
         nodeDisplayName: node.displayName,
         nodeBlockTypeId: node.blockTypeId,
-        reason: `Parameter ${widget.binding.parameterName} was not found on node ${node.instanceId}.`,
+        reason: `Parameter ${binding.parameterName} was not found on node ${node.instanceId}.`,
       };
     }
 
     const blockDetails = input.blockDetailsByType.get(node.blockTypeId);
-    const parameterMeta = blockDetails?.parameters.find((parameter) => parameter.name === widget.binding.parameterName);
+    const parameterMeta = blockDetails?.parameters.find((parameter) => parameter.name === binding.parameterName);
     const enumOptions = widget.enumOptions ?? parameterMeta?.enumOptions;
     const enumLabels = widget.enumLabels ?? parameterMeta?.enumLabels;
     if (parameterMeta && !isCompatibleWidget(widget, parameterMeta)) {

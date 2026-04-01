@@ -4,11 +4,13 @@ import {
   addControlWidgetToPanels,
   addEmptyControlPanelToPanels,
   buildControlWidgetSpec,
+  getControlWidgetTargetLabel,
   getCompatibleControlWidgetInputKinds,
   inferControlWidgetInputKind,
   moveControlWidgetInPanel,
   moveControlWidgetToPanel,
   removeControlWidgetFromPanel,
+  removeControlWidgetsBoundToVariable,
   renameControlPanelTitle,
   updateControlWidgetInputKind,
   updateControlWidgetLabel,
@@ -64,12 +66,38 @@ describe('control panel authoring', () => {
       id: 'control-widget:node-a:gain',
       kind: 'parameter',
       binding: {
+        kind: 'parameter',
         nodeId: 'node-a',
         parameterName: 'gain',
       },
       label: 'gain',
       inputKind: 'number',
     });
+  });
+
+  it('builds a control widget bound directly to a variable', () => {
+    expect(
+      buildControlWidgetSpec({
+        variableName: 'center_freq',
+        label: 'Center Frequency',
+        inputKind: 'number',
+        initialValue: 100,
+      }),
+    ).toEqual({
+      id: 'control-widget:variable:center_freq',
+      kind: 'parameter',
+      binding: {
+        kind: 'variable',
+        variableName: 'center_freq',
+      },
+      label: 'Center Frequency',
+      inputKind: 'number',
+    });
+    expect(getControlWidgetTargetLabel(buildControlWidgetSpec({
+      variableName: 'center_freq',
+      inputKind: 'number',
+      initialValue: 100,
+    }))).toBe('Variable');
   });
 
   it('appends a widget to an existing control panel or creates one', () => {
@@ -173,6 +201,26 @@ describe('control panel authoring', () => {
     );
     expect((movedPanels[0] as Extract<StudioPanelSpec, { kind: 'control' }>).widgets).toEqual([]);
     expect((movedPanels[1] as Extract<StudioPanelSpec, { kind: 'control' }>).widgets).toEqual([widgetB, widgetA]);
+
+    const variableWidget = buildControlWidgetSpec({
+      variableName: 'center_freq',
+      label: 'Center',
+      inputKind: 'number',
+      initialValue: 100,
+    });
+    const scrubbedPanels = removeControlWidgetsBoundToVariable(
+      [
+        {
+          id: 'control-panel-1',
+          kind: 'control',
+          title: 'Controls',
+          visible: true,
+          widgets: [widgetA, variableWidget],
+        },
+      ],
+      'center_freq',
+    );
+    expect((scrubbedPanels[0] as Extract<StudioPanelSpec, { kind: 'control' }>).widgets).toEqual([widgetA]);
 
     expect(getCompatibleControlWidgetInputKinds(makeParameter({ valueType: 'bool' }))).toEqual(['text', 'boolean']);
     expect(getCompatibleControlWidgetInputKinds(makeParameter({ valueType: 'float' }))).toEqual(['text', 'number', 'slider']);

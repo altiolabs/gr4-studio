@@ -1,6 +1,8 @@
 import type { GraphDocument } from '../../graph-document/model/types';
 import type { BlockDetails, BlockParameterMeta } from '../../../lib/api/block-details';
 import type { GrcExport } from './types';
+import { resolveGraphVariables } from '../../variables/model/resolveGraphVariables';
+import type { JsonPrimitive } from '../../variables/model/types';
 
 function stableHash(input: string): string {
   let hash = 2166136261;
@@ -11,8 +13,13 @@ function stableHash(input: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0');
 }
 
-function sanitizeScalar(value: string): string {
-  const trimmed = value.trim();
+function sanitizeScalar(value: JsonPrimitive): string {
+  if (value === null || value === undefined) {
+    return '""';
+  }
+
+  const raw = typeof value === 'string' ? value : String(value);
+  const trimmed = raw.trim();
   if (!trimmed) {
     return '""';
   }
@@ -25,8 +32,8 @@ function sanitizeScalar(value: string): string {
   return trimmed;
 }
 
-function renderParameterValue(name: string, rawValue: string): string {
-  const trimmed = rawValue.trim();
+function renderParameterValue(name: string, rawValue: JsonPrimitive): string {
+  const trimmed = typeof rawValue === 'string' ? rawValue.trim() : String(rawValue ?? '').trim();
   if (name === 'ui_constraints') {
     if (!trimmed) {
       return '{}';
@@ -91,6 +98,7 @@ function serializeGraphDocumentToInlineGrc(
   const nodes = [...document.graph.nodes].sort((left, right) => left.id.localeCompare(right.id));
   const edges = [...document.graph.edges].sort((left, right) => left.id.localeCompare(right.id));
   const blockDetailsByType = options?.blockDetailsByType;
+  const resolved = resolveGraphVariables(document);
 
   const lines: string[] = [];
   lines.push(`# gr4-studio inline grc`);
@@ -113,10 +121,14 @@ function serializeGraphDocumentToInlineGrc(
           if (name === 'name') {
             return;
           }
-          if (shouldOmitParameter(blockDetailsByType, node.blockType, name, parameter.value)) {
+          const resolvedParameter = resolved.parametersByNodeId[node.id]?.[name];
+          const fallbackValue = parameter.kind === 'literal' ? parameter.value : '';
+          const parameterValue =
+            resolvedParameter?.state === 'resolved' ? resolvedParameter.value : fallbackValue;
+          if (shouldOmitParameter(blockDetailsByType, node.blockType, name, String(parameterValue ?? ''))) {
             return;
           }
-          lines.push(...indent([`    ${name}: ${renderParameterValue(name, parameter.value)}`]));
+          lines.push(...indent([`    ${name}: ${renderParameterValue(name, parameterValue ?? '')}`]));
         });
       }
     });

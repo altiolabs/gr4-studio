@@ -119,6 +119,7 @@ describe('graph document schema split-tree layout', () => {
                   label: 'Gain',
                   inputKind: 'number',
                   binding: {
+                    kind: 'parameter',
                     nodeId: 'node-a',
                     parameterName: 'gain',
                   },
@@ -156,6 +157,7 @@ describe('graph document schema split-tree layout', () => {
             label: 'Gain',
             inputKind: 'number',
             binding: {
+              kind: 'parameter',
               nodeId: 'node-a',
               parameterName: 'gain',
             },

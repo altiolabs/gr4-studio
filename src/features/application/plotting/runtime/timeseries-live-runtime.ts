@@ -8,6 +8,7 @@ import {
   normalizeSeriesPollMs,
   isSupportedSeriesBinding,
 } from '../../../workspace/renderers/series-live-renderer-model';
+import { hasRenderableSeries } from '../components/plot-visible-state';
 import type { PlotDataFrame, PlotPanelSpec, PlotRuntimeBinding, PlotSeriesFrame } from '../model/types';
 import { createPlotFrameController } from './plot-frame-controller';
 import {
@@ -18,6 +19,7 @@ import {
 } from './vector-frame';
 
 const PLOT_PUBLISH_MS = 120;
+const PLOT_NO_DATA_GRACE_MS = 1200;
 const PLOT_DEBUG_FLAG = '__GR4_STUDIO_PLOT_DEBUG';
 
 export type PlotPayloadContract = 'series-window-json-v1' | 'series2d-xy-json-v1' | 'dataset-xy-json-v1';
@@ -55,6 +57,18 @@ export function deriveBindingFailure(params: {
     errorKind: 'invalid-binding',
     message,
   };
+}
+
+export function shouldRetainPreviousLiveFrame(params: {
+  currentFrame: PlotDataFrame;
+  nextFrame: PlotDataFrame;
+}): boolean {
+  const nextState = params.nextFrame.meta?.state;
+  if (nextState !== 'loading' && nextState !== 'no-data') {
+    return false;
+  }
+
+  return params.currentFrame.meta?.state === 'ready' && hasRenderableSeries(params.currentFrame);
 }
 
 async function fetchSnapshotPayload(endpointUrl: string): Promise<unknown> {
@@ -272,11 +286,14 @@ type UseTimeseriesLiveFrameArgs = {
 export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTimeseriesLiveFrameArgs): PlotDataFrame {
   const controllerRef = useRef(createPlotFrameController(spec));
   const [frame, setFrame] = useState<PlotDataFrame>(() => controllerRef.current.getFrame());
+  const frameRef = useRef(frame);
   const isFetchingRef = useRef(false);
   const fetchGenerationRef = useRef(0);
   const lastPublishedVersionRef = useRef(-1);
   const publishCounterRef = useRef(0);
   const publishWindowStartedAtRef = useRef(typeof performance !== 'undefined' ? performance.now() : Date.now());
+  const pendingNoDataTimeoutRef = useRef<number | null>(null);
+  const pendingNoDataFrameRef = useRef<PlotDataFrame | null>(null);
 
   const endpoint = binding.endpoint?.trim() ?? '';
   const bindingGate = isSupportedSeriesBinding(binding);
@@ -289,7 +306,11 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
     fetchGenerationRef.current += 1;
     controllerRef.current = createPlotFrameController(spec);
     lastPublishedVersionRef.current = -1;
-    setFrame(controllerRef.current.getFrame());
+    if (pendingNoDataTimeoutRef.current !== null) {
+      window.clearTimeout(pendingNoDataTimeoutRef.current);
+      pendingNoDataTimeoutRef.current = null;
+    }
+    pendingNoDataFrameRef.current = null;
   }, [spec]);
 
   const refresh = useCallback(async () => {
@@ -395,6 +416,30 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
 
       const nextFrame = controllerRef.current.getFrame();
       lastPublishedVersionRef.current = nextVersion;
+
+      if (shouldRetainPreviousLiveFrame({ currentFrame: frameRef.current, nextFrame })) {
+        pendingNoDataFrameRef.current = nextFrame;
+        if (pendingNoDataTimeoutRef.current === null) {
+          pendingNoDataTimeoutRef.current = window.setTimeout(() => {
+            const pendingFrame = pendingNoDataFrameRef.current;
+            pendingNoDataTimeoutRef.current = null;
+            pendingNoDataFrameRef.current = null;
+            if (pendingFrame) {
+              frameRef.current = pendingFrame;
+              setFrame(pendingFrame);
+            }
+          }, PLOT_NO_DATA_GRACE_MS);
+        }
+        return;
+      }
+
+      if (pendingNoDataTimeoutRef.current !== null) {
+        window.clearTimeout(pendingNoDataTimeoutRef.current);
+        pendingNoDataTimeoutRef.current = null;
+        pendingNoDataFrameRef.current = null;
+      }
+
+      frameRef.current = nextFrame;
       setFrame(nextFrame);
 
       publishCounterRef.current += 1;
@@ -420,9 +465,17 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
     }, PLOT_PUBLISH_MS);
     return () => {
       fetchGenerationRef.current += 1;
+      if (pendingNoDataTimeoutRef.current !== null) {
+        window.clearTimeout(pendingNoDataTimeoutRef.current);
+        pendingNoDataTimeoutRef.current = null;
+      }
       window.clearInterval(handle);
     };
   }, [spec.panelId]);
+
+  useEffect(() => {
+    frameRef.current = frame;
+  }, [frame]);
 
   return frame;
 }

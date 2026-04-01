@@ -7,6 +7,7 @@ export type GraphPoint = {
 
 export type EditorNodeParameterDraft = {
   value: string;
+  bindingKind: 'literal' | 'expression';
 };
 
 export type EditorNodeParameterDrafts = Record<string, EditorNodeParameterDraft>;

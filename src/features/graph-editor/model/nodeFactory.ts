@@ -52,6 +52,7 @@ export function buildInitialParameterDrafts(blockDetails: BlockDetails): EditorN
   return blockDetails.parameters.reduce<EditorNodeParameterDrafts>((acc, param) => {
     acc[param.name] = {
       value: param.defaultValue ?? '',
+      bindingKind: 'literal',
     };
     return acc;
   }, {});

@@ -1,8 +1,10 @@
 import type { BlockParameterMeta } from '../../lib/api/block-details';
+import type { JsonPrimitive } from '../variables/model/types';
 import type {
   StudioControlPanelSpec,
   StudioControlWidgetInputKind,
   StudioControlWidgetSpec,
+  StudioControlWidgetBinding,
   StudioPanelSpec,
 } from '../graph-document/model/studio-workspace';
 
@@ -30,6 +32,20 @@ function isSliderUiHint(uiHint?: string): boolean {
 
 export function isControlWidgetParameterTarget(parameter: BlockParameterMeta): boolean {
   return parameter.mutable && !parameter.readOnly;
+}
+
+export function getControlWidgetTargetLabel(widget: { binding: StudioControlWidgetBinding }): string {
+  return widget.binding.kind === 'parameter' ? 'Block parameter' : 'Variable';
+}
+
+function inferVariableInputKind(value: JsonPrimitive | undefined): StudioControlWidgetInputKind {
+  if (typeof value === 'boolean') {
+    return 'boolean';
+  }
+  if (typeof value === 'number') {
+    return 'number';
+  }
+  return 'text';
 }
 
 export function inferControlWidgetInputKind(parameter: BlockParameterMeta): StudioControlWidgetInputKind {
@@ -88,19 +104,42 @@ function makeUniqueId(existingIds: Set<string>, baseId: string): string {
   return `${baseId}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function buildControlWidgetSpec(input: {
-  nodeId: string;
-  parameter: BlockParameterMeta;
-}): StudioControlWidgetSpec {
+export function buildControlWidgetSpec(
+  input:
+    | {
+        nodeId: string;
+        parameter: BlockParameterMeta;
+      }
+    | {
+        variableName: string;
+        label?: string;
+        inputKind?: StudioControlWidgetInputKind;
+        initialValue?: JsonPrimitive;
+      },
+): StudioControlWidgetSpec {
+  if ('nodeId' in input) {
+    return {
+      id: `control-widget:${input.nodeId}:${input.parameter.name}`,
+      kind: 'parameter',
+      binding: {
+        kind: 'parameter',
+        nodeId: input.nodeId,
+        parameterName: input.parameter.name,
+      },
+      label: input.parameter.name,
+      inputKind: inferControlWidgetInputKind(input.parameter),
+    };
+  }
+
   return {
-    id: `control-widget:${input.nodeId}:${input.parameter.name}`,
+    id: `control-widget:variable:${input.variableName}`,
     kind: 'parameter',
     binding: {
-      nodeId: input.nodeId,
-      parameterName: input.parameter.name,
+      kind: 'variable',
+      variableName: input.variableName,
     },
-    label: input.parameter.name,
-    inputKind: inferControlWidgetInputKind(input.parameter),
+    label: input.label?.trim() || input.variableName,
+    inputKind: input.inputKind ?? inferVariableInputKind(input.initialValue),
   };
 }
 
@@ -154,11 +193,18 @@ export function addControlWidgetToPanels(
   const existingBindings = new Set(
     currentPanels.flatMap((panel) =>
       panel.kind === 'control'
-        ? panel.widgets.map((widget) => `${widget.binding.nodeId}:${widget.binding.parameterName}`)
+        ? panel.widgets.map((widget) =>
+            widget.binding.kind === 'parameter'
+              ? `parameter:${widget.binding.nodeId}:${widget.binding.parameterName}`
+              : `variable:${widget.binding.variableName}`,
+          )
         : [],
     ),
   );
-  const widgetBindingKey = `${input.widget.binding.nodeId}:${input.widget.binding.parameterName}`;
+  const widgetBindingKey =
+    input.widget.binding.kind === 'parameter'
+      ? `parameter:${input.widget.binding.nodeId}:${input.widget.binding.parameterName}`
+      : `variable:${input.widget.binding.variableName}`;
   if (existingBindings.has(widgetBindingKey)) {
     return currentPanels;
   }
@@ -319,6 +365,24 @@ export function removeControlWidgetFromPanel(
     return {
       ...panel,
       widgets: panel.widgets.filter((widget) => widget.id !== widgetId),
+    };
+  });
+}
+
+export function removeControlWidgetsBoundToVariable(
+  panels: readonly StudioPanelSpec[] | undefined,
+  variableName: string,
+): StudioPanelSpec[] {
+  return (panels ?? []).map((panel) => {
+    if (panel.kind !== 'control') {
+      return panel;
+    }
+
+    return {
+      ...panel,
+      widgets: panel.widgets.filter(
+        (widget) => widget.binding.kind !== 'variable' || widget.binding.variableName !== variableName,
+      ),
     };
   });
 }

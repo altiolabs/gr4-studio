@@ -72,6 +72,7 @@ describe('studio panel metadata round-trip', () => {
                 label: 'Gain',
                 inputKind: 'number' as const,
                 binding: {
+                  kind: 'parameter' as const,
                   nodeId: 'node-1',
                   parameterName: 'gain',
                 },
@@ -83,6 +84,7 @@ describe('studio panel metadata round-trip', () => {
                 label: 'Enabled',
                 inputKind: 'boolean' as const,
                 binding: {
+                  kind: 'parameter' as const,
                   nodeId: 'node-2',
                   parameterName: 'enabled',
                 },

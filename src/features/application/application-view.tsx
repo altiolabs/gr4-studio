@@ -8,19 +8,23 @@ import { WorkspacePanelRenderer } from '../workspace/renderers/panel-renderers';
 import type { WorkspaceLiveRendererContext } from '../workspace/renderers/live-renderer-contract';
 import type { WorkspacePanelViewModel } from '../workspace/workspace-view';
 import { ControlPanelView } from '../control-panels/control-panel-view';
+import type { ExpressionBinding } from '../variables/model/types';
 
 type ApplicationViewProps = {
   panelEntries: readonly WorkspacePanelViewModel[];
   layout: StudioLayoutSpec;
   executionState?: 'idle' | 'ready' | 'running' | 'stopped' | 'error';
+  onUpdateVariableValue?: (variableName: string, binding: ExpressionBinding) => void;
 };
 
 function ApplicationPanelShell({
   entry,
   executionState,
+  onUpdateVariableValue,
 }: {
   entry: WorkspacePanelViewModel;
   executionState?: 'idle' | 'ready' | 'running' | 'stopped' | 'error';
+  onUpdateVariableValue?: (variableName: string, binding: ExpressionBinding) => void;
 }) {
   const { panel } = entry;
   const plotSpec = useMemo(() => derivePlotPanelSpec(entry), [entry]);
@@ -35,7 +39,7 @@ function ApplicationPanelShell({
         </header>
         <div className="p-2 flex-1 min-h-0">
           <div className="h-full rounded border border-slate-700 bg-slate-950/50 p-3">
-            <ControlPanelView widgets={entry.controlWidgets ?? []} />
+            <ControlPanelView widgets={entry.controlWidgets ?? []} onUpdateVariableValue={onUpdateVariableValue} />
           </div>
         </div>
       </article>
@@ -92,7 +96,7 @@ function ApplicationPanelShell({
   );
 }
 
-export function ApplicationView({ panelEntries, layout, executionState }: ApplicationViewProps) {
+export function ApplicationView({ panelEntries, layout, executionState, onUpdateVariableValue }: ApplicationViewProps) {
   const visibleEntries = panelEntries.filter((entry) => entry.panel.visible);
   const visibleEntryByPanelId = new Map(visibleEntries.map((entry) => [entry.panel.id, entry]));
   const renderedPanelIds = new Set<string>();
@@ -107,7 +111,7 @@ export function ApplicationView({ panelEntries, layout, executionState }: Applic
         return null;
       }
       renderedPanelIds.add(entry.panel.id);
-      return <ApplicationPanelShell entry={entry} executionState={executionState} />;
+      return <ApplicationPanelShell entry={entry} executionState={executionState} onUpdateVariableValue={onUpdateVariableValue} />;
     }
 
     const children: Array<{ key: string; node: ReactNode }> = node.children

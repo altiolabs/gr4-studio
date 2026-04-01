@@ -5,12 +5,15 @@ import { useEditorStore } from '../graph-editor/store/editorStore';
 import { useBlockDetailsQuery } from '../inspector/hooks/use-block-details-query';
 import { toCanonicalBlockDisplayName } from '../graph-editor/model/presentation';
 import type { StudioPanelSpec } from '../graph-document/model/studio-workspace';
+import { graphDocumentFromEditor } from '../graph-document/model/fromEditor';
 import {
   addControlWidgetToPanels,
   buildControlWidgetSpec,
   isControlWidgetParameterTarget,
   removeControlWidgetFromPanel,
 } from '../control-panels/control-panel-authoring';
+import { resolveGraphVariables } from '../variables/model/resolveGraphVariables';
+import type { ExpressionBinding } from '../variables/model/types';
 
 type BlockPropertiesModalProps = {
   instanceId: string;
@@ -19,7 +22,12 @@ type BlockPropertiesModalProps = {
 
 type ModalTab = 'general' | 'readonly' | 'advanced' | 'documentation';
 
-type DraftMap = Record<string, string>;
+type DraftValue = {
+  value: string;
+  bindingKind: 'literal' | 'expression';
+};
+
+type DraftMap = Record<string, DraftValue>;
 const EMPTY_STUDIO_PANELS: readonly StudioPanelSpec[] = [];
 const CUSTOM_ENUM_VALUE = '__custom__';
 
@@ -28,17 +36,23 @@ function isAdvancedParameterMeta(parameter: BlockParameterMeta): boolean {
 }
 
 function buildInitialDraftValues(
-  persistedValues: Record<string, { value: string }>,
+  persistedValues: Record<string, { value: string; bindingKind: 'literal' | 'expression' }>,
   blockDetails: BlockDetails,
 ): DraftMap {
   const fromMetadata = blockDetails.parameters.reduce<DraftMap>((acc, parameter) => {
-    acc[parameter.name] = persistedValues[parameter.name]?.value ?? parameter.defaultValue ?? '';
+    acc[parameter.name] = {
+      value: persistedValues[parameter.name]?.value ?? parameter.defaultValue ?? '',
+      bindingKind: persistedValues[parameter.name]?.bindingKind ?? 'literal',
+    };
     return acc;
   }, {});
 
   for (const [name, entry] of Object.entries(persistedValues)) {
     if (!(name in fromMetadata)) {
-      fromMetadata[name] = entry.value;
+      fromMetadata[name] = {
+        value: entry.value,
+        bindingKind: entry.bindingKind,
+      };
     }
   }
 
@@ -47,9 +61,17 @@ function buildInitialDraftValues(
 
 export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesModalProps) {
   const block = useEditorStore((state) => state.getNodeById(instanceId));
-  const updateNodeParameters = useEditorStore((state) => state.updateNodeParameters);
+  const updateNodeParameterBindings = useEditorStore((state) => state.updateNodeParameterBindings);
   const studioPanels = useEditorStore((state) => state.studioPanels);
   const setStudioPanels = useEditorStore((state) => state.setStudioPanels);
+  const documentName = useEditorStore((state) => state.documentName);
+  const documentDescription = useEditorStore((state) => state.documentDescription);
+  const studioVariables = useEditorStore((state) => state.studioVariables);
+  const studioLayout = useEditorStore((state) => state.studioLayout);
+  const studioPlotPalettes = useEditorStore((state) => state.studioPlotPalettes);
+  const application = useEditorStore((state) => state.application);
+  const nodes = useEditorStore((state) => state.nodes);
+  const edges = useEditorStore((state) => state.edges);
 
   const [activeTab, setActiveTab] = useState<ModalTab>('general');
   const [draftValues, setDraftValues] = useState<DraftMap>({});
@@ -103,7 +125,10 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
       .map((panel) => ({
         panel,
         widget: panel.widgets.find(
-          (widget) => widget.binding.nodeId === blockInstanceId && widget.binding.parameterName === parameterName,
+          (widget) =>
+            widget.binding.kind === 'parameter' &&
+            widget.binding.nodeId === blockInstanceId &&
+            widget.binding.parameterName === parameterName,
         ),
       }))
       .find((entry): entry is { panel: Extract<StudioPanelSpec, { kind: 'control' }>; widget: NonNullable<typeof entry.widget> } =>
@@ -132,11 +157,42 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
     [parameterRows],
   );
   const canCommit = isDraftInitialized && !blockDetailsQuery.isPending && !blockDetailsQuery.isError;
+  const currentDocument = useMemo(
+    () =>
+      graphDocumentFromEditor({
+        metadata: {
+          name: documentName,
+          description: documentDescription,
+          studioPanels,
+          studioVariables,
+          studioLayout,
+          studioPlotPalettes,
+          application,
+        },
+        nodes,
+        edges,
+      }),
+    [application, documentDescription, documentName, edges, nodes, studioLayout, studioPanels, studioPlotPalettes, studioVariables],
+  );
+  const resolvedGraph = useMemo(() => resolveGraphVariables(currentDocument), [currentDocument]);
 
   const setDraftValue = (parameterName: string, value: string) => {
     setDraftValues((prev) => ({
       ...prev,
-      [parameterName]: value,
+      [parameterName]: {
+        value,
+        bindingKind: prev[parameterName]?.bindingKind ?? 'literal',
+      },
+    }));
+  };
+
+  const setDraftBindingKind = (parameterName: string, bindingKind: DraftValue['bindingKind']) => {
+    setDraftValues((prev) => ({
+      ...prev,
+      [parameterName]: {
+        value: prev[parameterName]?.value ?? '',
+        bindingKind,
+      },
     }));
   };
 
@@ -181,7 +237,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
   };
 
   const renderParameterValueInput = (parameter: BlockParameterMeta, disabled: boolean) => {
-    const currentValue = draftValues[parameter.name] ?? parameter.defaultValue ?? '';
+    const currentValue = draftValues[parameter.name]?.value ?? parameter.defaultValue ?? '';
     const enumOptions = parameter.enumOptions ?? [];
     const hasEnumOptions = parameter.valueKind === 'enum' && enumOptions.length > 0;
 
@@ -241,7 +297,29 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
       return;
     }
 
-    updateNodeParameters(block.instanceId, draftValues);
+    const nextBindings = Object.entries(draftValues).reduce<Record<string, ExpressionBinding>>((acc, [name, draft]) => {
+      if (draft.bindingKind === 'expression') {
+        acc[name] = { kind: 'expression', expr: draft.value };
+        return acc;
+      }
+
+      const trimmed = draft.value.trim();
+      if (trimmed === 'true') {
+        acc[name] = { kind: 'literal', value: true };
+      } else if (trimmed === 'false') {
+        acc[name] = { kind: 'literal', value: false };
+      } else if (trimmed === 'null') {
+        acc[name] = { kind: 'literal', value: null };
+      } else if (trimmed !== '' && /^-?(?:\d+\.?\d*|\.\d+)$/.test(trimmed)) {
+        const parsed = Number(trimmed);
+        acc[name] = { kind: 'literal', value: Number.isFinite(parsed) ? parsed : draft.value };
+      } else {
+        acc[name] = { kind: 'literal', value: draft.value };
+      }
+      return acc;
+    }, {});
+
+    updateNodeParameterBindings(block.instanceId, nextBindings);
   };
 
   const handleApply = () => {
@@ -400,10 +478,28 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                         >
                           {binding ? '−' : '+'}
                         </button>
+                        <select
+                          value={draftValues[parameter.name]?.bindingKind ?? 'literal'}
+                          onChange={(event) =>
+                            setDraftBindingKind(parameter.name, event.target.value as DraftValue['bindingKind'])
+                          }
+                          className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+                        >
+                          <option value="literal">Literal</option>
+                          <option value="expression">Expression</option>
+                        </select>
                         <div className="min-w-0 flex-1">
                           {renderParameterValueInput(parameter, false)}
                         </div>
                       </div>
+                      <p className="text-[11px] text-slate-500">
+                        {resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.state === 'resolved'
+                          ? `Resolved: ${String(
+                              resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.value ?? '',
+                            )}`
+                          : resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.reason ??
+                            'No resolved preview available.'}
+                      </p>
                       {parameter.description && (
                         <div className="text-[11px] text-slate-500">{parameter.description}</div>
                       )}
@@ -494,10 +590,28 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                         >
                           {binding ? '−' : '+'}
                         </button>
+                        <select
+                          value={draftValues[parameter.name]?.bindingKind ?? 'literal'}
+                          onChange={(event) =>
+                            setDraftBindingKind(parameter.name, event.target.value as DraftValue['bindingKind'])
+                          }
+                          className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+                        >
+                          <option value="literal">Literal</option>
+                          <option value="expression">Expression</option>
+                        </select>
                         <div className="min-w-0 flex-1">
                           {renderParameterValueInput(parameter, !isEditable)}
                         </div>
                       </div>
+                      <p className="text-[11px] text-slate-500">
+                        {resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.state === 'resolved'
+                          ? `Resolved: ${String(
+                              resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.value ?? '',
+                            )}`
+                          : resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.reason ??
+                            'No resolved preview available.'}
+                      </p>
                       {parameter.description && <div className="text-[11px] text-slate-500">{parameter.description}</div>}
                     </div>
                   );

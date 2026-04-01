@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ApplicationSpec, StudioLayoutSpec, StudioPanelSpec, StudioPlotPaletteSpec } from '../../graph-document/model/studio-workspace';
+import type { ApplicationSpec, StudioLayoutSpec, StudioPanelSpec, StudioPlotPaletteSpec, StudioVariable } from '../../graph-document/model/studio-workspace';
 import type { EditorGraphEdge, EditorGraphNode } from '../../graph-editor/model/types';
 import { createUntitledDocumentIdentity, type DocumentIdentityState } from '../../document-file/document-persistence-service';
 import { detectDocumentPersistenceCapabilities } from '../../document-file/document-persistence-capabilities';
@@ -10,6 +10,7 @@ export type EditorSnapshot = {
     name: string;
     description?: string;
     studioPanels?: StudioPanelSpec[];
+    studioVariables?: StudioVariable[];
     studioLayout?: StudioLayoutSpec;
     studioPlotPalettes?: StudioPlotPaletteSpec[];
     application?: ApplicationSpec;
@@ -56,6 +57,7 @@ function createEmptySnapshot(index: number): EditorSnapshot {
     metadata: {
       name: untitledName,
       description: undefined,
+      studioVariables: [],
     },
     nodes: [],
     edges: [],
