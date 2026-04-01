@@ -3,6 +3,7 @@ import { useQueries } from '@tanstack/react-query';
 import { StatusBadge } from '../components/status-badge';
 import { StatusPill } from '../components/status-pill';
 import { ApplicationView } from '../features/application/application-view';
+import { VariablesView } from '../features/variables/variables-view';
 import {
   createDocumentPersistenceService,
   createUntitledDocumentIdentity,
@@ -43,28 +44,33 @@ import { useEditorStore } from '../features/graph-editor/store/editorStore';
 import { InspectorPanel } from '../features/inspector/inspector-panel';
 import { GlobalSessionsDrawer } from '../features/runtime-session/components/global-sessions-drawer';
 import { useRuntimeSessionStore } from '../features/runtime-session/store/runtimeSessionStore';
+import { setBlockSettings } from '../lib/api/block-settings';
 import { toGrctrlContentSubmission } from '../features/runtime-submission/model/toGrctrlPayload';
 import { WorkspaceView, type WorkspacePanelViewModel } from '../features/workspace/workspace-view';
+import { resolveGraphVariables } from '../features/variables/model/resolveGraphVariables';
 import { deriveDefaultStudioPanelsFromNodes } from '../features/workspace/model/panel-derivation';
 import { buildEffectiveStudioLayout } from '../features/workspace/model/layout';
 import { mergeSavedAndDerivedStudioPanels } from '../features/workspace/model/panel-merge';
 import { buildDisambiguatedPanelTitles } from '../features/workspace/model/panel-titles';
 import {
   addEmptyControlPanelToPanels,
+  addControlWidgetToPanels,
+  buildControlWidgetSpec,
   renameControlPanelTitle,
   moveControlWidgetInPanel,
   removeControlWidgetFromPanel,
+  removeControlWidgetsBoundToVariable,
   moveControlWidgetToPanel,
   updateControlWidgetInputKind,
   updateControlWidgetLabel,
 } from '../features/control-panels/control-panel-authoring';
 import { PlotStyleModal } from '../features/workspace/plot-style-modal';
-import type { StudioPlotStyleConfig } from '../features/graph-document/model/studio-workspace';
+import type { StudioPlotStyleConfig, StudioVariable } from '../features/graph-document/model/studio-workspace';
 import { getBlockDetails, type BlockDetails } from '../lib/api/block-details';
 import { config } from '../lib/config';
 
 type ConnectionStatus = 'idle' | 'loading' | 'connected' | 'error';
-type CenterViewMode = 'graph' | 'workspace' | 'application';
+type CenterViewMode = 'graph' | 'variables' | 'workspace' | 'application';
 type PendingDestructiveAction = { type: 'close-tab'; tabId: string } | null;
 
 function runButtonTitle(runIntent: 'none' | 'create-session' | 'replace-session-from-edits' | 'start-linked-session'): string {
@@ -122,6 +128,7 @@ function buildNewUntitledSnapshot(): EditorSnapshot {
       name: STUDIO_UNTITLED_NAME,
       description: undefined,
       studioPanels: [],
+      studioVariables: [],
       studioLayout: undefined,
       studioPlotPalettes: undefined,
       application: undefined,
@@ -157,9 +164,13 @@ export function StudioPage() {
   const documentName = useEditorStore((state) => state.documentName);
   const documentDescription = useEditorStore((state) => state.documentDescription);
   const studioPanels = useEditorStore((state) => state.studioPanels);
+  const studioVariables = useEditorStore((state) => state.studioVariables);
   const studioLayout = useEditorStore((state) => state.studioLayout);
   const studioPlotPalettes = useEditorStore((state) => state.studioPlotPalettes);
   const application = useEditorStore((state) => state.application);
+  const addVariable = useEditorStore((state) => state.addVariable);
+  const updateVariable = useEditorStore((state) => state.updateVariable);
+  const removeVariable = useEditorStore((state) => state.removeVariable);
   const nodes = useEditorStore((state) => state.nodes);
   const edges = useEditorStore((state) => state.edges);
   const replaceGraph = useEditorStore((state) => state.replaceGraph);
@@ -212,6 +223,7 @@ export function StudioPage() {
         name: documentName,
         description: documentDescription,
         studioPanels,
+        studioVariables,
         studioLayout,
         studioPlotPalettes,
         application,
@@ -219,7 +231,7 @@ export function StudioPage() {
       nodes,
       edges,
     }),
-    [application, documentDescription, documentName, edges, nodes, studioLayout, studioPanels, studioPlotPalettes],
+    [application, documentDescription, documentName, edges, nodes, studioLayout, studioPanels, studioPlotPalettes, studioVariables],
   );
   const serializedSnapshot = useMemo(() => serializeEditorSnapshot(currentSnapshot), [currentSnapshot]);
   const activeTabSerializedSnapshot = useMemo(
@@ -290,6 +302,19 @@ export function StudioPage() {
     () => toGrctrlContentSubmission(serializedSnapshot.document, { blockDetailsByType }).content,
     [blockDetailsByType, serializedSnapshot.document],
   );
+  const resolvedGraph = useMemo(
+    () => resolveGraphVariables(serializedSnapshot.document),
+    [serializedSnapshot.document],
+  );
+  const handleCreateVariable = useCallback(() => {
+    addVariable();
+  }, [addVariable]);
+  const handleUpdateVariable = useCallback(
+    (variableId: string, patch: Partial<Pick<StudioVariable, 'name' | 'binding'>>) => {
+      updateVariable(variableId, patch);
+    },
+    [updateVariable],
+  );
   const mergedWorkspacePanels = useMemo(
     () =>
       mergeSavedAndDerivedStudioPanels({
@@ -297,6 +322,49 @@ export function StudioPage() {
         derivedPanels: derivedWorkspacePanels,
       }),
     [derivedWorkspacePanels, studioPanels],
+  );
+  const variableControlNames = useMemo(() => {
+    const names = new Set<string>();
+    mergedWorkspacePanels.forEach((panel) => {
+      if (panel.kind !== 'control') {
+        return;
+      }
+      panel.widgets.forEach((widget) => {
+        if (widget.binding.kind === 'variable') {
+          names.add(widget.binding.variableName);
+        }
+      });
+    });
+    return names;
+  }, [mergedWorkspacePanels]);
+  const handleRemoveVariable = useCallback(
+    (variableId: string) => {
+      const variable = (studioVariables ?? []).find((entry) => entry.id === variableId);
+      if (variable) {
+        setStudioPanels(removeControlWidgetsBoundToVariable(mergedWorkspacePanels, variable.name));
+      }
+      removeVariable(variableId);
+    },
+    [mergedWorkspacePanels, removeVariable, setStudioPanels, studioVariables],
+  );
+  const handleCreateVariableControl = useCallback(
+    (variableName: string, inputValue?: string) => {
+      const resolvedValue = resolvedGraph.variablesByName[variableName]?.value;
+      const widget = buildControlWidgetSpec({
+        variableName,
+        label: variableName,
+        initialValue: resolvedValue ?? inputValue ?? '',
+      });
+      const nextPanels = addControlWidgetToPanels(mergedWorkspacePanels, { widget });
+      setStudioPanels(nextPanels);
+    },
+    [mergedWorkspacePanels, resolvedGraph.variablesByName, setStudioPanels],
+  );
+  const handleRemoveVariableControl = useCallback(
+    (variableName: string) => {
+      setStudioPanels(removeControlWidgetsBoundToVariable(mergedWorkspacePanels, variableName));
+    },
+    [mergedWorkspacePanels, setStudioPanels],
   );
   const effectiveStudioPlotPalettes = useMemo(
     () => (studioPlotPalettes && studioPlotPalettes.length > 0 ? studioPlotPalettes : buildDefaultStudioPlotPalettes()),
@@ -313,6 +381,7 @@ export function StudioPage() {
           graphDriftState: runtimeView.graphDriftState,
         }
       : null;
+  const lastPropagatedRuntimeSnapshotRef = useRef<string | null>(null);
   const workspacePanelEntries = useMemo<WorkspacePanelViewModel[]>(() => {
     const nodeById = new Map(nodes.map((node) => [node.instanceId, node]));
     const nodePanelTitlesById = buildDisambiguatedPanelTitles(
@@ -332,6 +401,7 @@ export function StudioPage() {
               panel,
               nodeById,
               blockDetailsByType,
+              resolvedGraph,
               runtime: controlWidgetRuntime,
             }),
           };
@@ -344,12 +414,13 @@ export function StudioPage() {
         if (panel.kind === 'control') {
           return {
             panel,
-            controlWidgets: resolveControlPanelWidgetBindings({
-              panel,
-              nodeById,
-              blockDetailsByType,
-              runtime: controlWidgetRuntime,
-            }),
+              controlWidgets: resolveControlPanelWidgetBindings({
+                panel,
+                nodeById,
+                blockDetailsByType,
+                resolvedGraph,
+                runtime: controlWidgetRuntime,
+              }),
           };
         }
         return { panel };
@@ -367,6 +438,7 @@ export function StudioPage() {
               panel,
               nodeById,
               blockDetailsByType,
+              resolvedGraph,
               runtime: controlWidgetRuntime,
             })
           : undefined;
@@ -385,7 +457,82 @@ export function StudioPage() {
         bindingPollMs: bindingView.pollMs,
       };
     });
-  }, [blockDetailsByType, controlWidgetRuntime, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes]);
+  }, [blockDetailsByType, controlWidgetRuntime, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes, resolvedGraph]);
+
+  useEffect(() => {
+    if (!activeTabId || !activeRuntimeContext?.sessionId || !runtimeView) {
+      return;
+    }
+
+    if (runtimeView.executionState !== 'running') {
+      return;
+    }
+
+    const propagationKey = `${activeTabId}:${activeRuntimeContext.sessionId}:${serializedSnapshot.contentHash}`;
+    if (lastPropagatedRuntimeSnapshotRef.current === propagationKey) {
+      return;
+    }
+
+    let cancelled = false;
+    const pushResolvedValues = async () => {
+      const updates = nodes.flatMap((node) => {
+        const blockDetails = blockDetailsByType.get(node.blockTypeId);
+        if (!blockDetails) {
+          return [];
+        }
+
+        const resolvedParameters = resolvedGraph.parametersByNodeId[node.instanceId];
+        if (!resolvedParameters) {
+          return [];
+        }
+
+        const patch: Record<string, string | number | boolean | null> = {};
+        blockDetails.parameters.forEach((parameter) => {
+          if (parameter.readOnly || !parameter.mutable) {
+            return;
+          }
+          const resolvedParameter = resolvedParameters[parameter.name];
+          if (!resolvedParameter || resolvedParameter.state !== 'resolved' || resolvedParameter.value === undefined) {
+            return;
+          }
+          patch[parameter.name] = resolvedParameter.value;
+        });
+
+        if (Object.keys(patch).length === 0) {
+          return [];
+        }
+
+        return [{ nodeId: node.instanceId, patch }];
+      });
+
+      await Promise.all(
+        updates.map(async ({ nodeId, patch }) => {
+          if (cancelled) {
+            return;
+          }
+          await setBlockSettings(activeRuntimeContext.sessionId as string, nodeId, patch, 'immediate');
+        }),
+      );
+
+      if (!cancelled) {
+        lastPropagatedRuntimeSnapshotRef.current = propagationKey;
+      }
+    };
+
+    void pushResolvedValues();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeRuntimeContext?.sessionId,
+    activeTabId,
+    blockDetailsByType,
+    nodes,
+    resolvedGraph.parametersByNodeId,
+    runtimeView,
+    serializedSnapshot.contentHash,
+  ]);
 
   const workspaceLayout = useMemo(
     () => buildEffectiveStudioLayout(studioLayout, mergedWorkspacePanels),
@@ -1017,6 +1164,17 @@ export function StudioPage() {
             </button>
             <button
               type="button"
+              onClick={() => setActiveCenterView('variables')}
+              className={`rounded border px-2 py-1 text-xs ${
+                activeCenterView === 'variables'
+                  ? 'border-emerald-600/70 bg-emerald-900/30 text-emerald-100'
+                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+              }`}
+            >
+              Variables
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveCenterView('workspace')}
               className={`rounded border px-2 py-1 text-xs ${
                 activeCenterView === 'workspace'
@@ -1101,11 +1259,29 @@ export function StudioPage() {
                 onRemoveControlWidget={removeControlWidgetInWorkspace}
                 onMoveControlWidgetToPanel={moveControlWidgetToPanelInWorkspace}
               />
+            ) : activeCenterView === 'variables' ? (
+              <VariablesView
+              variables={studioVariables}
+              resolvedGraph={resolvedGraph}
+              variableControlNames={variableControlNames}
+              onCreateVariable={handleCreateVariable}
+              onUpdateVariable={handleUpdateVariable}
+              onRemoveVariable={handleRemoveVariable}
+              onCreateVariableControl={handleCreateVariableControl}
+              onRemoveVariableControl={handleRemoveVariableControl}
+            />
             ) : (
               <ApplicationView
                 panelEntries={workspacePanelEntries}
                 layout={workspaceLayout}
                 executionState={runtimeView?.executionState}
+                onUpdateVariableValue={(variableName, binding) => {
+                  const targetVariable = (studioVariables ?? []).find((variable) => variable.name === variableName);
+                  if (!targetVariable) {
+                    return;
+                  }
+                  updateVariable(targetVariable.id, { binding });
+                }}
               />
             )}
             <PlotStyleModal

@@ -1,13 +1,15 @@
 import type { EditorGraphEdge, EditorGraphNode } from '../../graph-editor/model/types';
-import type { ApplicationSpec, StudioLayoutSpec, StudioPanelSpec, StudioPlotPaletteSpec } from './studio-workspace';
-import type { GraphDocument } from './types';
+import type { ApplicationSpec, StudioLayoutSpec, StudioPanelSpec, StudioPlotPaletteSpec, StudioVariable } from './studio-workspace';
+import type { GraphDocument, GraphParameterValue } from './types';
 import { GRAPH_DOCUMENT_FORMAT, GRAPH_DOCUMENT_VERSION } from './types';
+import type { ExpressionBinding, JsonPrimitive } from '../../variables/model/types';
 
 type EditorSnapshot = {
   metadata: {
     name: string;
     description?: string;
     studioPanels?: StudioPanelSpec[];
+    studioVariables?: StudioVariable[];
     studioLayout?: StudioLayoutSpec;
     studioPlotPalettes?: StudioPlotPaletteSpec[];
     application?: ApplicationSpec;
@@ -16,8 +18,36 @@ type EditorSnapshot = {
   edges: EditorGraphEdge[];
 };
 
+function coerceLiteralValue(value: string): JsonPrimitive {
+  const trimmed = value.trim();
+  if (trimmed === 'null') {
+    return null;
+  }
+  if (trimmed === 'true') {
+    return true;
+  }
+  if (trimmed === 'false') {
+    return false;
+  }
+  if (trimmed !== '' && /^-?(?:\d+\.?\d*|\.\d+)$/.test(trimmed)) {
+    const parsed = Number(trimmed);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return value;
+}
+
+function toGraphParameterValue(value: EditorGraphNode['parameters'][string]): ExpressionBinding {
+  if (value.bindingKind === 'expression') {
+    return { kind: 'expression', expr: value.value };
+  }
+  return { kind: 'literal', value: coerceLiteralValue(value.value) };
+}
+
 export function graphDocumentFromEditor(snapshot: EditorSnapshot): GraphDocument {
   const studioPanels = snapshot.metadata.studioPanels;
+  const studioVariables = snapshot.metadata.studioVariables;
   const studioLayout = snapshot.metadata.studioLayout;
   const studioPlotPalettes = snapshot.metadata.studioPlotPalettes;
 
@@ -28,9 +58,10 @@ export function graphDocumentFromEditor(snapshot: EditorSnapshot): GraphDocument
       name: snapshot.metadata.name,
       description: snapshot.metadata.description,
       application: snapshot.metadata.application,
-      studio: studioPanels || studioLayout || studioPlotPalettes
+      studio: studioPanels || studioVariables || studioLayout || studioPlotPalettes
         ? {
             panels: studioPanels ?? [],
+            variables: studioVariables ?? [],
             layout: studioLayout,
             plotPalettes: studioPlotPalettes,
           }
@@ -47,13 +78,10 @@ export function graphDocumentFromEditor(snapshot: EditorSnapshot): GraphDocument
         },
         parameters: Object.entries(node.parameters).reduce(
           (acc, [key, value]) => {
-            acc[key] = {
-              kind: 'expression',
-              value: value.value,
-            };
+            acc[key] = toGraphParameterValue(value);
             return acc;
           },
-          {} as Record<string, { kind: 'expression'; value: string }>,
+          {} as Record<string, GraphParameterValue>,
         ),
       })),
       edges: snapshot.edges.map((edge) => ({

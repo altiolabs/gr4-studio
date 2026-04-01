@@ -1,7 +1,9 @@
 import { create } from 'zustand';
 import type { EdgeChange, NodeChange } from '@xyflow/react';
+import type { ExpressionBinding } from '../../variables/model/types';
+import { createNextVariableName, createUniqueVariableName } from '../../variables/model/variable-binding';
 import type { BlockDetails } from '../../../lib/api/block-details';
-import type { ApplicationSpec, StudioLayoutSpec, StudioPanelSpec, StudioPlotPaletteSpec } from '../../graph-document/model/studio-workspace';
+import type { ApplicationSpec, StudioLayoutSpec, StudioPanelSpec, StudioPlotPaletteSpec, StudioVariable } from '../../graph-document/model/studio-workspace';
 import {
   buildInitialParameterDrafts,
   createEditorNode,
@@ -29,6 +31,7 @@ type EditorState = {
   documentName: string;
   documentDescription?: string;
   studioPanels?: StudioPanelSpec[];
+  studioVariables?: StudioVariable[];
   studioLayout?: StudioLayoutSpec;
   studioPlotPalettes?: StudioPlotPaletteSpec[];
   application?: ApplicationSpec;
@@ -42,6 +45,7 @@ type EditorState = {
       name: string;
       description?: string;
       studioPanels?: StudioPanelSpec[];
+      studioVariables?: StudioVariable[];
       studioLayout?: StudioLayoutSpec;
       studioPlotPalettes?: StudioPlotPaletteSpec[];
       application?: ApplicationSpec;
@@ -51,11 +55,13 @@ type EditorState = {
     name: string;
     description?: string;
     studioPanels?: StudioPanelSpec[];
+    studioVariables?: StudioVariable[];
     studioLayout?: StudioLayoutSpec;
     studioPlotPalettes?: StudioPlotPaletteSpec[];
     application?: ApplicationSpec;
   }) => void;
   setStudioPanels: (panels: StudioPanelSpec[]) => void;
+  setStudioVariables: (variables: StudioVariable[]) => void;
   setStudioPlotPalettes: (palettes: StudioPlotPaletteSpec[]) => void;
   setStudioLayout: (layout: StudioLayoutSpec) => void;
   clearGraph: () => void;
@@ -66,6 +72,7 @@ type EditorState = {
       name: string;
       description?: string;
       studioPanels?: StudioPanelSpec[];
+      studioVariables?: StudioVariable[];
       studioLayout?: StudioLayoutSpec;
       studioPlotPalettes?: StudioPlotPaletteSpec[];
       application?: ApplicationSpec;
@@ -81,7 +88,12 @@ type EditorState = {
   removeEdge: (edgeId: string) => void;
   updateNodeParameter: (instanceId: string, parameterName: string, value: string) => void;
   updateNodeParameters: (instanceId: string, parameterValues: Record<string, string>) => void;
+  updateNodeParameterBinding: (instanceId: string, parameterName: string, binding: ExpressionBinding) => void;
+  updateNodeParameterBindings: (instanceId: string, parameterValues: Record<string, ExpressionBinding>) => void;
   ensureNodeParametersInitialized: (instanceId: string, blockDetails: BlockDetails) => void;
+  addVariable: (input?: { name?: string; binding?: ExpressionBinding }) => string;
+  updateVariable: (variableId: string, patch: Partial<Pick<StudioVariable, 'name' | 'binding'>>) => void;
+  removeVariable: (variableId: string) => void;
 };
 
 export const useEditorStore = create<EditorState>((set, get) => ({
@@ -90,6 +102,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   documentName: 'Untitled Graph',
   documentDescription: undefined,
   studioPanels: undefined,
+  studioVariables: undefined,
   studioLayout: undefined,
   studioPlotPalettes: undefined,
   application: undefined,
@@ -107,17 +120,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         name: state.documentName,
         description: state.documentDescription,
         studioPanels: state.studioPanels,
+        studioVariables: state.studioVariables,
         studioLayout: state.studioLayout,
         studioPlotPalettes: state.studioPlotPalettes,
         application: state.application,
       },
     };
   },
-  setDocumentMetadata: ({ name, description, studioPanels, studioLayout, studioPlotPalettes, application }) => {
+  setDocumentMetadata: ({ name, description, studioPanels, studioVariables, studioLayout, studioPlotPalettes, application }) => {
     set((state) => ({
       documentName: name,
       documentDescription: description,
       studioPanels: studioPanels ?? state.studioPanels,
+      studioVariables: studioVariables ?? state.studioVariables,
       studioLayout: studioLayout ?? state.studioLayout,
       studioPlotPalettes: studioPlotPalettes ?? state.studioPlotPalettes,
       application: application ?? state.application,
@@ -126,6 +141,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setStudioPanels: (panels) => {
     set({
       studioPanels: panels,
+    });
+  },
+  setStudioVariables: (variables) => {
+    set({
+      studioVariables: variables,
     });
   },
   setStudioPlotPalettes: (palettes) => {
@@ -143,6 +163,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       nodes: [],
       edges: [],
       studioPanels: undefined,
+      studioVariables: undefined,
       studioLayout: undefined,
       studioPlotPalettes: undefined,
       application: undefined,
@@ -167,6 +188,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       documentName: metadata.name,
       documentDescription: metadata.description,
       studioPanels: metadata.studioPanels,
+      studioVariables: metadata.studioVariables,
       studioLayout: metadata.studioLayout,
       studioPlotPalettes: metadata.studioPlotPalettes,
       application: metadata.application,
@@ -357,7 +379,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           ...node,
           parameters: {
             ...node.parameters,
-            [parameterName]: { value },
+            [parameterName]: { value, bindingKind: 'literal' },
           },
         };
       }),
@@ -366,7 +388,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   updateNodeParameters: (instanceId, parameterValues) => {
     const parameters: EditorNodeParameterDrafts = Object.entries(parameterValues).reduce(
       (acc, [name, value]) => {
-        acc[name] = { value };
+        acc[name] = { value, bindingKind: 'literal' };
         return acc;
       },
       {} as EditorNodeParameterDrafts,
@@ -381,6 +403,51 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         return {
           ...node,
           parameters,
+        };
+      }),
+    }));
+  },
+  updateNodeParameterBinding: (instanceId, parameterName, binding) => {
+    set((state) => ({
+      nodes: state.nodes.map((node) => {
+        if (node.instanceId !== instanceId) {
+          return node;
+        }
+
+        return {
+          ...node,
+          parameters: {
+            ...node.parameters,
+            [parameterName]:
+              binding.kind === 'literal'
+                ? { value: String(binding.value), bindingKind: 'literal' }
+                : { value: binding.expr, bindingKind: 'expression' },
+          },
+        };
+      }),
+    }));
+  },
+  updateNodeParameterBindings: (instanceId, parameterValues) => {
+    set((state) => ({
+      nodes: state.nodes.map((node) => {
+        if (node.instanceId !== instanceId) {
+          return node;
+        }
+
+        const nextParameters: EditorNodeParameterDrafts = {
+          ...node.parameters,
+        };
+
+        Object.entries(parameterValues).forEach(([name, binding]) => {
+          nextParameters[name] =
+            binding.kind === 'literal'
+              ? { value: String(binding.value), bindingKind: 'literal' }
+              : { value: binding.expr, bindingKind: 'expression' };
+        });
+
+        return {
+          ...node,
+          parameters: nextParameters,
         };
       }),
     }));
@@ -400,7 +467,61 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           ...node,
           parameters: buildInitialParameterDrafts(blockDetails),
         };
-      }),
+        }),
+    }));
+  },
+  addVariable: (input) => {
+    let createdId = '';
+    set((state) => {
+      const variables = state.studioVariables ?? [];
+      const existingNames = new Set(variables.map((variable) => variable.name));
+      const nextName =
+        input?.name !== undefined
+          ? createUniqueVariableName(existingNames, input.name)
+          : createNextVariableName(existingNames);
+
+      createdId = `variable-${variables.length + 1}`;
+      return {
+        studioVariables: [
+          ...variables,
+          {
+            id: createdId,
+            name: nextName,
+            binding: input?.binding ?? { kind: 'literal', value: 0 },
+          },
+        ],
+      };
+    });
+    return createdId;
+  },
+  updateVariable: (variableId, patch) => {
+    set((state) => {
+      const variables = state.studioVariables ?? [];
+      const index = variables.findIndex((variable) => variable.id === variableId);
+      if (index < 0) {
+        return state;
+      }
+
+      const current = variables[index];
+      const desiredName = (patch.name ?? current.name).trim() || current.name;
+      const namesInUse = new Set(variables.filter((variable) => variable.id !== variableId).map((variable) => variable.name));
+      const nextName = createUniqueVariableName(namesInUse, desiredName);
+
+      const nextVariables = [...variables];
+      nextVariables[index] = {
+        ...current,
+        ...patch,
+        name: nextName,
+      };
+
+      return {
+        studioVariables: nextVariables,
+      };
+    });
+  },
+  removeVariable: (variableId) => {
+    set((state) => ({
+      studioVariables: (state.studioVariables ?? []).filter((variable) => variable.id !== variableId),
     }));
   },
 }));

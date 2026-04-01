@@ -3,8 +3,9 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { RuntimeSettingsValue } from '../../lib/api/block-settings';
 import { useRuntimeBlockSettings } from '../inspector/hooks/use-runtime-block-settings';
 import { toRuntimeSettingsErrorMessage } from '../inspector/runtime-settings-model';
-import { getCompatibleControlWidgetInputKinds } from './control-panel-authoring';
+import { getCompatibleControlWidgetInputKinds, getControlWidgetTargetLabel } from './control-panel-authoring';
 import type { ResolvedControlWidget } from './control-panel-binding-resolution';
+import type { ExpressionBinding } from '../variables/model/types';
 
 function stateLabel(state: ResolvedControlWidget['state']): string {
   if (state === 'missing_node') {
@@ -12,6 +13,9 @@ function stateLabel(state: ResolvedControlWidget['state']): string {
   }
   if (state === 'missing_parameter') {
     return 'missing parameter';
+  }
+  if (state === 'missing_variable') {
+    return 'missing variable';
   }
   if (state === 'incompatible_widget') {
     return 'incompatible';
@@ -95,6 +99,7 @@ type ControlWidgetFieldProps = {
   isEditable: boolean;
   isPanelSelected: boolean;
   controlPanelOptions: readonly ControlPanelTargetOption[];
+  onUpdateVariableValue?: (variableName: string, binding: ExpressionBinding) => void;
   onUpdateWidgetLabel?: (panelId: string, widgetId: string, label: string) => void;
   onUpdateWidgetInputKind?: (
     panelId: string,
@@ -112,15 +117,24 @@ function ControlWidgetField({
   isEditable,
   isPanelSelected,
   controlPanelOptions,
+  onUpdateVariableValue,
   onUpdateWidgetLabel,
   onUpdateWidgetInputKind,
   onMoveWidget,
   onRemoveWidget,
   onMoveWidgetToPanel,
 }: ControlWidgetFieldProps) {
-  const canWrite = widget.state === 'ready' && Boolean(widget.runtimeSessionId);
-  const { query, mutation } = useRuntimeBlockSettings(widget.runtimeSessionId ?? undefined, widget.binding.nodeId, canWrite);
-  const runtimeValue = query.data?.[widget.binding.parameterName];
+  const canWrite =
+    widget.binding.kind === 'parameter'
+      ? widget.state === 'ready' && Boolean(widget.runtimeSessionId)
+      : widget.state === 'ready';
+  const { query, mutation } = useRuntimeBlockSettings(
+    widget.binding.kind === 'parameter' ? widget.runtimeSessionId ?? undefined : undefined,
+    widget.binding.kind === 'parameter' ? widget.binding.nodeId : undefined,
+    canWrite && widget.binding.kind === 'parameter',
+  );
+  const runtimeValue =
+    widget.binding.kind === 'parameter' ? query.data?.[widget.binding.parameterName] : undefined;
   const committedValue = runtimeValue !== undefined ? runtimeValue : widget.currentValue;
   const committedText = runtimeValueToString(committedValue);
   const [draftText, setDraftText] = useState<string>(committedText);
@@ -220,6 +234,17 @@ function ControlWidgetField({
       return;
     }
 
+    if (widget.binding.kind === 'variable') {
+      onUpdateVariableValue?.(widget.binding.variableName, {
+        kind: 'literal',
+        value:
+          typeof nextValue === 'number' || typeof nextValue === 'boolean' || typeof nextValue === 'string' || nextValue === null
+            ? nextValue
+            : String(nextValue),
+      });
+      return;
+    }
+
     queuedWriteRef.current = { value: nextValue };
     if (flushingWriteRef.current) {
       return;
@@ -227,6 +252,10 @@ function ControlWidgetField({
 
     flushingWriteRef.current = true;
     try {
+      const parameterName = widget.binding.kind === 'parameter' ? widget.binding.parameterName : null;
+      if (!parameterName) {
+        return;
+      }
       while (queuedWriteRef.current !== null) {
         const pendingValue = queuedWriteRef.current.value;
         queuedWriteRef.current = null;
@@ -265,7 +294,8 @@ function ControlWidgetField({
       : 'border-slate-700/70 bg-slate-950/35 hover:border-slate-600/90',
   ].join(' ');
   const displayText = draftText.length > 0 ? draftText : committedText;
-  const labelText = widget.label ?? widget.binding.parameterName;
+  const labelText =
+    widget.label ?? (widget.binding.kind === 'parameter' ? widget.binding.parameterName : widget.binding.variableName);
   const inputKindOptions = widget.parameterMeta
     ? getCompatibleControlWidgetInputKinds(widget.parameterMeta)
     : ['text', 'number', 'slider', 'boolean', 'enum'];
@@ -289,7 +319,10 @@ function ControlWidgetField({
             >
               <div className="border-b border-slate-700 px-3 py-2">
                 <p className="text-xs font-semibold text-slate-100">Widget actions</p>
-                <p className="mt-0.5 text-[11px] text-slate-400">{widget.binding.parameterName}</p>
+                <p className="mt-0.5 text-[11px] text-slate-400">
+                  {getControlWidgetTargetLabel(widget)} ·{' '}
+                  {widget.binding.kind === 'parameter' ? widget.binding.parameterName : widget.binding.variableName}
+                </p>
               </div>
               <div className="space-y-3 p-3">
                 <div className="space-y-1">
@@ -660,6 +693,7 @@ export function ControlPanelView({
   isEditable = false,
   isPanelSelected = false,
   controlPanelOptions = [],
+  onUpdateVariableValue,
   onUpdateWidgetLabel,
   onUpdateWidgetInputKind,
   onMoveWidget,
@@ -671,6 +705,7 @@ export function ControlPanelView({
   isEditable?: boolean;
   isPanelSelected?: boolean;
   controlPanelOptions?: readonly ControlPanelTargetOption[];
+  onUpdateVariableValue?: (variableName: string, binding: ExpressionBinding) => void;
   onUpdateWidgetLabel?: (panelId: string, widgetId: string, label: string) => void;
   onUpdateWidgetInputKind?: (
     panelId: string,
@@ -696,6 +731,7 @@ export function ControlPanelView({
             isEditable={isEditable && Boolean(panelId)}
             isPanelSelected={isPanelSelected}
             controlPanelOptions={controlPanelOptions}
+            onUpdateVariableValue={onUpdateVariableValue}
             onUpdateWidgetLabel={onUpdateWidgetLabel}
             onUpdateWidgetInputKind={onUpdateWidgetInputKind}
             onMoveWidget={onMoveWidget}

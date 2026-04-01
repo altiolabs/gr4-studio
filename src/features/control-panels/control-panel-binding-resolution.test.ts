@@ -13,7 +13,7 @@ function makeNode(overrides: Partial<EditorGraphNode> = {}): EditorGraphNode {
     blockTypeId: 'gr4.example.Sink',
     displayName: 'Example Sink',
     parameters: {
-      gain: { value: '0.5' },
+      gain: { value: '0.5', bindingKind: 'literal' },
     },
     position: { x: 0, y: 0 },
     ...overrides,
@@ -31,10 +31,33 @@ function makePanel(widgetOverrides: Partial<StudioControlPanelSpec['widgets'][nu
         id: 'gain',
         kind: 'parameter',
         binding: {
+          kind: 'parameter',
           nodeId: 'node-a',
           parameterName: 'gain',
         },
         label: 'Gain',
+        inputKind: 'number',
+        ...widgetOverrides,
+      },
+    ],
+  };
+}
+
+function makeVariablePanel(widgetOverrides: Partial<StudioControlPanelSpec['widgets'][number]> = {}): StudioControlPanelSpec {
+  return {
+    id: 'panel-control',
+    kind: 'control',
+    title: 'Controls',
+    visible: true,
+    widgets: [
+      {
+        id: 'variable-center_freq',
+        kind: 'parameter',
+        binding: {
+          kind: 'variable',
+          variableName: 'center_freq',
+        },
+        label: 'Center Frequency',
         inputKind: 'number',
         ...widgetOverrides,
       },
@@ -182,5 +205,47 @@ describe('resolveControlPanelWidgetBindings', () => {
 
     expectState(result, 'stale');
     expect(result[0]?.reason).toContain('stale relative to the current graph');
+  });
+
+  it('resolves variable-target widgets directly', () => {
+    const result = resolveControlPanelWidgetBindings({
+      panel: makeVariablePanel(),
+      nodeById: new Map([['node-a', makeNode()]]),
+      blockDetailsByType: new Map(),
+      resolvedGraph: {
+        variablesByName: {
+          center_freq: {
+            binding: { kind: 'literal', value: 123 },
+            dependencies: [],
+            state: 'literal',
+            value: 123,
+          },
+        },
+        parametersByNodeId: {},
+        diagnostics: [],
+      },
+      runtime: null,
+    });
+
+    expectState(result, 'ready');
+    expect(result[0]?.currentValue).toBe('123');
+    expect(result[0]?.variableName).toBe('center_freq');
+  });
+
+  it('marks missing variable targets as missing_variable', () => {
+    const result = resolveControlPanelWidgetBindings({
+      panel: makeVariablePanel(),
+      nodeById: new Map([['node-a', makeNode()]]),
+      blockDetailsByType: new Map(),
+      resolvedGraph: {
+        variablesByName: {},
+        parametersByNodeId: {},
+        diagnostics: [],
+      },
+      runtime: null,
+    });
+
+    expectState(result, 'missing_variable');
+    expect(result[0]?.reason).toContain('Variable center_freq was not found');
   });
 });

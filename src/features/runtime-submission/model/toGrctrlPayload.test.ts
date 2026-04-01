@@ -18,8 +18,8 @@ function makeDocument(name: string, uiConstraintsValue: string): GraphDocument {
           title: 'HttpTimeSeriesSink',
           position: { x: 0, y: 0 },
           parameters: {
-            ui_constraints: { kind: 'expression', value: uiConstraintsValue },
-            bind_port: { kind: 'expression', value: '8080' },
+            ui_constraints: { kind: 'expression', expr: uiConstraintsValue },
+            bind_port: { kind: 'expression', expr: '8080' },
           },
         },
       ],
@@ -43,9 +43,9 @@ function makeVectorSettingsDocument(name: string): GraphDocument {
           title: 'PfbArbResampler<float32>',
           position: { x: 0, y: 0 },
           parameters: {
-            taps: { kind: 'expression', value: '' },
-            gain: { kind: 'expression', value: '' },
-            name: { kind: 'expression', value: 'pfb_1' },
+            taps: { kind: 'expression', expr: '' },
+            gain: { kind: 'expression', expr: '' },
+            name: { kind: 'expression', expr: 'pfb_1' },
           },
         },
       ],

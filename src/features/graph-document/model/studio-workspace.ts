@@ -1,3 +1,5 @@
+import type { ExpressionBinding } from '../../variables/model/types';
+
 // StudioPanelSpec describes one panel definition (what exists).
 // It is panel identity + source + display intent, independent of arrangement.
 export type StudioPanelKind = 'series' | 'series2d' | 'image' | 'audio' | 'control';
@@ -24,10 +26,16 @@ export type StudioPlotPaletteSpec = {
   colors: string[];
 };
 
-export type StudioControlWidgetBinding = {
-  nodeId: string;
-  parameterName: string;
-};
+export type StudioControlWidgetBinding =
+  | {
+      kind: 'parameter';
+      nodeId: string;
+      parameterName: string;
+    }
+  | {
+      kind: 'variable';
+      variableName: string;
+    };
 
 export type StudioControlWidgetInputKind = 'text' | 'number' | 'slider' | 'boolean' | 'enum';
 
@@ -65,6 +73,12 @@ export type StudioDataPanelSpec = {
 
 export type StudioPanelSpec = StudioDataPanelSpec | StudioControlPanelSpec;
 
+export type StudioVariable = {
+  id: string;
+  name: string;
+  binding: ExpressionBinding;
+};
+
 export type StudioLayoutNode =
   | {
       kind: 'pane';
@@ -87,6 +101,7 @@ export type StudioLayoutSpec = {
 
 export type StudioWorkspaceMetadata = {
   panels: StudioPanelSpec[];
+  variables?: StudioVariable[];
   layout?: StudioLayoutSpec;
   plotPalettes?: StudioPlotPaletteSpec[];
 };

@@ -1,15 +1,16 @@
 import type { EditorGraphEdge, EditorGraphNode } from '../../graph-editor/model/types';
-import type { ApplicationSpec, StudioLayoutSpec, StudioPanelSpec, StudioPlotPaletteSpec } from './studio-workspace';
+import type { ApplicationSpec, StudioLayoutSpec, StudioPanelSpec, StudioPlotPaletteSpec, StudioVariable } from './studio-workspace';
 import type { GraphDocument } from './types';
 
 type EditorGraphReplacement = {
-  metadata: {
-    name: string;
-    description?: string;
-    studioPanels?: StudioPanelSpec[];
-    studioLayout?: StudioLayoutSpec;
-    studioPlotPalettes?: StudioPlotPaletteSpec[];
-    application?: ApplicationSpec;
+    metadata: {
+      name: string;
+      description?: string;
+      studioPanels?: StudioPanelSpec[];
+      studioVariables?: StudioVariable[];
+      studioLayout?: StudioLayoutSpec;
+      studioPlotPalettes?: StudioPlotPaletteSpec[];
+      application?: ApplicationSpec;
   };
   nodes: EditorGraphNode[];
   edges: EditorGraphEdge[];
@@ -21,6 +22,7 @@ export function editorGraphFromDocument(document: GraphDocument): EditorGraphRep
       name: document.metadata.name,
       description: document.metadata.description,
       studioPanels: document.metadata.studio?.panels,
+      studioVariables: document.metadata.studio?.variables,
       studioLayout: document.metadata.studio?.layout,
       studioPlotPalettes: document.metadata.studio?.plotPalettes,
       application: document.metadata.application,
@@ -36,10 +38,13 @@ export function editorGraphFromDocument(document: GraphDocument): EditorGraphRep
       },
       parameters: Object.entries(node.parameters).reduce(
         (acc, [name, value]) => {
-          acc[name] = { value: value.value };
+          acc[name] =
+            value.kind === 'expression'
+              ? { value: value.expr, bindingKind: 'expression' }
+              : { value: String(value.value), bindingKind: 'literal' };
           return acc;
         },
-        {} as Record<string, { value: string }>,
+        {} as Record<string, { value: string; bindingKind: 'literal' | 'expression' }>,
       ),
     })),
     edges: document.graph.edges.map((edge) => ({

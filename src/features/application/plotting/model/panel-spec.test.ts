@@ -122,6 +122,25 @@ describe('derivePlotPanelSpec', () => {
     expect(derivePlotPanelSpec(entry)).toBeNull();
   });
 
+  it('reuses cached plot specs when semantic inputs are unchanged', () => {
+    const first = derivePlotPanelSpec(
+      makeSeriesEntry({
+        nodeParameters: {
+          channels: '2',
+        },
+      }),
+    );
+    const second = derivePlotPanelSpec(
+      makeSeriesEntry({
+        nodeParameters: {
+          channels: '2',
+        },
+      }),
+    );
+
+    expect(first).toBe(second);
+  });
+
   it('derives vector sink plotting spec from series2d panels', () => {
     const spec = derivePlotPanelSpec(
       makeSeriesEntry({

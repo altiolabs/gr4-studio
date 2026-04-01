@@ -3,6 +3,8 @@ import { lookupStudioKnownBlockBinding } from '../../../graph-editor/runtime/kno
 import type { PlotPanelSpec } from './types';
 import { resolveStudioPlotStyle } from './plot-style';
 
+const plotSpecCache = new Map<string, PlotPanelSpec>();
+
 // Scalar timeseries metadata remains graph/block-owned.
 // Accepted optional keys from node parameters:
 // - plot_title | title
@@ -101,9 +103,50 @@ function hasValidManualRange(min: number | undefined, max: number | undefined): 
   return (max as number) > (min as number);
 }
 
+function serializeParameters(parameters: Readonly<Record<string, string>> | undefined): string {
+  if (!parameters) {
+    return '';
+  }
+
+  return JSON.stringify(
+    Object.keys(parameters)
+      .sort()
+      .reduce<Record<string, string>>((acc, key) => {
+        acc[key] = parameters[key];
+        return acc;
+      }, {}),
+  );
+}
+
+function buildPlotSpecCacheKey(entry: WorkspacePanelViewModel): string {
+  return JSON.stringify({
+    panel: {
+      id: entry.panel.id,
+      kind: entry.panel.kind,
+      title: entry.panel.title ?? '',
+      nodeId: entry.panel.nodeId,
+      visible: entry.panel.visible,
+      previewOnCanvas: entry.panel.previewOnCanvas,
+      plotStyle: entry.panel.plotStyle ?? null,
+    },
+    node: {
+      displayName: entry.nodeDisplayName ?? '',
+      blockTypeId: entry.nodeBlockTypeId ?? '',
+      parameters: serializeParameters(entry.nodeParameters),
+      palettes: entry.studioPlotPalettes ?? null,
+    },
+  });
+}
+
 export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSpec | null {
   if (entry.panel.kind !== 'series' && entry.panel.kind !== 'series2d') {
     return null;
+  }
+
+  const cacheKey = buildPlotSpecCacheKey(entry);
+  const cached = plotSpecCache.get(cacheKey);
+  if (cached) {
+    return cached;
   }
 
   const payloadFormat =
@@ -146,7 +189,7 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
     studioPalettes: entry.studioPlotPalettes,
   });
 
-  return {
+  const spec: PlotPanelSpec = {
     panelId: entry.panel.id,
     kind: 'timeseries',
     source: {
@@ -182,4 +225,7 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
       colorAssignmentMode: resolvedPlotStyle.assignmentMode,
     },
   };
+
+  plotSpecCache.set(cacheKey, spec);
+  return spec;
 }

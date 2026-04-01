@@ -1,12 +1,10 @@
 import type { ApplicationSpec, StudioWorkspaceMetadata } from './studio-workspace';
+import type { ExpressionBinding } from '../../variables/model/types';
 
 export const GRAPH_DOCUMENT_FORMAT = 'gr4-studio.graph';
 export const GRAPH_DOCUMENT_VERSION = 1 as const;
 
-export type GraphParameterValue = {
-  kind: 'expression';
-  value: string;
-};
+export type GraphParameterValue = ExpressionBinding;
 
 export type GraphDocumentNode = {
   id: string;

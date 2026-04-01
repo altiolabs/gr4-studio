@@ -13,6 +13,7 @@ import type {
   StudioLayoutSpec,
   StudioPanelSpec,
 } from './studio-workspace';
+import type { ExpressionBinding } from '../../variables/model/types';
 
 const studioPlotPaletteSchema = z.union([
   z.object({
@@ -34,10 +35,52 @@ const studioPlotStyleConfigSchema = z.object({
   palette: studioPlotPaletteSchema.optional(),
 });
 
-const studioControlWidgetBindingSchema = z.object({
-  nodeId: z.string().min(1),
-  parameterName: z.string().min(1),
-});
+const jsonPrimitiveSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+
+const studioControlWidgetBindingSchema = z.union([
+  z.object({
+    kind: z.literal('parameter'),
+    nodeId: z.string().min(1),
+    parameterName: z.string().min(1),
+  }),
+  z.object({
+    kind: z.literal('variable'),
+    variableName: z.string().min(1),
+  }),
+]);
+
+const studioVariableBindingSchema: z.ZodType<ExpressionBinding> = z.union([
+  z.object({
+    kind: z.literal('literal'),
+    value: jsonPrimitiveSchema,
+  }),
+  z.object({
+    kind: z.literal('expression'),
+    expr: z.string(),
+  }),
+]) as z.ZodType<ExpressionBinding>;
+
+const legacyGraphParameterValueSchema = z
+  .object({
+    kind: z.literal('expression'),
+    value: z.string(),
+  })
+  .transform((input) => ({
+    kind: 'literal' as const,
+    value: input.value,
+  }));
+
+const graphParameterValueSchema: z.ZodType<ExpressionBinding> = z.union([
+  z.object({
+    kind: z.literal('literal'),
+    value: jsonPrimitiveSchema,
+  }),
+  z.object({
+    kind: z.literal('expression'),
+    expr: z.string(),
+  }),
+  legacyGraphParameterValueSchema,
+]) as z.ZodType<ExpressionBinding>;
 
 const studioControlWidgetSpecSchema: z.ZodType<StudioControlWidgetSpec> = z.object({
   id: z.string().min(1),
@@ -98,6 +141,13 @@ const studioLayoutSpecSchema: z.ZodType<StudioLayoutSpec> = z.object({
 
 const studioWorkspaceMetadataSchema = z.object({
   panels: z.array(studioPanelSpecSchema),
+  variables: z.array(
+    z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+      binding: studioVariableBindingSchema,
+    }),
+  ).optional(),
   layout: studioLayoutSpecSchema.optional(),
   plotPalettes: z
     .array(
@@ -115,11 +165,6 @@ const applicationSpecSchema = z.object({
   title: z.string().optional(),
 });
 
-const parameterValueSchema = z.object({
-  kind: z.literal('expression'),
-  value: z.string(),
-});
-
 const graphNodeSchema = z.object({
   id: z.string().min(1),
   blockType: z.string().min(1),
@@ -128,7 +173,7 @@ const graphNodeSchema = z.object({
     x: z.number(),
     y: z.number(),
   }),
-  parameters: z.record(z.string(), parameterValueSchema).default({}),
+  parameters: z.record(z.string(), graphParameterValueSchema).default({}),
 });
 
 const graphEdgeEndpointSchema = z.object({
