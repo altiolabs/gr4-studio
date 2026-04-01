@@ -73,6 +73,7 @@ export function graphDocumentFromEditor(snapshot: EditorSnapshot): GraphDocument
         blockType: node.blockTypeId,
         title: node.displayName,
         executionMode: node.executionMode ?? 'active',
+        rotation: node.rotation ?? 0,
         position: {
           x: node.position.x,
           y: node.position.y,

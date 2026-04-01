@@ -91,6 +91,7 @@ type EditorState = {
   selectNode: (nodeId: string | null) => void;
   setNodePosition: (nodeId: string, position: GraphPoint) => void;
   setNodeExecutionMode: (nodeId: string, executionMode: 'active' | 'disabled' | 'bypassed') => void;
+  setNodeRotation: (nodeId: string, rotation: 0 | 90 | 180 | 270) => void;
   removeNode: (nodeId: string) => void;
   addEdge: (input: AddEdgeInput) => void;
   removeEdge: (edgeId: string) => void;
@@ -349,6 +350,18 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           ? {
               ...node,
               executionMode,
+            }
+          : node,
+      ),
+    }));
+  },
+  setNodeRotation: (nodeId, rotation) => {
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        node.instanceId === nodeId
+          ? {
+              ...node,
+              rotation,
             }
           : node,
       ),
