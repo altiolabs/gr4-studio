@@ -32,4 +32,31 @@ describe('buildCurrentGraphSubmissionFromEditorSnapshot', () => {
 
     expect(helper).toEqual(direct);
   });
+
+  it('preserves float-like literal text through editor import and runtime export', () => {
+    const snapshot = {
+      metadata: {
+        name: 'Example.gr4s',
+      },
+      nodes: [
+        {
+          instanceId: 'node-1',
+          blockTypeId: 'gr::blocks::math::Rotator<std::complex<float32>>',
+          displayName: 'Rotator',
+          category: 'demo',
+          parameters: {
+            sample_rate: { value: '20000000.0', bindingKind: 'literal' as const },
+            phase_increment: { value: '0.5', bindingKind: 'literal' as const },
+          },
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [],
+    };
+
+    const submission = buildCurrentGraphSubmissionFromEditorSnapshot(snapshot);
+
+    expect(submission.content).toContain('sample_rate: 20000000.0');
+    expect(submission.content).toContain('phase_increment: 0.5');
+  });
 });

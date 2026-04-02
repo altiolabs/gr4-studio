@@ -35,6 +35,20 @@ function isAdvancedParameterMeta(parameter: BlockParameterMeta): boolean {
   return isAdvancedParameterName(parameter.name) || isAdvancedUiHint(parameter.uiHint);
 }
 
+export function coerceBlockPropertyLiteralValue(value: string): string | number | boolean | null {
+  const trimmed = value.trim();
+  if (trimmed === 'true') {
+    return true;
+  }
+  if (trimmed === 'false') {
+    return false;
+  }
+  if (trimmed === 'null') {
+    return null;
+  }
+  return value;
+}
+
 function buildInitialDraftValues(
   persistedValues: Record<string, { value: string; bindingKind: 'literal' | 'expression' }>,
   blockDetails: BlockDetails,
@@ -303,19 +317,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
         return acc;
       }
 
-      const trimmed = draft.value.trim();
-      if (trimmed === 'true') {
-        acc[name] = { kind: 'literal', value: true };
-      } else if (trimmed === 'false') {
-        acc[name] = { kind: 'literal', value: false };
-      } else if (trimmed === 'null') {
-        acc[name] = { kind: 'literal', value: null };
-      } else if (trimmed !== '' && /^-?(?:\d+\.?\d*|\.\d+)$/.test(trimmed)) {
-        const parsed = Number(trimmed);
-        acc[name] = { kind: 'literal', value: Number.isFinite(parsed) ? parsed : draft.value };
-      } else {
-        acc[name] = { kind: 'literal', value: draft.value };
-      }
+      acc[name] = { kind: 'literal', value: coerceBlockPropertyLiteralValue(draft.value) };
       return acc;
     }, {});
 

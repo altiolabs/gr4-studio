@@ -29,12 +29,6 @@ function coerceLiteralValue(value: string): JsonPrimitive {
   if (trimmed === 'false') {
     return false;
   }
-  if (trimmed !== '' && /^-?(?:\d+\.?\d*|\.\d+)$/.test(trimmed)) {
-    const parsed = Number(trimmed);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
   return value;
 }
 
