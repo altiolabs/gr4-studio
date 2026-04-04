@@ -14,6 +14,7 @@ import {
 } from '../control-panels/control-panel-authoring';
 import { resolveGraphVariables } from '../variables/model/resolveGraphVariables';
 import type { ExpressionBinding } from '../variables/model/types';
+import { DoxygenText } from '../documentation/model/doxygen';
 
 type BlockPropertiesModalProps = {
   instanceId: string;
@@ -503,7 +504,10 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                             'No resolved preview available.'}
                       </p>
                       {parameter.description && (
-                        <div className="text-[11px] text-slate-500">{parameter.description}</div>
+                        <DoxygenText
+                          text={parameter.description}
+                          className="text-[11px] text-slate-500"
+                        />
                       )}
                     </div>
                   );
@@ -537,7 +541,10 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                         read-only
                       </div>
                       {parameter.description && (
-                        <div className="text-[11px] text-slate-500">{parameter.description}</div>
+                        <DoxygenText
+                          text={parameter.description}
+                          className="text-[11px] text-slate-500"
+                        />
                       )}
                     </div>
                   );
@@ -555,7 +562,6 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
               ) : (
                 advancedParameters.map((parameter) => {
                   const isEditable = !parameter.readOnly && parameter.mutable;
-                  const binding = findControlWidgetBinding(parameter.name);
 
                   return (
                     <div
@@ -579,19 +585,6 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleControlAction(parameter)}
-                          disabled={!isControlWidgetParameterTarget(parameter)}
-                          title={binding ? 'Remove control' : 'Add control'}
-                          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border text-sm leading-none ${
-                            binding
-                              ? 'border-rose-700/70 bg-rose-900/30 text-rose-100 hover:bg-rose-800/40'
-                              : 'border-emerald-700/70 bg-emerald-900/35 text-emerald-100 hover:bg-emerald-800/45'
-                          } disabled:cursor-not-allowed disabled:opacity-40`}
-                        >
-                          {binding ? '−' : '+'}
-                        </button>
                         <select
                           value={draftValues[parameter.name]?.bindingKind ?? 'literal'}
                           onChange={(event) =>
@@ -614,7 +607,12 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                           : resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.reason ??
                             'No resolved preview available.'}
                       </p>
-                      {parameter.description && <div className="text-[11px] text-slate-500">{parameter.description}</div>}
+                      {parameter.description && (
+                        <DoxygenText
+                          text={parameter.description}
+                          className="text-[11px] text-slate-500"
+                        />
+                      )}
                     </div>
                   );
                 })
@@ -632,8 +630,12 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
           )}
 
           {activeTab === 'documentation' && (
-            <div className="rounded border border-slate-700 bg-slate-800/50 p-3 text-sm text-slate-300 whitespace-pre-wrap">
-              {blockDetailsQuery.data?.description ?? 'No documentation available for this block.'}
+            <div className="rounded border border-slate-700 bg-slate-800/50 p-3 text-sm text-slate-300">
+              {blockDetailsQuery.data?.description ? (
+                <DoxygenText text={blockDetailsQuery.data.description} className="space-y-3" />
+              ) : (
+                <p className="text-slate-300">No documentation available for this block.</p>
+              )}
             </div>
           )}
         </div>
