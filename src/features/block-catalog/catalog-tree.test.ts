@@ -39,13 +39,22 @@ describe('catalog tree helpers', () => {
     expect(normalizeCategoryPath(noisy)).toBe('basic');
   });
 
-  it('preserves sane backend categories', () => {
+  it('derives the catalog category from the reflected block id', () => {
     const block = makeBlock({
       blockTypeId: 'gr::incubator::http::HttpTimeSeriesSink<float32>',
       category: 'incubator/http',
     });
 
     expect(normalizeCategoryPath(block)).toBe('incubator/http');
+  });
+
+  it('ignores drawable ui categories like Content when grouping blocks', () => {
+    const block = makeBlock({
+      blockTypeId: 'gr::testing::ImChartMonitor<float32>',
+      category: 'Content',
+    });
+
+    expect(normalizeCategoryPath(block)).toBe('testing');
   });
 
   it('parses family name and first template variant label', () => {

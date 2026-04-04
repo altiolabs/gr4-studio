@@ -103,11 +103,8 @@ export function isMalformedCategoryPath(category: string): boolean {
 }
 
 export function normalizeCategoryPath(block: BlockCatalogItem): string {
-  const raw = (block.category ?? '').trim();
-  if (!raw || isMalformedCategoryPath(raw)) {
-    return deriveNamespaceCategoryPath(block.blockTypeId);
-  }
-  return raw;
+  void block;
+  return deriveNamespaceCategoryPath(block.blockTypeId);
 }
 
 export function countCategoryNode(node: CategoryTreeNode): number {
