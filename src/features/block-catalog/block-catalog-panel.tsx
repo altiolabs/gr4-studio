@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { BlockCatalogItem } from '../../lib/api/blocks';
 import { ApiClientError } from '../../lib/api/client';
 import { PanelHeader } from '../../components/panel-header';
+import { extractDoxygenBrief } from '../documentation/model/doxygen';
 import { toEditorCatalogBlock } from '../graph-editor/model/nodeFactory';
 import { useEditorStore } from '../graph-editor/store/editorStore';
 import {
@@ -30,7 +31,9 @@ function BlockVariantButton({ block }: { block: BlockCatalogItem }) {
         {parsed.familyName} {parsed.variantLabel}
       </div>
       {block.description && (
-        <div className="mt-1 text-xs text-slate-400 line-clamp-2">{block.description}</div>
+        <div className="mt-1 text-xs text-slate-400 line-clamp-2">
+          {extractDoxygenBrief(block.description) ?? block.description}
+        </div>
       )}
     </button>
   );
