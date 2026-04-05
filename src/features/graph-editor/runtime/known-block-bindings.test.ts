@@ -14,33 +14,23 @@ describe('known Studio block bindings', () => {
     expect(lookupStudioKnownBlockBinding(known.blockTypeId)).not.toBeNull();
     expect(lookupStudioKnownBlockBinding(`${known.blockTypeId} `)).toBeNull();
     expect(lookupStudioKnownBlockBinding('StudioSeriesSink')).toBeNull();
+    expect(lookupStudioKnownBlockBinding('gr::studio::StudioSpectrumHistorySink<float32>')).toBeNull();
+    expect(lookupStudioKnownBlockBinding('gr::studio::StudioPhosphorSpectrumSink<float32>')).toBeNull();
   });
 
   it('contains placeholder entries for the registered Studio families', () => {
-    const families = STUDIO_KNOWN_BLOCK_BINDINGS.map((binding) => binding.family).sort();
-    expect(families).toEqual([
-      'audio',
-      'audio',
-      'image',
-      'image',
-      'image',
-      'series',
-      'series',
-      'series',
-      'series',
-      'series2d',
-      'series2d',
-      'series2d',
-      'series2d',
-      'series2d',
-      'series2d',
-      'series2d',
-      'series2d',
-      'series2d',
-      'series2d',
-      'series2d',
-      'series2d',
-    ]);
+    const counts = STUDIO_KNOWN_BLOCK_BINDINGS.reduce<Record<string, number>>((acc, binding) => {
+      acc[binding.family] = (acc[binding.family] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    expect(counts).toEqual({
+      audio: 2,
+      image: 3,
+      series: 4,
+      series2d: 12,
+      waterfall: 4,
+    });
   });
 
   it('uses a consistent phase-1 transport contract across all known blocks', () => {
@@ -165,6 +155,7 @@ describe('known Studio block bindings', () => {
       sample_rate: '48000',
       topic: 'spectrum',
     });
+
     expect(powerSpectrumConfigured).toMatchObject({
       status: 'configured',
       family: 'series2d',
@@ -173,6 +164,23 @@ describe('known Studio block bindings', () => {
       endpoint: 'http://127.0.0.1:18086/snapshot',
       sampleRate: 48000,
       topic: 'spectrum',
+    });
+
+    const waterfallConfigured = buildStudioBindingView('gr::studio::StudioWaterfallSink<float32>', {
+      transport: 'http_poll',
+      endpoint: 'http://127.0.0.1:18087/snapshot',
+      poll_ms: '200',
+      sample_rate: '48000',
+      topic: 'waterfall',
+    });
+    expect(waterfallConfigured).toMatchObject({
+      status: 'configured',
+      family: 'waterfall',
+      payloadFormat: 'waterfall-spectrum-json-v1',
+      transport: 'http_poll',
+      endpoint: 'http://127.0.0.1:18087/snapshot',
+      sampleRate: 48000,
+      topic: 'waterfall',
     });
 
     const imageConfigured = buildStudioBindingView('gr::studio::StudioImageSink<uint8>', {

@@ -33,7 +33,7 @@ namespace gr::studio {
 namespace detail {
 
 template<typename T>
-concept SupportedPowerSpectrumSample = std::same_as<T, float> || std::same_as<T, std::complex<float>>;
+concept SupportedWaterfallSample = std::same_as<T, float> || std::same_as<T, std::complex<float>>;
 
 inline std::string escapeJson(std::string_view text) {
     std::string out;
@@ -53,41 +53,32 @@ inline std::string escapeJson(std::string_view text) {
     return out;
 }
 
-template<SupportedPowerSpectrumSample T>
-class PowerSpectrumWindow {
+template<SupportedWaterfallSample T>
+class WaterfallWindow {
 public:
     using value_type = float;
     using complex_type = std::complex<value_type>;
     using fft_type = gr::algorithm::FFT<T, complex_type>;
 
-    void configure(
-        std::size_t fft_size,
-        std::size_t num_averages,
-        float sample_rate,
-        std::string window,
-        bool output_in_db,
-        bool persistence_enabled,
-        float phosphor_intensity,
-        float phosphor_decay_ms,
-        bool autoscale_enabled,
-        float x_min,
-        float x_max,
-        float y_min,
-        float y_max) {
+    [[nodiscard]] static constexpr const char* sampleTypeName() noexcept {
+        if constexpr (std::same_as<T, float>) {
+            return "float32";
+        } else {
+            return "complex64";
+        }
+    }
+
+    void configure(std::size_t fft_size, std::size_t num_averages, float time_span, float sample_rate, std::string window, bool output_in_db) {
         std::lock_guard lock(_mutex);
         _fftSize = std::max<std::size_t>(1UZ, fft_size);
         _numAverages = std::max<std::size_t>(1UZ, num_averages);
+        _timeSpan = std::max<value_type>(0.0F, time_span);
+        const std::size_t quantizedSamples = _quantizeSampleCountLocked(_samplesFromDurationLocked(_timeSpan, sample_rate));
+        _timeSpanSamples = quantizedSamples;
+        _historyRows = std::max<std::size_t>(1UZ, quantizedSamples / _fftSize);
         _sampleRate = sample_rate > 0.0F ? sample_rate : 1.0F;
         _windowName = std::move(window);
         _outputInDb = output_in_db;
-        _persistenceEnabled = persistence_enabled;
-        _phosphorIntensity = phosphor_intensity;
-        _phosphorDecayMs = phosphor_decay_ms;
-        _autoscale = autoscale_enabled;
-        _xMin = x_min;
-        _xMax = x_max;
-        _yMin = y_min;
-        _yMax = y_max;
 
         const auto parsedWindow = magic_enum::enum_cast<gr::algorithm::window::Type>(_windowName, magic_enum::case_insensitive)
                                       .value_or(gr::algorithm::window::Type::BlackmanHarris);
@@ -101,8 +92,16 @@ public:
         _spectrumSum.assign(_spectrumSize(), value_type{});
         _averagedSpectrum.assign(_spectrumSize(), value_type{});
         _frequencies.assign(_spectrumSize(), value_type{});
+        _averagingHistory.clear();
         rebuildFrequencyAxisLocked();
         _history.clear();
+    }
+
+    void configureColorScale(bool autoscale, value_type z_min, value_type z_max) {
+        std::lock_guard lock(_mutex);
+        _autoscale = autoscale;
+        _zMin = z_min;
+        _zMax = z_max;
     }
 
     void processFrame(std::span<const T> input) {
@@ -120,20 +119,14 @@ public:
         }
 
         std::copy_n(input.begin(), static_cast<std::ptrdiff_t>(_fftSize), _fftInput.begin());
-        std::transform(
-            _fftInput.begin(),
-            _fftInput.end(),
-            _window.begin(),
-            _fftInput.begin(),
-            [](T sample, value_type windowValue) {
-                if constexpr (gr::meta::complex_like<T>) {
-                    sample.real(sample.real() * windowValue);
-                    sample.imag(sample.imag() * windowValue);
-                    return sample;
-                } else {
-                    return static_cast<T>(sample * windowValue);
-                }
-            });
+        for (std::size_t index = 0UZ; index < _fftSize; ++index) {
+            if constexpr (gr::meta::complex_like<T>) {
+                _fftInput[index].real(_fftInput[index].real() * _window[index]);
+                _fftInput[index].imag(_fftInput[index].imag() * _window[index]);
+            } else {
+                _fftInput[index] *= _window[index];
+            }
+        }
 
         _fftOutput = _fftImpl.compute(_fftInput);
 
@@ -152,125 +145,160 @@ public:
             return (magnitude * magnitude) * normalization;
         });
 
-        if (_history.size() == _numAverages) {
-            const auto& oldest = _history.front();
-            std::transform(_spectrumSum.begin(), _spectrumSum.end(), oldest.begin(), _spectrumSum.begin(), std::minus<>{});
-            _history.pop_front();
+        if (_averagingHistory.size() == _numAverages) {
+            const auto& oldest = _averagingHistory.front();
+            for (std::size_t index = 0UZ; index < _spectrumSum.size(); ++index) {
+                _spectrumSum[index] -= oldest[index];
+            }
+            _averagingHistory.pop_front();
         }
 
         if (_spectrumSum.size() != _currentSpectrum.size()) {
             _spectrumSum.assign(_currentSpectrum.size(), value_type{});
         }
 
-        std::transform(_spectrumSum.begin(), _spectrumSum.end(), _currentSpectrum.begin(), _spectrumSum.begin(), std::plus<>{});
+        if (_history.size() == _historyRows) {
+            _history.pop_front();
+        }
 
-        _history.push_back(_currentSpectrum);
-        const value_type denominator = static_cast<value_type>(_history.size());
+        _averagingHistory.push_back(_currentSpectrum);
+        for (std::size_t index = 0UZ; index < _currentSpectrum.size(); ++index) {
+            _spectrumSum[index] += _currentSpectrum[index];
+        }
+
+        const value_type denominator = static_cast<value_type>(_averagingHistory.size());
         _averagedSpectrum.resize(_currentSpectrum.size());
-        std::transform(_spectrumSum.begin(), _spectrumSum.end(), _averagedSpectrum.begin(), [denominator](const value_type value) {
-            return value / denominator;
-        });
-    }
-
-    [[nodiscard]] std::vector<value_type> frequencyAxis() const {
-        std::lock_guard lock(_mutex);
-        return _frequencies;
-    }
-
-    [[nodiscard]] std::vector<value_type> powerSpectrum() const {
-        std::lock_guard lock(_mutex);
-        return _displaySpectrumLocked();
+        for (std::size_t index = 0UZ; index < _currentSpectrum.size(); ++index) {
+            _averagedSpectrum[index] = _spectrumSum[index] / denominator;
+        }
+        _history.push_back(_displaySpectrumLocked());
     }
 
     [[nodiscard]] std::string snapshotJson() const {
         std::vector<value_type> frequencies;
-        std::vector<value_type> spectrum;
+        std::deque<std::vector<value_type>> history;
         std::size_t fftSize = 0UZ;
         std::size_t numAverages = 0UZ;
+        std::size_t historyRows = 0UZ;
+        std::size_t timeSpanSamples = 0UZ;
+        value_type sampleRate = 0.0F;
         std::string window;
         bool outputInDb = false;
-        bool persistenceEnabled = false;
-        value_type phosphorIntensity = static_cast<value_type>(1.1F);
-        value_type phosphorDecayMs = static_cast<value_type>(1024.0F);
-        bool autoscaleEnabled = true;
-        value_type xMin = static_cast<value_type>(0.0F);
-        value_type xMax = static_cast<value_type>(0.0F);
-        value_type yMin = static_cast<value_type>(0.0F);
-        value_type yMax = static_cast<value_type>(0.0F);
+        bool autoscale = true;
+        value_type zMin = 0.0F;
+        value_type zMax = 1.0F;
 
         {
             std::lock_guard lock(_mutex);
             frequencies = _frequencies;
-            spectrum = _displaySpectrumLocked();
+            history = _history;
             fftSize = _fftSize;
             numAverages = _numAverages;
+            historyRows = _historyRows;
+            timeSpanSamples = _timeSpanSamples;
+            sampleRate = _sampleRate;
             window = _windowName;
             outputInDb = _outputInDb;
-            persistenceEnabled = _persistenceEnabled;
-            phosphorIntensity = _phosphorIntensity;
-            phosphorDecayMs = _phosphorDecayMs;
-            autoscaleEnabled = _autoscale;
-            xMin = _xMin;
-            xMax = _xMax;
-            yMin = _yMin;
-            yMax = _yMax;
+            autoscale = _autoscale;
+            zMin = _zMin;
+            zMax = _zMax;
         }
 
-        if (frequencies.empty() || spectrum.empty()) {
-            std::ostringstream os;
-            os << "{\"payload_format\":\"dataset-xy-json-v1\",";
-            os << "\"layout\":\"pairs_xy\",";
-            os << "\"points\":0,";
-            os << "\"sample_type\":\"float32\",";
-            os << "\"axis_name\":\"Frequency\",";
-            os << "\"axis_unit\":\"Hz\",";
-            os << "\"signal_name\":\"Power Spectrum\",";
-            os << "\"signal_unit\":\"" << (outputInDb ? "dB" : "power") << "\",";
-            os << "\"fft_size\":" << fftSize << ",";
-            os << "\"num_averages\":" << numAverages << ",";
-            os << "\"window\":\"" << escapeJson(window) << "\",";
-            os << "\"output_in_db\":" << (outputInDb ? "true" : "false") << ",";
-            os << "\"persistence\":" << (persistenceEnabled ? "true" : "false") << ",";
-            os << "\"phosphor_intensity\":" << phosphorIntensity << ",";
-            os << "\"phosphor_decay_ms\":" << phosphorDecayMs << ",";
-            os << "\"autoscale\":" << (autoscaleEnabled ? "true" : "false") << ",";
-            os << "\"x_min\":" << xMin << ",";
-            os << "\"x_max\":" << xMax << ",";
-            os << "\"y_min\":" << yMin << ",";
-            os << "\"y_max\":" << yMax << ",";
-            os << "\"data\":[]}";
-            return os.str();
+        const auto [resolvedMinValue, resolvedMaxValue] = _resolveColorScaleLocked(history, frequencies.size(), autoscale, zMin, zMax);
+        const value_type effectiveTimeSpan = sampleRate > 0.0F ? static_cast<value_type>(timeSpanSamples) / sampleRate : 0.0F;
+
+        if (frequencies.empty()) {
+            std::ostringstream empty;
+            empty << "{\"payload_format\":\"waterfall-spectrum-json-v1\",";
+            empty << "\"layout\":\"waterfall_matrix\",";
+            empty << "\"rows\":0,";
+            empty << "\"columns\":0,";
+            empty << "\"sample_type\":\"" << sampleTypeName() << "\",";
+            empty << "\"axis_name\":\"Frequency\",";
+            empty << "\"axis_unit\":\"Hz\",";
+            empty << "\"signal_name\":\"Waterfall\",";
+            empty << "\"signal_unit\":\"" << (outputInDb ? "dB" : "power") << "\",";
+            empty << "\"fft_size\":" << fftSize << ",";
+            empty << "\"num_averages\":" << numAverages << ",";
+            empty << "\"time_span\":" << effectiveTimeSpan << ",";
+            empty << "\"sample_rate\":" << sampleRate << ",";
+            empty << "\"history_rows\":" << historyRows << ",";
+            empty << "\"window\":\"" << escapeJson(window) << "\",";
+            empty << "\"output_in_db\":" << (outputInDb ? "true" : "false") << ",";
+            empty << "\"autoscale\":" << (autoscale ? "true" : "false") << ",";
+            empty << "\"z_min\":" << zMin << ",";
+            empty << "\"z_max\":" << zMax << ",";
+            empty << "\"min_value\":" << resolvedMinValue << ",";
+            empty << "\"max_value\":" << resolvedMaxValue << ",";
+            empty << "\"color_map\":\"turbo\",";
+            empty << "\"frequencies\":[],";
+            empty << "\"data\":[]}";
+            return empty.str();
         }
 
-        const std::size_t points = std::min(frequencies.size(), spectrum.size());
+        const std::size_t rows = historyRows;
+        const std::size_t columns = history.empty() ? frequencies.size() : std::min(frequencies.size(), history.front().size());
         std::ostringstream os;
         os.precision(9);
-        os << "{\"payload_format\":\"dataset-xy-json-v1\",";
-        os << "\"layout\":\"pairs_xy\",";
-        os << "\"points\":" << points << ",";
-        os << "\"sample_type\":\"float32\",";
+        os << "{\"payload_format\":\"waterfall-spectrum-json-v1\",";
+        os << "\"layout\":\"waterfall_matrix\",";
+        os << "\"rows\":" << rows << ",";
+        os << "\"columns\":" << columns << ",";
+        os << "\"sample_type\":\"" << sampleTypeName() << "\",";
         os << "\"axis_name\":\"Frequency\",";
         os << "\"axis_unit\":\"Hz\",";
-        os << "\"signal_name\":\"Power Spectrum\",";
+        os << "\"signal_name\":\"Waterfall\",";
         os << "\"signal_unit\":\"" << (outputInDb ? "dB" : "power") << "\",";
         os << "\"fft_size\":" << fftSize << ",";
         os << "\"num_averages\":" << numAverages << ",";
+        os << "\"time_span\":" << effectiveTimeSpan << ",";
+        os << "\"sample_rate\":" << sampleRate << ",";
+        os << "\"history_rows\":" << historyRows << ",";
         os << "\"window\":\"" << escapeJson(window) << "\",";
         os << "\"output_in_db\":" << (outputInDb ? "true" : "false") << ",";
-        os << "\"persistence\":" << (persistenceEnabled ? "true" : "false") << ",";
-        os << "\"phosphor_intensity\":" << phosphorIntensity << ",";
-        os << "\"phosphor_decay_ms\":" << phosphorDecayMs << ",";
-        os << "\"autoscale\":" << (autoscaleEnabled ? "true" : "false") << ",";
-        os << "\"x_min\":" << xMin << ",";
-        os << "\"x_max\":" << xMax << ",";
-        os << "\"y_min\":" << yMin << ",";
-        os << "\"y_max\":" << yMax << ",";
-        os << "\"data\":[";
-        for (std::size_t index = 0UZ; index < points; ++index) {
+        os << "\"autoscale\":" << (autoscale ? "true" : "false") << ",";
+        os << "\"z_min\":" << zMin << ",";
+        os << "\"z_max\":" << zMax << ",";
+        os << "\"min_value\":" << resolvedMinValue << ",";
+        os << "\"max_value\":" << resolvedMaxValue << ",";
+        os << "\"color_map\":\"turbo\",";
+        os << "\"frequencies\":[";
+        for (std::size_t index = 0UZ; index < columns; ++index) {
             if (index > 0UZ) {
                 os << ',';
             }
-            os << '[' << frequencies[index] << ',' << spectrum[index] << ']';
+            os << frequencies[index];
+        }
+        os << "],";
+        os << "\"data\":[";
+        std::size_t rowIndex = 0UZ;
+        for (const auto& row : history) {
+            if (rowIndex > 0UZ) {
+                os << ',';
+            }
+            os << '[';
+            for (std::size_t index = 0UZ; index < columns; ++index) {
+                if (index > 0UZ) {
+                    os << ',';
+                }
+                os << row[index];
+            }
+            os << ']';
+            rowIndex += 1UZ;
+        }
+        const std::vector<value_type> blankRow(columns, resolvedMinValue);
+        for (; rowIndex < rows; ++rowIndex) {
+            if (rowIndex > 0UZ) {
+                os << ',';
+            }
+            os << '[';
+            for (std::size_t index = 0UZ; index < columns; ++index) {
+                if (index > 0UZ) {
+                    os << ',';
+                }
+                os << blankRow[index];
+            }
+            os << ']';
         }
         os << "]}";
         return os.str();
@@ -288,17 +316,13 @@ private:
 
         if constexpr (gr::meta::complex_like<T>) {
             const value_type freqOffset = static_cast<value_type>(bins / 2UZ) * freqWidth;
-            std::generate(_frequencies.begin(), _frequencies.end(), [index = 0UZ, freqWidth, freqOffset]() mutable {
-                const auto next = static_cast<value_type>(index) * freqWidth - freqOffset;
-                ++index;
-                return next;
-            });
+            for (std::size_t index = 0UZ; index < bins; ++index) {
+                _frequencies[index] = static_cast<value_type>(index) * freqWidth - freqOffset;
+            }
         } else {
-            std::generate(_frequencies.begin(), _frequencies.end(), [index = 0UZ, freqWidth]() mutable {
-                const auto next = static_cast<value_type>(index) * freqWidth;
-                ++index;
-                return next;
-            });
+            for (std::size_t index = 0UZ; index < bins; ++index) {
+                _frequencies[index] = static_cast<value_type>(index) * freqWidth;
+            }
         }
     }
 
@@ -313,27 +337,79 @@ private:
 
         std::vector<value_type> display = _averagedSpectrum;
         constexpr value_type minimumPower = static_cast<value_type>(1.0e-16F);
-        std::ranges::transform(display, display.begin(), [minimumPower](const value_type value) {
+        for (auto& value : display) {
             const value_type clamped = std::max(value, minimumPower);
-            return static_cast<value_type>(10.0F) * std::log10(clamped);
-        });
+            value = static_cast<value_type>(10.0F) * std::log10(clamped);
+        }
         return display;
+    }
+
+    [[nodiscard]] std::pair<value_type, value_type> _minMaxLocked(
+        const std::deque<std::vector<value_type>>& history,
+        std::size_t columns) const {
+        value_type minValue = std::numeric_limits<value_type>::infinity();
+        value_type maxValue = -std::numeric_limits<value_type>::infinity();
+        for (const auto& row : history) {
+            for (std::size_t index = 0UZ; index < std::min(columns, row.size()); ++index) {
+                minValue = std::min(minValue, row[index]);
+                maxValue = std::max(maxValue, row[index]);
+            }
+        }
+        if (!std::isfinite(minValue) || !std::isfinite(maxValue)) {
+            minValue = 0.0F;
+            maxValue = 1.0F;
+        }
+        return {minValue, maxValue};
+    }
+
+    [[nodiscard]] std::pair<value_type, value_type> _resolveColorScaleLocked(
+        const std::deque<std::vector<value_type>>& history,
+        std::size_t columns,
+        bool autoscale,
+        value_type zMin,
+        value_type zMax) const {
+        const bool manualRangeValid = std::isfinite(zMin) && std::isfinite(zMax) && zMax >= zMin;
+        if (!autoscale && manualRangeValid) {
+            return {zMin, zMax};
+        }
+
+        if (!history.empty()) {
+            const auto [minValue, maxValue] = _minMaxLocked(history, columns);
+            if (std::isfinite(minValue) && std::isfinite(maxValue)) {
+                return {minValue, maxValue};
+            }
+        }
+
+        if (manualRangeValid) {
+            return {zMin, zMax};
+        }
+
+        return {0.0F, 1.0F};
+    }
+
+    [[nodiscard]] std::size_t _samplesFromDurationLocked(value_type time_span, value_type sample_rate) const noexcept {
+        const value_type duration = std::max<value_type>(0.0F, time_span);
+        const value_type rate = sample_rate > 0.0F ? sample_rate : 1.0F;
+        const auto rawSamples = static_cast<std::size_t>(std::ceil(duration * rate));
+        return std::max<std::size_t>(1UZ, rawSamples);
+    }
+
+    [[nodiscard]] std::size_t _quantizeSampleCountLocked(std::size_t sample_count) const noexcept {
+        const std::size_t frameSize = std::max<std::size_t>(1UZ, _fftSize);
+        const std::size_t normalized = std::max<std::size_t>(frameSize, sample_count);
+        const std::size_t remainder = normalized % frameSize;
+        return remainder == 0UZ ? normalized : (normalized + frameSize - remainder);
     }
 
     mutable std::mutex _mutex;
     std::size_t _fftSize = 1024UZ;
     std::size_t _numAverages = 8UZ;
+    std::size_t _timeSpanSamples = 262144UZ;
+    std::size_t _historyRows = 256UZ;
     float _sampleRate = 1.0F;
+    value_type _timeSpan = 256.0F;
     std::string _windowName = std::string(magic_enum::enum_name(gr::algorithm::window::Type::BlackmanHarris));
     bool _outputInDb = true;
-    bool _persistenceEnabled = false;
-    value_type _phosphorIntensity = static_cast<value_type>(1.1F);
-    value_type _phosphorDecayMs = static_cast<value_type>(1024.0F);
-    bool _autoscale = true;
-    value_type _xMin = static_cast<value_type>(0.0F);
-    value_type _xMax = static_cast<value_type>(0.0F);
-    value_type _yMin = static_cast<value_type>(0.0F);
-    value_type _yMax = static_cast<value_type>(0.0F);
     gr::algorithm::window::Type _windowType = gr::algorithm::window::Type::BlackmanHarris;
     fft_type _fftImpl{};
     std::vector<value_type> _window{};
@@ -343,7 +419,11 @@ private:
     std::vector<value_type> _spectrumSum{};
     std::vector<value_type> _averagedSpectrum{};
     std::vector<value_type> _frequencies{};
+    std::deque<std::vector<value_type>> _averagingHistory{};
     std::deque<std::vector<value_type>> _history{};
+    bool _autoscale = true;
+    value_type _zMin = 0.0F;
+    value_type _zMax = 1.0F;
 };
 
 struct ParsedHttpEndpoint {
@@ -464,11 +544,11 @@ inline bool isHttpTransport(const std::string& transport) {
 
 } // namespace detail
 
-GR_REGISTER_BLOCK("gr::studio::StudioPowerSpectrumSink", gr::studio::StudioPowerSpectrumSink, ([T]), [ float, std::complex<float> ])
+GR_REGISTER_BLOCK("gr::studio::StudioWaterfallSink", gr::studio::StudioWaterfallSink, ([T]), [ float, std::complex<float> ])
 
-template<detail::SupportedPowerSpectrumSample T>
-struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
-    using Description = Doc<"@brief Studio power spectrum sink with FFT windowing, averaged spectra, and optional phosphor persistence.">;
+template<detail::SupportedWaterfallSample T>
+struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
+    using Description = Doc<"@brief Studio waterfall sink with FFT windowing and bounded history.">;
 
     PortIn<T> in;
 
@@ -476,18 +556,18 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
     Annotated<std::string, "endpoint", Doc<"Transport endpoint URL/path">, Visible> endpoint = "http://127.0.0.1:18085/snapshot";
     Annotated<std::uint32_t, "poll_ms", Doc<"Suggested poll interval in milliseconds for poll transports">, Visible> poll_ms = 250U;
     Annotated<gr::Size_t, "fft_size", Doc<"FFT size used for each spectrum frame">, Visible> fft_size = 1024UZ;
-    Annotated<gr::Size_t, "num_averages", Doc<"Number of FFT frames averaged into the displayed spectrum">, Visible> num_averages = 8UZ;
+    Annotated<gr::Size_t, "num_averages", Doc<"Number of FFT frames averaged into each history row">, Visible> num_averages = 8UZ;
+    Annotated<float, "time_span", Doc<"Total waterfall history span in seconds (quantized to fft_size using sample_rate)">, Visible> time_span = 256.0F;
     Annotated<std::string, "window", Doc<gr::algorithm::window::TypeNames>, Visible> window = std::string(magic_enum::enum_name(gr::algorithm::window::Type::BlackmanHarris));
     Annotated<float, "sample_rate", Doc<"Input sample rate in Hz">, Visible> sample_rate = 1.0F;
-    Annotated<bool, "output_in_db", Doc<"Render the averaged power spectrum in dB">, Visible> output_in_db = true;
-    Annotated<bool, "persistence", Doc<"Enable phosphor persistence rendering in Studio Application">, Visible> persistence = false;
-    Annotated<float, "phosphor_intensity", Doc<"Phosphor intensity multiplier when persistence is enabled">, Visible> phosphor_intensity = 1.1F;
-    Annotated<float, "phosphor_decay_ms", Doc<"Phosphor persistence decay time in milliseconds">, Visible> phosphor_decay_ms = 1024.0F;
-    Annotated<std::string, "plot_title", Doc<"Optional semantic plot title for Studio Application">, Visible> plot_title = "Power Spectrum";
+    Annotated<bool, "output_in_db", Doc<"Render the waterfall history in dB">, Visible> output_in_db = true;
+    Annotated<bool, "autoscale", Doc<"Automatically derive the waterfall colormap range from live data">, Visible> autoscale = true;
+    Annotated<float, "z_min", Doc<"Manual waterfall colormap minimum when autoscale is disabled">, Visible> z_min = 0.0F;
+    Annotated<float, "z_max", Doc<"Manual waterfall colormap maximum when autoscale is disabled">, Visible> z_max = 1.0F;
+    Annotated<std::string, "plot_title", Doc<"Optional semantic plot title for Studio Application">, Visible> plot_title = "Waterfall";
     Annotated<std::string, "x_label", Doc<"Optional semantic x-axis label for Studio Application">, Visible> x_label = "Frequency";
     Annotated<std::string, "y_label", Doc<"Optional semantic y-axis label for Studio Application">, Visible> y_label = "Power";
-    Annotated<std::string, "series_labels", Doc<"Optional comma-separated series labels for Studio Application">, Visible> series_labels = "Power";
-    Annotated<bool, "autoscale", Doc<"Enable automatic axis scaling in Studio Application">, Visible> autoscale = true;
+    Annotated<std::string, "series_labels", Doc<"Optional comma-separated series labels for Studio Application">, Visible> series_labels = "Waterfall";
     Annotated<float, "x_min", Doc<"Optional x-axis minimum when autoscale is disabled">, Visible> x_min = 0.0F;
     Annotated<float, "x_max", Doc<"Optional x-axis maximum when autoscale is disabled">, Visible> x_max = 0.0F;
     Annotated<float, "y_min", Doc<"Optional y-axis minimum when autoscale is disabled">, Visible> y_min = 0.0F;
@@ -495,47 +575,41 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
     Annotated<std::string, "topic", Doc<"Optional stream topic for pub/sub transports">, Visible> topic = "";
 
     GR_MAKE_REFLECTABLE(
-        StudioPowerSpectrumSink,
+        StudioWaterfallSink,
         in,
         transport,
         endpoint,
         poll_ms,
         fft_size,
         num_averages,
+        time_span,
         window,
         sample_rate,
         output_in_db,
-        persistence,
-        phosphor_intensity,
-        phosphor_decay_ms,
+        autoscale,
+        z_min,
+        z_max,
         plot_title,
         x_label,
         y_label,
         series_labels,
-        autoscale,
         x_min,
         x_max,
         y_min,
         y_max,
         topic);
 
-    using Block<StudioPowerSpectrumSink<T>>::Block;
+    using Block<StudioWaterfallSink<T>>::Block;
 
     void start() {
         _window.configure(
             static_cast<std::size_t>(fft_size),
             static_cast<std::size_t>(num_averages),
+            time_span,
             sample_rate,
             window.value,
-            output_in_db,
-            persistence,
-            phosphor_intensity,
-            phosphor_decay_ms,
-            autoscale,
-            x_min,
-            x_max,
-            y_min,
-            y_max);
+            output_in_db);
+        _window.configureColorScale(autoscale, z_min, z_max);
         syncInputPortConstraints();
         startTransport();
     }
@@ -543,35 +617,20 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
     void stop() { _http.stop(); }
 
     void settingsChanged(const property_map&, const property_map& new_settings) {
-        if (
-            new_settings.contains("fft_size") ||
-            new_settings.contains("num_averages") ||
-            new_settings.contains("window") ||
-            new_settings.contains("sample_rate") ||
-            new_settings.contains("output_in_db") ||
-            new_settings.contains("persistence") ||
-            new_settings.contains("phosphor_intensity") ||
-            new_settings.contains("phosphor_decay_ms") ||
-            new_settings.contains("autoscale") ||
-            new_settings.contains("x_min") ||
-            new_settings.contains("x_max") ||
-            new_settings.contains("y_min") ||
-            new_settings.contains("y_max")) {
+        if (new_settings.contains("fft_size") || new_settings.contains("num_averages") || new_settings.contains("window") ||
+            new_settings.contains("sample_rate") || new_settings.contains("output_in_db") || new_settings.contains("time_span")) {
             _window.configure(
                 static_cast<std::size_t>(fft_size),
                 static_cast<std::size_t>(num_averages),
+                time_span,
                 sample_rate,
                 window.value,
-                output_in_db,
-                persistence,
-                phosphor_intensity,
-                phosphor_decay_ms,
-                autoscale,
-                x_min,
-                x_max,
-                y_min,
-                y_max);
+                output_in_db);
             syncInputPortConstraints();
+        }
+
+        if (new_settings.contains("autoscale") || new_settings.contains("z_min") || new_settings.contains("z_max")) {
+            _window.configureColorScale(autoscale, z_min, z_max);
         }
 
         if (new_settings.contains("transport") || new_settings.contains("endpoint")) {
@@ -609,16 +668,16 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
 private:
     void startTransport() {
         if (!detail::isHttpTransport(transport.value)) {
-            throw gr::exception("StudioPowerSpectrumSink currently supports only http_snapshot and http_poll transports.");
+            throw gr::exception("StudioWaterfallSink currently supports only http_snapshot and http_poll transports.");
         }
 
         const auto parsed = detail::parseHttpEndpoint(endpoint.value);
         if (!_http.start(parsed, [this]() { return _window.snapshotJson(); })) {
-            throw gr::exception("StudioPowerSpectrumSink failed to start HTTP transport endpoint.");
+            throw gr::exception("StudioWaterfallSink failed to start HTTP transport endpoint.");
         }
     }
 
-    detail::PowerSpectrumWindow<T> _window{};
+    detail::WaterfallWindow<T> _window{};
     detail::SnapshotHttpService _http{};
 
     void syncInputPortConstraints() {

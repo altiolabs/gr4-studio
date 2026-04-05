@@ -38,4 +38,35 @@ describe('timeseries live runtime retention', () => {
       }),
     ).toBe(false);
   });
+
+  it('retains prior waterfall frames during transient loading/no-data transitions', () => {
+    expect(
+      shouldRetainPreviousLiveFrame({
+        currentFrame: {
+          kind: 'waterfall',
+          image: {
+            width: 2,
+            height: 2,
+            values: [1, 2, 3, 4],
+          },
+          meta: {
+            state: 'ready',
+            domain: 'frequency',
+          },
+        },
+        nextFrame: {
+          kind: 'waterfall',
+          image: {
+            width: 0,
+            height: 0,
+            values: [],
+          },
+          meta: {
+            state: 'loading',
+            domain: 'frequency',
+          },
+        },
+      }),
+    ).toBe(true);
+  });
 });

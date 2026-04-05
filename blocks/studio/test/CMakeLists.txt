@@ -1,3 +1,7 @@
 add_executable(qa_StudioPowerSpectrumSink qa_StudioPowerSpectrumSink.cpp)
 target_link_libraries(qa_StudioPowerSpectrumSink PRIVATE gr4_studio::blocks_studio_headers)
 add_test(NAME qa_StudioPowerSpectrumSink COMMAND qa_StudioPowerSpectrumSink)
+
+add_executable(qa_StudioWaterfallSink qa_StudioWaterfallSink.cpp)
+target_link_libraries(qa_StudioWaterfallSink PRIVATE gr4_studio::blocks_studio_headers)
+add_test(NAME qa_StudioWaterfallSink COMMAND qa_StudioWaterfallSink)

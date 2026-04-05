@@ -1,7 +1,9 @@
 import type { ReactElement } from 'react';
 import type { StudioPanelKind } from '../../graph-document/model/studio-workspace';
 import type { WorkspaceLiveRendererContext } from './live-renderer-contract';
+import { PhosphorSpectrumLiveRenderer } from './histogram-live-renderer';
 import { SeriesLiveRenderer } from './series-live-renderer';
+import { WaterfallLiveRenderer } from './waterfall-live-renderer';
 
 export type WorkspacePanelRendererProps = {
   kind: StudioPanelKind;
@@ -62,6 +64,8 @@ function AudioPlaceholderRenderer({ liveContext }: { liveContext: WorkspaceLiveR
 const RENDERER_BY_KIND = {
   series: SeriesLiveRenderer,
   series2d: Series2DPlaceholderRenderer,
+  histogram: PhosphorSpectrumLiveRenderer,
+  waterfall: WaterfallLiveRenderer,
   image: ImagePlaceholderRenderer,
   audio: AudioPlaceholderRenderer,
 } as Record<StudioPanelKind, (props: { liveContext: WorkspaceLiveRendererContext }) => ReactElement>;

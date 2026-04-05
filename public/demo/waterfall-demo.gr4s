@@ -1,0 +1,139 @@
+{
+  "format": "gr4-studio.graph",
+  "version": 1,
+  "metadata": {
+    "name": "Waterfall Demo.gr4s",
+    "description": "Minimal demo graph for validating StudioWaterfallSink live rendering."
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "src0",
+        "blockType": "gr::basic::SignalGenerator<float32>",
+        "title": "SignalGenerator",
+        "position": {
+          "x": 120,
+          "y": 120
+        },
+        "parameters": {
+          "name": {
+            "kind": "literal",
+            "value": "src0"
+          },
+          "sample_rate": {
+            "kind": "literal",
+            "value": 1000
+          },
+          "chunk_size": {
+            "kind": "literal",
+            "value": 256
+          },
+          "signal_type": {
+            "kind": "literal",
+            "value": "Sin"
+          },
+          "frequency": {
+            "kind": "literal",
+            "value": 25
+          },
+          "amplitude": {
+            "kind": "literal",
+            "value": 1
+          },
+          "offset": {
+            "kind": "literal",
+            "value": 0
+          },
+          "phase": {
+            "kind": "literal",
+            "value": 0
+          }
+        }
+      },
+      {
+        "id": "sink0",
+        "blockType": "gr::studio::StudioWaterfallSink<float32>",
+        "title": "Waterfall",
+        "position": {
+          "x": 420,
+          "y": 96
+        },
+        "parameters": {
+          "name": {
+            "kind": "literal",
+            "value": "sink0"
+          },
+          "transport": {
+            "kind": "literal",
+            "value": "http_poll"
+          },
+          "endpoint": {
+            "kind": "literal",
+            "value": "http://127.0.0.1:18085/snapshot"
+          },
+          "poll_ms": {
+            "kind": "literal",
+            "value": 250
+          },
+          "fft_size": {
+            "kind": "literal",
+            "value": 256
+          },
+          "num_averages": {
+            "kind": "literal",
+            "value": 4
+          },
+          "time_span": {
+            "kind": "literal",
+            "value": 49.152
+          },
+          "window": {
+            "kind": "literal",
+            "value": "Hann"
+          },
+          "sample_rate": {
+            "kind": "literal",
+            "value": 1000
+          },
+          "output_in_db": {
+            "kind": "literal",
+            "value": true
+          },
+          "plot_title": {
+            "kind": "literal",
+            "value": "Waterfall Demo"
+          },
+          "x_label": {
+            "kind": "literal",
+            "value": "Frequency"
+          },
+          "y_label": {
+            "kind": "literal",
+            "value": "Power"
+          },
+          "series_labels": {
+            "kind": "literal",
+            "value": "Waterfall"
+          },
+          "autoscale": {
+            "kind": "literal",
+            "value": true
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge-src0-sink0",
+        "source": {
+          "nodeId": "src0",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "sink0",
+          "portId": "in"
+        }
+      }
+    ]
+  }
+}

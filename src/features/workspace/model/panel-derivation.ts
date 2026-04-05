@@ -11,6 +11,8 @@ type PanelSourceNode = {
 const PANEL_KIND_BY_FAMILY: Readonly<Record<string, Exclude<StudioPanelKind, 'control'>>> = {
   series: 'series',
   series2d: 'series2d',
+  histogram: 'histogram',
+  waterfall: 'waterfall',
   image: 'image',
   audio: 'audio',
 };

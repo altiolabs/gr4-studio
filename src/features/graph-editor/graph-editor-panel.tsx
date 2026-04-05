@@ -24,7 +24,6 @@ import { rotateNodeRotation } from './model/node-rotation';
 import {
   buildBlockCardSummary,
   toCanonicalBlockDisplayName,
-  toDisambiguatedShortBlockName,
   toShortBlockName,
 } from './model/presentation';
 import { useEditorStore } from './store/editorStore';
@@ -437,19 +436,7 @@ export function GraphEditorPanel({
 
   const nodes = useMemo(
     () => {
-      const baseNameCounts = editorNodes.reduce((acc, node) => {
-        const baseName = toShortBlockName(node.displayName, node.blockTypeId);
-        acc.set(baseName, (acc.get(baseName) ?? 0) + 1);
-        return acc;
-      }, new Map<string, number>());
-
       return editorNodes.map((block) => {
-        const baseName = toShortBlockName(block.displayName, block.blockTypeId);
-        const shouldDisambiguate = (baseNameCounts.get(baseName) ?? 0) > 1;
-        const shortDisplayName = shouldDisambiguate
-          ? toDisambiguatedShortBlockName(block.displayName, block.blockTypeId)
-          : baseName;
-
         return toFlowNodeData(
           block,
           openRuntimeVisualizationId,
@@ -458,7 +445,7 @@ export function GraphEditorPanel({
           hasResolvedCatalog && !catalogBlockTypeIds.has(block.blockTypeId),
           fallbackPortsByNodeId.get(block.instanceId) ?? { inputs: [], outputs: [] },
           blockDetailsByType.get(block.blockTypeId),
-          shortDisplayName,
+          toShortBlockName(block.displayName, block.blockTypeId),
         );
       });
     },

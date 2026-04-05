@@ -11,70 +11,39 @@ type BlockCardSummary = {
   parameterOverflowCount: number;
 };
 
-function stripTemplateArgs(name: string): string {
-  const templateStart = name.indexOf('<');
-  return templateStart >= 0 ? name.slice(0, templateStart) : name;
-}
-
-function getTemplateArgs(name: string): string | undefined {
-  const start = name.indexOf('<');
-  const end = name.lastIndexOf('>');
-  if (start < 0 || end <= start) {
-    return undefined;
-  }
-
-  const args = name.slice(start + 1, end).trim();
-  return args || undefined;
-}
-
 function stripNamespace(name: string): string {
   const segments = name.split('::');
   return segments[segments.length - 1] || name;
 }
 
-function canonicalNameFromType(blockTypeId: string): string {
-  return stripNamespace(blockTypeId).trim() || blockTypeId;
+function splitTemplateTypeName(name: string): { base: string; templateSuffix?: string } {
+  const trimmed = name.trim();
+  const lt = trimmed.indexOf('<');
+  if (lt < 0) {
+    return { base: trimmed };
+  }
+
+  return {
+    base: trimmed.slice(0, lt).trim(),
+    templateSuffix: trimmed.slice(lt).trim(),
+  };
 }
 
-export function toCanonicalBlockDisplayName(displayName: string, blockTypeId: string): string {
-  const trimmed = displayName.trim();
-  const fromType = canonicalNameFromType(blockTypeId);
+function canonicalNameFromType(blockTypeId: string): string {
+  const { base } = splitTemplateTypeName(blockTypeId);
+  return stripNamespace(base).trim() || base || blockTypeId;
+}
 
-  if (!trimmed) {
-    return fromType;
-  }
-
-  if (trimmed.toLowerCase() === fromType.toLowerCase()) {
-    return fromType;
-  }
-
-  return trimmed;
+export function toCanonicalBlockDisplayName(_displayName: string, blockTypeId: string): string {
+  return canonicalNameFromType(blockTypeId);
 }
 
 export function toShortBlockName(displayName: string, blockTypeId: string): string {
-  const canonicalDisplay = toCanonicalBlockDisplayName(displayName, blockTypeId);
-  const fromDisplay = stripNamespace(stripTemplateArgs(canonicalDisplay).trim());
-  const fromType = stripNamespace(stripTemplateArgs(blockTypeId).trim());
-
-  if (fromDisplay && fromType && fromDisplay.toLowerCase() === fromType.toLowerCase()) {
-    return fromType;
-  }
-
-  if (fromDisplay) {
-    return fromDisplay;
-  }
-
-  return fromType || blockTypeId;
+  return toCanonicalBlockDisplayName(displayName, blockTypeId);
 }
 
 export function toDisambiguatedShortBlockName(displayName: string, blockTypeId: string): string {
-  const base = toShortBlockName(displayName, blockTypeId);
-  const templateArgs = getTemplateArgs(displayName) ?? getTemplateArgs(blockTypeId);
-  if (!templateArgs) {
-    return base;
-  }
-
-  return `${base}<${templateArgs}>`;
+  return toCanonicalBlockDisplayName(displayName, blockTypeId);
 }
 
 function truncateValue(value: string): string {

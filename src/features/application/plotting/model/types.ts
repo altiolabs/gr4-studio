@@ -1,5 +1,11 @@
 export type PlotKind = 'timeseries' | 'fft' | 'waterfall' | 'histogram' | 'scatter';
 
+export type PhosphorSpectrumTuning = {
+  intensity: number;
+  decayMs: number;
+  colorMap: string;
+};
+
 export type PlotViewSpec = {
   kind: PlotKind;
   title?: string;
@@ -22,6 +28,7 @@ export type PlotViewSpec = {
   };
   plotColors?: string[];
   colorAssignmentMode?: 'byIndex';
+  phosphor?: PhosphorSpectrumTuning;
 };
 
 export type PlotSeriesFrame = {
@@ -31,16 +38,28 @@ export type PlotSeriesFrame = {
   y: number[] | Float32Array | Float64Array;
 };
 
+export type PlotImageFrame = {
+  width: number;
+  height: number;
+  values: number[] | Float32Array | Uint8Array;
+  xAxis?: number[] | Float64Array;
+  minValue?: number;
+  maxValue?: number;
+  timeSpan?: number;
+  sampleType?: string;
+  signalName?: string;
+  signalUnit?: string;
+  axisName?: string;
+  axisUnit?: string;
+  colorMap?: string;
+};
+
 export type PlotXyRenderMode = 'line' | 'scatter';
 
 export type PlotDataFrame = {
   kind: PlotKind;
   series?: PlotSeriesFrame[];
-  image?: {
-    width: number;
-    height: number;
-    values: number[] | Float32Array | Uint8Array;
-  };
+  image?: PlotImageFrame;
   meta?: {
     sequence?: number;
     emittedAtMs?: number;
@@ -62,7 +81,7 @@ export type PlotPanelSpec = {
     sinkId: string;
     channel?: string;
     field?: string;
-    payloadFormat?: 'series-window-json-v1' | 'series2d-xy-json-v1' | 'dataset-xy-json-v1';
+    payloadFormat?: 'series-window-json-v1' | 'series2d-xy-json-v1' | 'dataset-xy-json-v1' | 'waterfall-spectrum-json-v1';
   };
   view: PlotViewSpec;
 };

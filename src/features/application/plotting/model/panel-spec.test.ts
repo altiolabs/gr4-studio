@@ -209,6 +209,73 @@ describe('derivePlotPanelSpec', () => {
     expect(spec?.view.xMode).toBe('frequency');
   });
 
+  it('derives phosphor panel kind from StudioPowerSpectrumSink persistence mode', () => {
+    const spec = derivePlotPanelSpec(
+      makeSeriesEntry({
+        panel: {
+          id: 'studio-panel:node-history',
+          nodeId: 'node-history',
+          kind: 'series2d',
+          title: 'Phosphor Spectrum',
+          visible: true,
+          previewOnCanvas: false,
+        },
+        nodeBlockTypeId: 'gr::studio::StudioPowerSpectrumSink<float32>',
+        nodeParameters: {
+          persistence: 'true',
+          plot_title: 'Phosphor Spectrum',
+          x_label: 'Frequency',
+          y_label: 'Power',
+          sample_rate: '48000',
+        },
+      }),
+    );
+
+    expect(spec?.kind).toBe('histogram');
+    expect(spec?.source.payloadFormat).toBe('dataset-xy-json-v1');
+    expect(spec?.view.kind).toBe('histogram');
+    expect(spec?.view.xMode).toBe('frequency');
+    expect(spec?.view.legend).toBe(true);
+    expect(spec?.view.phosphor).toEqual({
+      intensity: 1.1,
+      decayMs: 1024,
+      colorMap: 'gqrx',
+    });
+  });
+
+  it('derives waterfall payload format and panel kind from StudioWaterfallSink IDs', () => {
+    const spec = derivePlotPanelSpec(
+      makeSeriesEntry({
+        panel: {
+          id: 'studio-panel:node-waterfall',
+          nodeId: 'node-waterfall',
+          kind: 'waterfall',
+          title: 'Waterfall',
+          visible: true,
+          previewOnCanvas: false,
+        },
+        nodeBlockTypeId: 'gr::studio::StudioWaterfallSink<float32>',
+        nodeParameters: {
+          plot_title: 'Spectrum Waterfall',
+          x_label: 'Frequency',
+          y_label: 'Power',
+          x_min: '-5',
+          x_max: '5',
+          y_min: '-10',
+          y_max: '10',
+        },
+      }),
+    );
+
+    expect(spec?.kind).toBe('waterfall');
+    expect(spec?.source.payloadFormat).toBe('waterfall-spectrum-json-v1');
+    expect(spec?.view.title).toBe('Spectrum Waterfall');
+    expect(spec?.view.xMode).toBe('frequency');
+    expect(spec?.view.legend).toBe(false);
+    expect(spec?.view.xRange).toBeUndefined();
+    expect(spec?.view.yRange).toBeUndefined();
+  });
+
   it('derives fixed axis ranges when autoscale is disabled', () => {
     const spec = derivePlotPanelSpec(
       makeSeriesEntry({

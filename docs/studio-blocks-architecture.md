@@ -36,6 +36,7 @@ Rules:
 - `Studio2DSeriesSink`
 - `StudioDataSetSink`
 - `StudioPowerSpectrumSink`
+- `StudioWaterfallSink`
 - `StudioAudioMonitor`
 - `StudioImageSink`
 
@@ -45,6 +46,7 @@ The code currently registers concrete type variants for each family, for example
 - `gr::studio::Studio2DSeriesSink<...>`
 - `gr::studio::StudioDataSetSink<...>`
 - `gr::studio::StudioPowerSpectrumSink<...>`
+- `gr::studio::StudioWaterfallSink<...>`
 - `gr::studio::StudioAudioMonitor<...>`
 - `gr::studio::StudioImageSink<...>`
 
@@ -105,7 +107,20 @@ Rendering is handled separately:
 - scalar series -> live `series` renderer path
 - `series2d-xy-json-v1` and `dataset-xy-json-v1` -> XY/vector plot path
 - `StudioPowerSpectrumSink` uses the `dataset-xy-json-v1` path for FFT-based spectrum rendering
+- `StudioPowerSpectrumSink` with `persistence=true` also uses the `dataset-xy-json-v1` path, but routes to the phosphor spectrum renderer with a persistent glow behind the live trace. The phosphor look is tuned via `phosphor_intensity` and `phosphor_decay_ms`.
+- `StudioWaterfallSink` uses the `waterfall-spectrum-json-v1` path for bounded FFT-history waterfall rendering
+- `StudioWaterfallSink` uses `time_span` and `sample_rate` as the fixed waterfall depth controls and quantizes the resulting duration to the FFT size
+- `StudioWaterfallSink` emits the effective quantized `time_span` together with `sample_rate`
+- `StudioWaterfallSink` also carries `autoscale`, `z_min`, and `z_max` parameters that control the rendered waterfall colormap range
+- Waterfall plots ignore the generic `x_min` / `x_max` / `y_min` / `y_max` axis-range parameters
 - image and audio panel kinds -> separate renderers
+
+For manual waterfall validation, the repo also ships canonical fixture payloads under `public/demo/`:
+
+- `waterfall-spectrum-json-v1.normal.json`
+- `waterfall-spectrum-json-v1.smallest.json`
+- `waterfall-spectrum-json-v1.malformed.json`
+- `public/demo/phosphor-spectrum-demo.gr4s`
 
 Payload details live in:
 

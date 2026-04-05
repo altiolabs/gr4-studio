@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { derivePlotVisibleState, hasRenderableSeries } from './plot-visible-state';
+import { derivePlotVisibleState, hasRenderableImage, hasRenderableSeries } from './plot-visible-state';
 import type { PlotDataFrame } from '../model/types';
 
 function frame(state: NonNullable<PlotDataFrame['meta']>['state'], points: number[]): PlotDataFrame {
@@ -17,6 +17,38 @@ describe('plot visible state', () => {
   it('detects renderable series payload', () => {
     expect(hasRenderableSeries(frame('ready', [1, 2]))).toBe(true);
     expect(hasRenderableSeries(frame('ready', []))).toBe(false);
+  });
+
+  it('detects renderable image payload', () => {
+    expect(
+      hasRenderableImage({
+        kind: 'waterfall',
+        image: {
+          width: 2,
+          height: 2,
+          values: [1, 2, 3, 4],
+        },
+        meta: {
+          state: 'ready',
+          domain: 'frequency',
+        },
+      }),
+    ).toBe(true);
+
+    expect(
+      hasRenderableImage({
+        kind: 'waterfall',
+        image: {
+          width: 0,
+          height: 0,
+          values: [],
+        },
+        meta: {
+          state: 'ready',
+          domain: 'frequency',
+        },
+      }),
+    ).toBe(false);
   });
 
   it('prioritizes error state', () => {
@@ -71,6 +103,27 @@ describe('plot visible state', () => {
     expect(
       derivePlotVisibleState({
         frame: frame('ready', [1, 2, 3]),
+        width: 400,
+        height: 240,
+      }),
+    ).toBe('live');
+  });
+
+  it('returns live when ready state has image samples', () => {
+    expect(
+      derivePlotVisibleState({
+        frame: {
+          kind: 'waterfall',
+          image: {
+            width: 2,
+            height: 2,
+            values: [1, 2, 3, 4],
+          },
+          meta: {
+            state: 'ready',
+            domain: 'frequency',
+          },
+        },
         width: 400,
         height: 240,
       }),
