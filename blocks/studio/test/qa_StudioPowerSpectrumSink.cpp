@@ -1,10 +1,12 @@
 #include <cassert>
 #include <array>
+#include <algorithm>
 #include <complex>
 #include <cstddef>
 #include <span>
 #include <string>
 
+#include <gnuradio-4.0/BlockRegistry.hpp>
 #include <gnuradio-4.0/Tag.hpp>
 #include <gnuradio-4.0/studio/StudioPowerSpectrumSink.hpp>
 
@@ -17,13 +19,38 @@ void configureBlock(TBlock& block) {
     block.window = std::string("Rectangular");
     block.sample_rate = 8.0F;
     block.output_in_db = false;
+    block.persistence = true;
+    block.phosphor_intensity = 1.25F;
+    block.phosphor_decay_ms = 750.0F;
+    block.autoscale = false;
+    block.x_min = -2.0F;
+    block.x_max = 2.0F;
+    block.y_min = -1.5F;
+    block.y_max = 1.5F;
 
     block.settingsChanged({}, gr::property_map{
                                  {"fft_size", 4UZ},
                                  {"num_averages", 2UZ},
                                  {"window", std::string("Rectangular")},
                                  {"sample_rate", 8.0F},
+                                 {"output_in_db", false},
+                                 {"persistence", true},
+                                 {"phosphor_intensity", 1.25F},
+                                 {"phosphor_decay_ms", 750.0F},
+                                 {"autoscale", false},
+                                 {"x_min", -2.0F},
+                                 {"x_max", 2.0F},
+                                 {"y_min", -1.5F},
+                                 {"y_max", 1.5F},
                              });
+}
+
+void testPowerSpectrumRegistered() {
+    const auto keys = gr::globalBlockRegistry().keys();
+    const bool foundPowerSpectrum = std::ranges::any_of(keys, [](const std::string& key) {
+        return key.find("StudioPowerSpectrumSink") != std::string::npos;
+    });
+    assert(foundPowerSpectrum);
 }
 
 void testFloatSpectrum() {
@@ -40,6 +67,14 @@ void testFloatSpectrum() {
     const std::string json = block.snapshotJson();
     assert(json.find("\"payload_format\":\"dataset-xy-json-v1\"") != std::string::npos);
     assert(json.find("\"points\":2") != std::string::npos);
+    assert(json.find("\"persistence\":true") != std::string::npos);
+    assert(json.find("\"phosphor_intensity\":1.25") != std::string::npos);
+    assert(json.find("\"phosphor_decay_ms\":750") != std::string::npos);
+    assert(json.find("\"autoscale\":false") != std::string::npos);
+    assert(json.find("\"x_min\":-2") != std::string::npos);
+    assert(json.find("\"x_max\":2") != std::string::npos);
+    assert(json.find("\"y_min\":-1.5") != std::string::npos);
+    assert(json.find("\"y_max\":1.5") != std::string::npos);
     assert(json.find("[0,0.125]") != std::string::npos);
     assert(json.find("[2,0.125]") != std::string::npos);
 }
@@ -84,6 +119,7 @@ void testComplexSpectrum() {
 } // namespace
 
 int main() {
+    testPowerSpectrumRegistered();
     testFloatSpectrum();
     testDbFloorIsFinite();
     testComplexSpectrum();

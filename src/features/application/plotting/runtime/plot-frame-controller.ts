@@ -21,6 +21,10 @@ export type PlotFrameController = {
       xyPointAlpha?: number;
     },
   ) => void;
+  ingestImage: (
+    image: NonNullable<PlotDataFrame['image']>,
+    emittedAtMs?: number,
+  ) => void;
 };
 
 export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameController {
@@ -29,9 +33,14 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
   let sequence = 0;
   let state: NonNullable<PlotDataFrame['meta']> = {
     state: 'no-data',
-    domain: spec.kind === 'timeseries' || spec.kind === 'fft' ? 'time' : 'image',
+    domain: spec.kind === 'timeseries' || spec.kind === 'fft'
+      ? 'time'
+      : spec.kind === 'waterfall' || spec.kind === 'histogram'
+        ? 'frequency'
+        : 'image',
   };
   let seriesById = new Map<string, { id: string; label: string; x?: number[]; y: number[] }>();
+  let imageFrame: PlotDataFrame['image'] | undefined;
   let cachedFrame: PlotDataFrame = {
     kind: spec.kind,
     series: [],
@@ -58,6 +67,7 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
         ...(series.x ? { x: series.x } : {}),
         y: series.y,
       })),
+      ...(imageFrame ? { image: imageFrame } : {}),
       meta: state,
     };
     dirty = false;
@@ -68,9 +78,14 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
     sequence = 0;
     state = {
       state: 'no-data',
-      domain: spec.kind === 'timeseries' || spec.kind === 'fft' ? 'time' : 'image',
+      domain: spec.kind === 'timeseries' || spec.kind === 'fft'
+        ? 'time'
+        : spec.kind === 'waterfall' || spec.kind === 'histogram'
+          ? 'frequency'
+          : 'image',
     };
     seriesById = new Map();
+    imageFrame = undefined;
     markDirty();
   };
 
@@ -163,6 +178,7 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
     }
     sequence += 1;
     seriesById = next;
+    imageFrame = undefined;
     state = {
       ...state,
       sequence,
@@ -177,6 +193,30 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
     markDirty();
   };
 
+  const ingestImage = (
+    image: NonNullable<PlotDataFrame['image']>,
+    emittedAtMs?: number,
+  ) => {
+    const nextValues = image.values;
+    const hasPixels = image.width > 0 && image.height > 0 && nextValues.length > 0;
+    sequence += 1;
+    imageFrame = {
+      ...image,
+      values: nextValues,
+    };
+    seriesById = new Map();
+    state = {
+      ...state,
+      sequence,
+      emittedAtMs,
+      state: hasPixels ? 'ready' : 'no-data',
+      errorKind: undefined,
+      errorMessage: undefined,
+      domain: spec.kind === 'waterfall' ? 'frequency' : state.domain,
+    };
+    markDirty();
+  };
+
   return {
     getVersion,
     getFrame,
@@ -185,5 +225,6 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
     setNoData,
     setError,
     ingestSeries,
+    ingestImage,
   };
 }

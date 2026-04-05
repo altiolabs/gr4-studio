@@ -13,7 +13,7 @@
 - Local document save/open for `.gr4s` files, including browser file-picker support and download fallback.
 - Studio-compatible first-party blocks under `blocks/studio`.
 - Exact block-ID based binding lookup in `src/features/graph-editor/runtime/known-block-bindings.ts`.
-- Live plotting paths for scalar series, 2D series, and DataSet-backed XY payloads.
+- Live plotting paths for scalar series, 2D series, phosphor-spectrum mode on `StudioPowerSpectrumSink`, and DataSet-backed XY payloads.
 - Placeholder renderers for panel kinds that are not fully live yet.
 
 ## Included block families
@@ -21,6 +21,8 @@
 - `StudioSeriesSink`
 - `Studio2DSeriesSink`
 - `StudioDataSetSink`
+- `StudioPowerSpectrumSink` with `persistence=true`, `phosphor_intensity`, and `phosphor_decay_ms` (Phosphor Spectrum)
+- `StudioWaterfallSink`
 - `StudioAudioMonitor`
 - `StudioImageSink`
 
@@ -28,6 +30,44 @@ Current transport support for the included blocks is limited to:
 
 - `http_snapshot`
 - `http_poll`
+
+For manual waterfall and phosphor-spectrum validation in Studio dev mode, the repo ships canonical JSON fixtures and demo graphs under `public/demo/`:
+
+- `waterfall-spectrum-json-v1.normal.json`
+- `waterfall-spectrum-json-v1.smallest.json`
+- `waterfall-spectrum-json-v1.malformed.json`
+- `waterfall-demo.gr4s`
+- `phosphor-spectrum-demo.gr4s`
+
+See `public/demo/README.md` for a compact index of the demo graph, payload fixtures, and native QA pointers.
+
+Those files are canonical payload references. The easiest in-Studio validation path for the waterfall is still a normal graph containing `SignalGenerator<float32> -> StudioWaterfallSink<float32>` and running it with the default HTTP settings.
+
+The quickest phosphor-spectrum validation path is a normal graph containing `SignalGenerator<float32> -> StudioPowerSpectrumSink<float32>` with `persistence=true`, `phosphor_intensity`, and `phosphor_decay_ms`, then running it with the default HTTP settings.
+
+The quickest end-to-end manual workflow is:
+
+1. Run the Studio dev server with `npm run dev`.
+2. Open `public/demo/phosphor-spectrum-demo.gr4s` from the Studio file open dialog.
+3. Start the graph with the normal Run control.
+4. Confirm the phosphor spectrum panel appears with a live trace and colored persistence behind it.
+5. Hover the plot to verify the frequency/bin/value readout updates.
+
+Successful behavior looks like:
+
+- a visible `Phosphor Spectrum` panel
+- crisp current spectrum line on top of a colored persistence field
+- `phosphor_intensity` controls how brightly new energy stamps into the field
+- `phosphor_decay_ms` controls how long the phosphor field persists before fading
+- hover readout showing bin, frequency, and value
+- if you toggle `autoscale=false` and adjust `y_min` / `y_max`, the spectrum y-range should update on the next live poll
+- the current spectrum continues to use the exact dataset payload path from `StudioPowerSpectrumSink`
+
+Common failure modes:
+
+- no phosphor panel: the exact `StudioPowerSpectrumSink` block was not recognized, `persistence=true` was not set, or the graph was not started
+- blank or stale history: the runtime session is not running, or the configured HTTP endpoint is not responding
+- malformed payload error: the sink emitted a payload that does not match `dataset-xy-json-v1`
 
 The block architecture and payload contracts are documented in:
 

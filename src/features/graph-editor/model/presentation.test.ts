@@ -19,18 +19,43 @@ describe('graph node short-name presentation', () => {
         'studioseriessink<complex<float32>>',
         'gr::studio::StudioSeriesSink<complex<float32>>',
       ),
-    ).toBe('StudioSeriesSink<complex<float32>>');
+    ).toBe('StudioSeriesSink');
     expect(toCanonicalBlockDisplayName('booger', 'gr::studio::StudioSeriesSink<float32>')).toBe(
-      'booger',
+      'StudioSeriesSink',
     );
+  });
+
+  it('falls back to the reflected block type when the display name collapses to a type fragment', () => {
+    expect(
+      toShortBlockName('complex<float32>>', 'gr::io::SigmfSource<complex<float32>>'),
+    ).toBe('SigmfSource');
+    expect(
+      toDisambiguatedShortBlockName('complex<float32>>', 'gr::io::SigmfSource<complex<float32>>'),
+    ).toBe('SigmfSource');
+  });
+
+
+  it('preserves namespaces inside template arguments', () => {
+    expect(
+      toShortBlockName(
+        'whatever',
+        'gr::blocks::math::Rotator<std::complex<float32>>',
+      ),
+    ).toBe('Rotator');
   });
 
   it('adds template suffix for disambiguation when available', () => {
     expect(toDisambiguatedShortBlockName('Abs<float32>', 'gr::math::Abs<float32>')).toBe(
-      'Abs<float32>',
+      'Abs',
     );
     expect(
       toDisambiguatedShortBlockName('Abs', 'gr::math::Abs<complex<float32>>'),
-    ).toBe('Abs<complex<float32>>');
+    ).toBe('Abs');
+    expect(
+      toDisambiguatedShortBlockName(
+        'complex<float32>>',
+        'gr::studio::StudioPowerSpectrumSink<complex<float32>>',
+      ),
+    ).toBe('StudioPowerSpectrumSink');
   });
 });

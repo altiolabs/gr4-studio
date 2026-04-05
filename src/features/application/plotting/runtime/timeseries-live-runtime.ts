@@ -8,7 +8,7 @@ import {
   normalizeSeriesPollMs,
   isSupportedSeriesBinding,
 } from '../../../workspace/renderers/series-live-renderer-model';
-import { hasRenderableSeries } from '../components/plot-visible-state';
+import { hasRenderableImage, hasRenderableSeries } from '../components/plot-visible-state';
 import type { PlotDataFrame, PlotPanelSpec, PlotRuntimeBinding, PlotSeriesFrame } from '../model/types';
 import { createPlotFrameController } from './plot-frame-controller';
 import {
@@ -17,12 +17,30 @@ import {
   parseHttpDatasetXySnapshot,
   parseHttpVectorSnapshot,
 } from './vector-frame';
+import { mapWaterfallSnapshotToImage, parseHttpWaterfallSnapshot } from './waterfall-frame';
 
 const PLOT_PUBLISH_MS = 120;
 const PLOT_NO_DATA_GRACE_MS = 1200;
 const PLOT_DEBUG_FLAG = '__GR4_STUDIO_PLOT_DEBUG';
 
-export type PlotPayloadContract = 'series-window-json-v1' | 'series2d-xy-json-v1' | 'dataset-xy-json-v1';
+export type PlotPayloadContract =
+  | 'series-window-json-v1'
+  | 'series2d-xy-json-v1'
+  | 'dataset-xy-json-v1'
+  | 'waterfall-spectrum-json-v1';
+
+type ParsedLivePayload =
+  | {
+      kind: 'series';
+      series: PlotSeriesFrame[];
+      xyRenderMode?: NonNullable<PlotDataFrame['meta']>['xyRenderMode'];
+      xyPointSize?: number;
+      xyPointAlpha?: number;
+    }
+  | {
+      kind: 'image';
+      image: NonNullable<PlotDataFrame['image']>;
+    };
 
 export type BindingFailure = {
   errorKind: 'invalid-binding';
@@ -68,7 +86,10 @@ export function shouldRetainPreviousLiveFrame(params: {
     return false;
   }
 
-  return params.currentFrame.meta?.state === 'ready' && hasRenderableSeries(params.currentFrame);
+  return (
+    params.currentFrame.meta?.state === 'ready' &&
+    (hasRenderableSeries(params.currentFrame) || hasRenderableImage(params.currentFrame))
+  );
 }
 
 async function fetchSnapshotPayload(endpointUrl: string): Promise<unknown> {
@@ -164,11 +185,32 @@ export function assertSeriesShape(series: PlotSeriesFrame[], context: SeriesShap
   }
 }
 
+export function assertImageShape(image: NonNullable<PlotDataFrame['image']>, context: SeriesShapeAssertionContext): void {
+  if (context.expectedSeriesCount !== undefined && image.width !== context.expectedSeriesCount) {
+    throw new Error(
+      `Image shape mismatch at ${context.stage}: expected width ${context.expectedSeriesCount}, got ${image.width}. ` +
+        `sourceChannels=${context.sourceChannels ?? 'n/a'} samplesPerChannel=${context.samplesPerChannel ?? 'n/a'}`,
+    );
+  }
+  if (!Number.isFinite(image.width) || !Number.isFinite(image.height)) {
+    throw new Error(`Image shape mismatch at ${context.stage}: image dimensions are not finite.`);
+  }
+  const values = Array.isArray(image.values) ? image.values : Array.from(image.values);
+  if (values.length !== image.width * image.height) {
+    throw new Error(
+      `Image shape mismatch at ${context.stage}: values.length=${values.length}, width=${image.width}, height=${image.height}.`,
+    );
+  }
+}
+
 export function resolvePayloadContract(payloadFormat?: PlotPanelSpec['source']['payloadFormat']): PlotPayloadContract {
   if (payloadFormat === 'series2d-xy-json-v1') {
     return payloadFormat;
   }
   if (payloadFormat === 'dataset-xy-json-v1') {
+    return payloadFormat;
+  }
+  if (payloadFormat === 'waterfall-spectrum-json-v1') {
     return payloadFormat;
   }
   return 'series-window-json-v1';
@@ -222,22 +264,19 @@ function tracePlotDiagnostic(event: string, details: Record<string, unknown>): v
   console.debug(`[plot:binding] ${event}`, details);
 }
 
-export function parseSeriesFramesFromPayload(params: {
+export function parseLiveFrameFromPayload(params: {
   payloadFormat?: PlotPanelSpec['source']['payloadFormat'];
   seriesLabels?: readonly string[];
   payload: unknown;
-}): {
-  series: PlotSeriesFrame[];
-  xyRenderMode?: NonNullable<PlotDataFrame['meta']>['xyRenderMode'];
-  xyPointSize?: number;
-  xyPointAlpha?: number;
-} {
+}): ParsedLivePayload {
   const mapVectorSnapshot = (snapshot: HttpVectorSnapshot): {
+    kind: 'series';
     series: PlotSeriesFrame[];
     xyRenderMode?: NonNullable<PlotDataFrame['meta']>['xyRenderMode'];
     xyPointSize?: number;
     xyPointAlpha?: number;
   } => ({
+    kind: 'series',
     series: mapSnapshotToVectorPlotSeriesFrames(snapshot, params.seriesLabels?.[0]),
     xyRenderMode: snapshot.renderMode,
     xyPointSize: snapshot.pointSize,
@@ -245,9 +284,10 @@ export function parseSeriesFramesFromPayload(params: {
   });
 
   // Contract-first routing:
-  // - series-window-json-v1 -> scalar channel parser
-  // - series2d-xy-json-v1   -> XY parser
-  // - dataset-xy-json-v1    -> DataSet->XY parser
+  // - series-window-json-v1     -> scalar channel parser
+  // - series2d-xy-json-v1       -> XY parser
+  // - dataset-xy-json-v1        -> DataSet->XY parser
+  // - waterfall-spectrum-json-v1 -> matrix waterfall parser
   const payloadFormat = resolvePayloadContract(params.payloadFormat);
   try {
     if (payloadFormat === 'dataset-xy-json-v1') {
@@ -255,6 +295,13 @@ export function parseSeriesFramesFromPayload(params: {
     }
     if (payloadFormat === 'series2d-xy-json-v1') {
       return mapVectorSnapshot(parseHttpVectorSnapshot(params.payload));
+    }
+    if (payloadFormat === 'waterfall-spectrum-json-v1') {
+      const waterfall = parseHttpWaterfallSnapshot(params.payload);
+      return {
+        kind: 'image',
+        image: mapWaterfallSnapshotToImage(waterfall),
+      };
     }
     if (isComplexScalarPayload(params.payload)) {
       const real = parseHttpTimeSeriesSnapshot(params.payload, 'real');
@@ -266,9 +313,13 @@ export function parseSeriesFramesFromPayload(params: {
         sourceChannels: real.channelCount,
         samplesPerChannel: real.samplesPerChannel,
       });
-      return { series };
+      return {
+        kind: 'series',
+        series,
+      };
     }
     return {
+      kind: 'series',
       series: mapSnapshotToPlotSeriesFrames(parseHttpTimeSeriesSnapshot(params.payload, 'magnitude'), params.seriesLabels),
     };
   } catch (error) {
@@ -325,22 +376,32 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
       if (refreshGeneration !== fetchGenerationRef.current) {
         return;
       }
-      const parsed = parseSeriesFramesFromPayload({
+      const parsed = parseLiveFrameFromPayload({
         payloadFormat: spec.source.payloadFormat,
         seriesLabels: spec.view.seriesLabels,
         payload,
       });
-      assertSeriesShape(parsed.series, {
-        stage: 'frame-ingest',
-      });
-      controllerRef.current.ingestSeries(parsed.series, Date.now(), 'replace', {
-        xyRenderMode: parsed.xyRenderMode,
-        xyPointSize: parsed.xyPointSize,
-        xyPointAlpha: parsed.xyPointAlpha,
-      });
-      assertSeriesShape(controllerRef.current.getFrame().series ?? [], {
-        stage: 'frame-readback',
-      });
+      if (parsed.kind === 'image') {
+        assertImageShape(parsed.image, {
+          stage: 'frame-ingest',
+        });
+        controllerRef.current.ingestImage(parsed.image, Date.now());
+        assertImageShape(controllerRef.current.getFrame().image ?? parsed.image, {
+          stage: 'frame-readback',
+        });
+      } else {
+        assertSeriesShape(parsed.series, {
+          stage: 'frame-ingest',
+        });
+        controllerRef.current.ingestSeries(parsed.series, Date.now(), 'replace', {
+          xyRenderMode: parsed.xyRenderMode,
+          xyPointSize: parsed.xyPointSize,
+          xyPointAlpha: parsed.xyPointAlpha,
+        });
+        assertSeriesShape(controllerRef.current.getFrame().series ?? [], {
+          stage: 'frame-readback',
+        });
+      }
     } catch (error) {
       if (refreshGeneration !== fetchGenerationRef.current) {
         return;

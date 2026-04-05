@@ -1,6 +1,6 @@
 import type { WorkspacePanelViewModel } from '../../../workspace/workspace-view';
 import { lookupStudioKnownBlockBinding } from '../../../graph-editor/runtime/known-block-bindings';
-import type { PlotPanelSpec } from './types';
+import type { PhosphorSpectrumTuning, PlotPanelSpec } from './types';
 import { resolveStudioPlotStyle } from './plot-style';
 
 const plotSpecCache = new Map<string, PlotPanelSpec>();
@@ -96,6 +96,32 @@ function parseOptionalNumber(parameters: Readonly<Record<string, string>> | unde
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function resolvePhosphorSpectrumTuning(
+  parameters: Readonly<Record<string, string>> | undefined,
+): PhosphorSpectrumTuning | undefined {
+  const intensity = parseOptionalNumber(parameters, ['phosphor_intensity', 'histo_scale', 'phosphor_scale']);
+  const decayMs = parseOptionalNumber(parameters, ['phosphor_decay_ms', 'histo_t0d']);
+  const colorMap = readParameterValue(parameters, ['color_map', 'phosphor_color_map']);
+
+  if (
+    intensity === undefined &&
+    decayMs === undefined &&
+    colorMap === undefined
+  ) {
+    return {
+      intensity: 1.1,
+      decayMs: 1024,
+      colorMap: 'gqrx',
+    };
+  }
+
+  return {
+    intensity: intensity ?? 1.1,
+    decayMs: decayMs ?? 1024,
+    colorMap: colorMap ?? 'gqrx',
+  };
+}
+
 function hasValidManualRange(min: number | undefined, max: number | undefined): boolean {
   if (!Number.isFinite(min) || !Number.isFinite(max)) {
     return false;
@@ -103,13 +129,15 @@ function hasValidManualRange(min: number | undefined, max: number | undefined): 
   return (max as number) > (min as number);
 }
 
-function serializeParameters(parameters: Readonly<Record<string, string>> | undefined): string {
+function serializeParameters(parameters: Readonly<Record<string, string>> | undefined, excludedKeys: readonly string[] = []): string {
   if (!parameters) {
     return '';
   }
 
+  const excluded = new Set(excludedKeys);
   return JSON.stringify(
     Object.keys(parameters)
+      .filter((key) => !excluded.has(key))
       .sort()
       .reduce<Record<string, string>>((acc, key) => {
         acc[key] = parameters[key];
@@ -118,7 +146,7 @@ function serializeParameters(parameters: Readonly<Record<string, string>> | unde
   );
 }
 
-function buildPlotSpecCacheKey(entry: WorkspacePanelViewModel): string {
+function buildPlotSpecCacheKey(entry: WorkspacePanelViewModel, isWaterfall: boolean): string {
   return JSON.stringify({
     panel: {
       id: entry.panel.id,
@@ -132,43 +160,50 @@ function buildPlotSpecCacheKey(entry: WorkspacePanelViewModel): string {
     node: {
       displayName: entry.nodeDisplayName ?? '',
       blockTypeId: entry.nodeBlockTypeId ?? '',
-      parameters: serializeParameters(entry.nodeParameters),
+      parameters: serializeParameters(entry.nodeParameters, isWaterfall ? ['x_min', 'x_max', 'y_min', 'y_max'] : []),
       palettes: entry.studioPlotPalettes ?? null,
     },
   });
 }
 
 export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSpec | null {
-  if (entry.panel.kind !== 'series' && entry.panel.kind !== 'series2d') {
+  if (
+    entry.panel.kind !== 'series' &&
+    entry.panel.kind !== 'series2d' &&
+    entry.panel.kind !== 'histogram' &&
+    entry.panel.kind !== 'waterfall'
+  ) {
     return null;
   }
 
-  const cacheKey = buildPlotSpecCacheKey(entry);
-  const cached = plotSpecCache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
-  const payloadFormat =
-    entry.nodeBlockTypeId ? lookupStudioKnownBlockBinding(entry.nodeBlockTypeId)?.payloadFormat : undefined;
+  const binding = entry.nodeBlockTypeId ? lookupStudioKnownBlockBinding(entry.nodeBlockTypeId) : null;
+  const payloadFormat = binding?.payloadFormat;
   const title =
     readParameterValue(entry.nodeParameters, ['plot_title', 'title']) ??
     entry.nodeDisplayName ??
     entry.panel.title ??
     entry.panel.nodeId;
+  const persistenceEnabled = parseBooleanValue(readParameterValue(entry.nodeParameters, ['persistence'])) ?? false;
+  const isPersistentSpectrum =
+    persistenceEnabled &&
+    Boolean(binding?.blockTypeId.startsWith('gr::studio::StudioPowerSpectrumSink'));
+  const isHistogram = entry.panel.kind === 'histogram' || isPersistentSpectrum;
   const isSeries2D =
-    entry.panel.kind === 'series2d' ||
-    payloadFormat === 'series2d-xy-json-v1' ||
-    payloadFormat === 'dataset-xy-json-v1';
-  const xLabel = readParameterValue(entry.nodeParameters, ['x_label', 'xlabel']) ?? (isSeries2D ? 'x' : 'sample');
-  const yLabel = readParameterValue(entry.nodeParameters, ['y_label', 'ylabel']) ?? 'value';
+    !isHistogram &&
+    (entry.panel.kind === 'series2d' ||
+      payloadFormat === 'series2d-xy-json-v1' ||
+      payloadFormat === 'dataset-xy-json-v1');
+  const isWaterfall = entry.panel.kind === 'waterfall' || payloadFormat === 'waterfall-spectrum-json-v1';
+  const xLabel =
+    readParameterValue(entry.nodeParameters, ['x_label', 'xlabel']) ?? (isSeries2D || isWaterfall || isHistogram ? 'Frequency' : 'sample');
+  const yLabel = readParameterValue(entry.nodeParameters, ['y_label', 'ylabel']) ?? (isWaterfall || isHistogram ? 'Power' : 'value');
   // Metadata precedence:
   // 1) explicit graph/block params (series_labels/channel_labels)
   // 2) payload-side metadata (handled at runtime for dataset/vector payloads)
   // 3) stable defaults
   const seriesLabels =
     parseSeriesLabels(entry.nodeParameters) ??
-    (isSeries2D ? undefined : buildDefaultSeriesLabels(parseChannels(entry.nodeParameters)));
+    (isSeries2D || isWaterfall || isHistogram ? undefined : buildDefaultSeriesLabels(parseChannels(entry.nodeParameters)));
   const windowSize = parseWindowSize(entry.nodeParameters) ?? 1024;
   const autoscale =
     parseBooleanValue(readParameterValue(entry.nodeParameters, ['autoscale', 'auto_scale'])) ?? true;
@@ -183,44 +218,65 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
       ? 'dataset-xy-json-v1'
       : payloadFormat === 'series2d-xy-json-v1'
         ? 'series2d-xy-json-v1'
-        : 'series-window-json-v1';
+        : payloadFormat === 'waterfall-spectrum-json-v1'
+          ? 'waterfall-spectrum-json-v1'
+        : isHistogram
+          ? 'dataset-xy-json-v1'
+        : isWaterfall
+          ? 'waterfall-spectrum-json-v1'
+        : isSeries2D
+            ? 'series2d-xy-json-v1'
+            : 'series-window-json-v1';
   const resolvedPlotStyle = resolveStudioPlotStyle({
     panelOverride: entry.panel.plotStyle,
     studioPalettes: entry.studioPlotPalettes,
   });
+  const phosphorTuning = isHistogram ? resolvePhosphorSpectrumTuning(entry.nodeParameters) : undefined;
+  const cacheKey = buildPlotSpecCacheKey(entry, isWaterfall);
+  const cached = plotSpecCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const rangeSpec = isWaterfall
+    ? {}
+    : {
+        xRange:
+          !autoscale && hasManualXRange
+            ? {
+                auto: false,
+                min: xMin,
+                max: xMax,
+              }
+            : { auto: true },
+        yRange: {
+          auto: !(!autoscale && hasManualYRange),
+          min: !autoscale && hasManualYRange ? yMin : undefined,
+          max: !autoscale && hasManualYRange ? yMax : undefined,
+        },
+      };
 
   const spec: PlotPanelSpec = {
     panelId: entry.panel.id,
-    kind: 'timeseries',
+    kind: isWaterfall ? 'waterfall' : isHistogram ? 'histogram' : 'timeseries',
     source: {
       sinkId: entry.panel.nodeId,
       channel: 'all',
-      field: 'y',
+      field: isWaterfall ? 'image' : 'y',
       payloadFormat: resolvedPayloadFormat,
     },
     view: {
-      kind: 'timeseries',
+      kind: isWaterfall ? 'waterfall' : isHistogram ? 'histogram' : 'timeseries',
       title,
-      xMode: isSeries2D ? 'frequency' : 'sample-index',
+      xMode: isSeries2D || isWaterfall || isHistogram ? 'frequency' : 'sample-index',
       streaming: true,
-      legend: true,
+      legend: !isWaterfall,
       windowSize,
       xLabel,
       yLabel,
       seriesLabels,
-      xRange:
-        !autoscale && hasManualXRange
-          ? {
-              auto: false,
-              min: xMin,
-              max: xMax,
-            }
-          : { auto: true },
-      yRange: {
-        auto: !(!autoscale && hasManualYRange),
-        min: !autoscale && hasManualYRange ? yMin : undefined,
-        max: !autoscale && hasManualYRange ? yMax : undefined,
-      },
+      ...(phosphorTuning ? { phosphor: phosphorTuning } : {}),
+      ...rangeSpec,
       plotColors: resolvedPlotStyle.colors,
       colorAssignmentMode: resolvedPlotStyle.assignmentMode,
     },

@@ -1,9 +1,17 @@
 import type { PlotAdapterProps } from '../model/types';
+import { PhosphorSpectrumUplotAdapter } from './histogram-spectrum-uplot-adapter';
 import { TimeseriesUplotAdapter } from './timeseries-uplot-adapter';
+import { WaterfallCanvasAdapter } from './waterfall-canvas-adapter';
 
 export function PlotAdapterSwitch(props: PlotAdapterProps) {
   if (props.spec.kind === 'timeseries') {
     return <TimeseriesUplotAdapter {...props} />;
+  }
+  if (props.spec.kind === 'histogram') {
+    return <PhosphorSpectrumUplotAdapter {...props} />;
+  }
+  if (props.spec.kind === 'waterfall') {
+    return <WaterfallCanvasAdapter {...props} />;
   }
 
   return (
@@ -15,4 +23,3 @@ export function PlotAdapterSwitch(props: PlotAdapterProps) {
     </div>
   );
 }
-

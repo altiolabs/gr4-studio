@@ -101,7 +101,7 @@ function colorWithAlpha(hexColor: string, alpha: number): string {
   return `${hexColor}${encoded}`;
 }
 
-function buildSeriesOptions(
+export function buildSeriesOptions(
   labels: string[],
   palette: readonly string[],
   mode: 'line' | 'scatter',
@@ -128,7 +128,7 @@ function buildSeriesOptions(
   ];
 }
 
-function buildEmptyAlignedData(seriesCount: number): uPlot.AlignedData {
+export function buildEmptyAlignedData(seriesCount: number): uPlot.AlignedData {
   return Array.from({ length: seriesCount + 1 }, () => []) as unknown as uPlot.AlignedData;
 }
 

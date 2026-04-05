@@ -104,7 +104,7 @@ function LayoutEditorPane({
 }) {
   const { panel } = entry;
   const paneTitle = entry.nodePanelTitle ?? panel.title ?? entry.nodeDisplayName ?? panel.nodeId;
-  const isPlotPanel = panel.kind === 'series' || panel.kind === 'series2d';
+  const isPlotPanel = panel.kind === 'series' || panel.kind === 'series2d' || panel.kind === 'histogram';
 
   return (
     <article

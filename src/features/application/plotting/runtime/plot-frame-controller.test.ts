@@ -2,6 +2,80 @@ import { describe, expect, it } from 'vitest';
 import { createPlotFrameController } from './plot-frame-controller';
 
 describe('plot frame controller', () => {
+  it('starts as no-data and empty image for waterfall panels', () => {
+    const controller = createPlotFrameController({
+      panelId: 'panel-waterfall',
+      kind: 'waterfall',
+      source: { sinkId: 'sink-waterfall' },
+      view: { kind: 'waterfall', title: 'Waterfall' },
+    });
+
+    expect(controller.getFrame()).toEqual({
+      kind: 'waterfall',
+      series: [],
+      meta: {
+        state: 'no-data',
+        domain: 'frequency',
+      },
+    });
+  });
+
+  it('starts as no-data and empty series for histogram panels', () => {
+    const controller = createPlotFrameController({
+      panelId: 'panel-histogram',
+      kind: 'histogram',
+      source: { sinkId: 'sink-histogram' },
+      view: { kind: 'histogram', title: 'History' },
+    });
+
+    expect(controller.getFrame()).toEqual({
+      kind: 'histogram',
+      series: [],
+      meta: {
+        state: 'no-data',
+        domain: 'frequency',
+      },
+    });
+  });
+
+  it('ingests waterfall image frames with bounded shape metadata', () => {
+    const controller = createPlotFrameController({
+      panelId: 'panel-waterfall',
+      kind: 'waterfall',
+      source: { sinkId: 'sink-waterfall' },
+      view: { kind: 'waterfall', title: 'Waterfall' },
+    });
+
+    controller.ingestImage(
+      {
+        width: 2,
+        height: 2,
+        values: [1, 2, 3, 4],
+        xAxis: [100, 200],
+        signalName: 'Spectrum',
+        signalUnit: 'dB',
+        axisName: 'Frequency',
+        axisUnit: 'Hz',
+      },
+      1234,
+    );
+
+    expect(controller.getFrame().kind).toBe('waterfall');
+    expect(controller.getFrame().meta?.state).toBe('ready');
+    expect(controller.getFrame().meta?.sequence).toBe(1);
+    expect(controller.getFrame().meta?.emittedAtMs).toBe(1234);
+    expect(controller.getFrame().image).toEqual({
+      width: 2,
+      height: 2,
+      values: [1, 2, 3, 4],
+      xAxis: [100, 200],
+      signalName: 'Spectrum',
+      signalUnit: 'dB',
+      axisName: 'Frequency',
+      axisUnit: 'Hz',
+    });
+  });
+
   it('starts as no-data and empty series', () => {
     const controller = createPlotFrameController({
       panelId: 'panel-1',

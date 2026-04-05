@@ -1,0 +1,22 @@
+{
+  "payload_format": "waterfall-spectrum-json-v1",
+  "layout": "waterfall_matrix",
+  "rows": 1,
+  "columns": 1,
+  "data": [
+    [0]
+  ],
+  "sample_type": "float32",
+  "signal_name": "Waterfall",
+  "signal_unit": "power",
+  "axis_name": "Frequency",
+  "axis_unit": "Hz",
+  "fft_size": 1,
+  "num_averages": 1,
+  "time_span": 0.001,
+  "sample_rate": 1000,
+  "history_rows": 1,
+  "window": "Rectangular",
+  "output_in_db": false,
+  "color_map": "turbo"
+}

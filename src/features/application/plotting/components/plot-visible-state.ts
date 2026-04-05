@@ -13,6 +13,14 @@ export function hasRenderableSeries(frame: PlotDataFrame): boolean {
   return series.some((item) => item.y.length > 0);
 }
 
+export function hasRenderableImage(frame: PlotDataFrame): boolean {
+  const image = frame.image;
+  if (!image) {
+    return false;
+  }
+  return image.width > 0 && image.height > 0 && image.values.length > 0;
+}
+
 export function derivePlotVisibleState(params: {
   frame: PlotDataFrame;
   width: number;
@@ -33,7 +41,7 @@ export function derivePlotVisibleState(params: {
     return 'loading';
   }
 
-  if (state === 'ready' && hasRenderableSeries(frame)) {
+  if (state === 'ready' && (hasRenderableSeries(frame) || hasRenderableImage(frame))) {
     return 'live';
   }
 

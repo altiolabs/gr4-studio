@@ -24,6 +24,11 @@ describe('deriveDefaultStudioPanelsFromNodes', () => {
         blockTypeId: 'gr::studio::StudioPowerSpectrumSink<float32>',
         displayName: 'Spectrum',
       },
+      {
+        instanceId: 'node-waterfall',
+        blockTypeId: 'gr::studio::StudioWaterfallSink<float32>',
+        displayName: 'Waterfall',
+      },
     ]);
 
     expect(panels).toEqual([
@@ -31,7 +36,7 @@ describe('deriveDefaultStudioPanelsFromNodes', () => {
         id: 'studio-panel:node-series',
         nodeId: 'node-series',
         kind: 'series',
-        title: 'Series Sink',
+        title: 'StudioSeriesSink',
         visible: true,
         previewOnCanvas: false,
       },
@@ -39,7 +44,15 @@ describe('deriveDefaultStudioPanelsFromNodes', () => {
         id: 'studio-panel:node-spectrum',
         nodeId: 'node-spectrum',
         kind: 'series2d',
-        title: 'Spectrum',
+        title: 'StudioPowerSpectrumSink',
+        visible: true,
+        previewOnCanvas: false,
+      },
+      {
+        id: 'studio-panel:node-waterfall',
+        nodeId: 'node-waterfall',
+        kind: 'waterfall',
+        title: 'StudioWaterfallSink',
         visible: true,
         previewOnCanvas: false,
       },
@@ -52,6 +65,11 @@ describe('deriveDefaultStudioPanelsFromNodes', () => {
         instanceId: 'node-series2d',
         blockTypeId: 'gr::studio::Studio2DSeriesSink<float32>',
         displayName: '2D',
+      },
+      {
+        instanceId: 'node-waterfall',
+        blockTypeId: 'gr::studio::StudioWaterfallSink<float32>',
+        displayName: 'Waterfall',
       },
       {
         instanceId: 'node-dataset',
@@ -75,6 +93,7 @@ describe('deriveDefaultStudioPanelsFromNodes', () => {
       { nodeId: 'node-dataset', kind: 'series2d' },
       { nodeId: 'node-image', kind: 'image' },
       { nodeId: 'node-series2d', kind: 'series2d' },
+      { nodeId: 'node-waterfall', kind: 'waterfall' },
     ]);
   });
 
@@ -124,8 +143,8 @@ describe('deriveDefaultStudioPanelsFromNodes', () => {
     ]);
 
     expect(panels.map((panel) => ({ nodeId: panel.nodeId, title: panel.title }))).toEqual([
-      { nodeId: 'node-c64', title: 'StudioSeriesSink<complex<float32>>' },
-      { nodeId: 'node-f32', title: 'StudioSeriesSink<float32>' },
+      { nodeId: 'node-c64', title: 'StudioSeriesSink' },
+      { nodeId: 'node-f32', title: 'StudioSeriesSink' },
     ]);
   });
 });

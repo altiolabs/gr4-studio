@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { PlotAdapterSwitch } from '../adapters/plot-adapter-switch';
 import type { PlotDataFrame, PlotViewSpec } from '../model/types';
-import { derivePlotVisibleState, hasRenderableSeries } from './plot-visible-state';
+import { derivePlotVisibleState, hasRenderableImage, hasRenderableSeries } from './plot-visible-state';
 
 type PlotSurfaceProps = {
   spec: PlotViewSpec;
@@ -40,7 +40,8 @@ export function PlotSurface({ spec, frame }: PlotSurfaceProps) {
     width: size.width,
     height: size.height,
   });
-  const showAdapter = visibleState === 'live' || (visibleState === 'loading' && hasRenderableSeries(frame));
+  const showAdapter =
+    visibleState === 'live' || (visibleState === 'loading' && (hasRenderableSeries(frame) || hasRenderableImage(frame)));
   const isCompactPlaceholder = size.width < 300 || size.height < 180;
 
   const titleByState: Record<Exclude<typeof visibleState, 'live'>, string> = {

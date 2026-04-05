@@ -1,0 +1,13 @@
+{
+  "payload_format": "waterfall-spectrum-json-v1",
+  "layout": "waterfall_matrix",
+  "rows": 2,
+  "columns": 2,
+  "data": [
+    [1, 2],
+    [3]
+  ],
+  "sample_type": "float32",
+  "time_span": 0.001,
+  "sample_rate": 1000
+}
