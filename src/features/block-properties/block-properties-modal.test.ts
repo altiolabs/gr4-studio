@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { coerceBlockPropertyLiteralValue } from './block-properties-modal';
+import {
+  coerceBlockPropertyLiteralValue,
+  getBlockParameterHoverTitle,
+  getBlockParameterTypeLabel,
+  isBooleanBlockParameter,
+} from './block-properties-modal';
 
 describe('coerceBlockPropertyLiteralValue', () => {
   it('preserves float-like text as text', () => {
@@ -14,5 +19,57 @@ describe('coerceBlockPropertyLiteralValue', () => {
     expect(coerceBlockPropertyLiteralValue('true')).toBe(true);
     expect(coerceBlockPropertyLiteralValue('false')).toBe(false);
     expect(coerceBlockPropertyLiteralValue('null')).toBeNull();
+  });
+
+  it('identifies boolean parameters and exposes compact metadata labels', () => {
+    expect(
+      isBooleanBlockParameter({
+        name: 'enabled',
+        label: 'Enabled',
+        valueKind: 'scalar',
+        valueType: 'bool',
+        mutable: true,
+        readOnly: false,
+      }),
+    ).toBe(true);
+    expect(
+      isBooleanBlockParameter({
+        name: 'mode',
+        label: 'Mode',
+        valueKind: 'enum',
+        mutable: true,
+        readOnly: false,
+      }),
+    ).toBe(false);
+
+    expect(
+      getBlockParameterTypeLabel({
+        name: 'mode',
+        label: 'Mode',
+        valueKind: 'enum',
+        mutable: true,
+        readOnly: false,
+      }),
+    ).toBe('enum');
+    expect(
+      getBlockParameterTypeLabel({
+        name: 'gain',
+        label: 'Gain',
+        valueKind: 'scalar',
+        valueType: 'float',
+        mutable: true,
+        readOnly: false,
+      }),
+    ).toBe('float');
+    expect(
+      getBlockParameterHoverTitle({
+        name: 'gain',
+        label: 'Gain',
+        description: 'Amplifier gain in dB.',
+        valueKind: 'scalar',
+        mutable: true,
+        readOnly: false,
+      }),
+    ).toBe('Amplifier gain in dB.');
   });
 });

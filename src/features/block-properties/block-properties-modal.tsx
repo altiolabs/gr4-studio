@@ -5,14 +5,12 @@ import { useEditorStore } from '../graph-editor/store/editorStore';
 import { useBlockDetailsQuery } from '../inspector/hooks/use-block-details-query';
 import { toCanonicalBlockDisplayName } from '../graph-editor/model/presentation';
 import type { StudioPanelSpec } from '../graph-document/model/studio-workspace';
-import { graphDocumentFromEditor } from '../graph-document/model/fromEditor';
 import {
   addControlWidgetToPanels,
   buildControlWidgetSpec,
   isControlWidgetParameterTarget,
   removeControlWidgetFromPanel,
 } from '../control-panels/control-panel-authoring';
-import { resolveGraphVariables } from '../variables/model/resolveGraphVariables';
 import type { ExpressionBinding } from '../variables/model/types';
 import { DoxygenText } from '../documentation/model/doxygen';
 
@@ -31,9 +29,23 @@ type DraftValue = {
 type DraftMap = Record<string, DraftValue>;
 const EMPTY_STUDIO_PANELS: readonly StudioPanelSpec[] = [];
 const CUSTOM_ENUM_VALUE = '__custom__';
+const PARAMETER_ROW_GRID = 'grid grid-cols-[minmax(0,9.5rem)_6rem_minmax(0,1fr)_4rem_1.75rem] items-center gap-1.5';
 
 function isAdvancedParameterMeta(parameter: BlockParameterMeta): boolean {
   return isAdvancedParameterName(parameter.name) || isAdvancedUiHint(parameter.uiHint);
+}
+
+export function getBlockParameterTypeLabel(parameter: BlockParameterMeta): string {
+  return parameter.valueType?.trim() || (parameter.valueKind === 'enum' ? 'enum' : 'scalar');
+}
+
+export function getBlockParameterHoverTitle(parameter: BlockParameterMeta): string {
+  return parameter.description?.trim() || parameter.label;
+}
+
+export function isBooleanBlockParameter(parameter: BlockParameterMeta): boolean {
+  const normalized = parameter.valueType?.trim().toLowerCase();
+  return normalized === 'bool' || normalized === 'boolean';
 }
 
 export function coerceBlockPropertyLiteralValue(value: string): string | number | boolean | null {
@@ -79,14 +91,6 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
   const updateNodeParameterBindings = useEditorStore((state) => state.updateNodeParameterBindings);
   const studioPanels = useEditorStore((state) => state.studioPanels);
   const setStudioPanels = useEditorStore((state) => state.setStudioPanels);
-  const documentName = useEditorStore((state) => state.documentName);
-  const documentDescription = useEditorStore((state) => state.documentDescription);
-  const studioVariables = useEditorStore((state) => state.studioVariables);
-  const studioLayout = useEditorStore((state) => state.studioLayout);
-  const studioPlotPalettes = useEditorStore((state) => state.studioPlotPalettes);
-  const application = useEditorStore((state) => state.application);
-  const nodes = useEditorStore((state) => state.nodes);
-  const edges = useEditorStore((state) => state.edges);
 
   const [activeTab, setActiveTab] = useState<ModalTab>('general');
   const [draftValues, setDraftValues] = useState<DraftMap>({});
@@ -172,25 +176,6 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
     [parameterRows],
   );
   const canCommit = isDraftInitialized && !blockDetailsQuery.isPending && !blockDetailsQuery.isError;
-  const currentDocument = useMemo(
-    () =>
-      graphDocumentFromEditor({
-        metadata: {
-          name: documentName,
-          description: documentDescription,
-          studioPanels,
-          studioVariables,
-          studioLayout,
-          studioPlotPalettes,
-          application,
-        },
-        nodes,
-        edges,
-      }),
-    [application, documentDescription, documentName, edges, nodes, studioLayout, studioPanels, studioPlotPalettes, studioVariables],
-  );
-  const resolvedGraph = useMemo(() => resolveGraphVariables(currentDocument), [currentDocument]);
-
   const setDraftValue = (parameterName: string, value: string) => {
     setDraftValues((prev) => ({
       ...prev,
@@ -253,8 +238,27 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
 
   const renderParameterValueInput = (parameter: BlockParameterMeta, disabled: boolean) => {
     const currentValue = draftValues[parameter.name]?.value ?? parameter.defaultValue ?? '';
+    const bindingKind = draftValues[parameter.name]?.bindingKind ?? 'literal';
+    const isLiteral = bindingKind === 'literal';
+    const isBoolean = isBooleanBlockParameter(parameter);
     const enumOptions = parameter.enumOptions ?? [];
     const hasEnumOptions = parameter.valueKind === 'enum' && enumOptions.length > 0;
+
+    if (isBoolean && isLiteral) {
+      const checked = coerceBlockPropertyLiteralValue(currentValue) === true;
+      return (
+        <label className="inline-flex min-w-0 items-center gap-2">
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled={disabled}
+            onChange={(event) => setDraftValue(parameter.name, event.currentTarget.checked ? 'true' : 'false')}
+            className="h-4 w-4 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500 disabled:opacity-60"
+          />
+          <span className="min-w-0 truncate text-xs text-slate-300">{checked ? 'true' : 'false'}</span>
+        </label>
+      );
+    }
 
     if (!hasEnumOptions) {
       return (
@@ -272,7 +276,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
     const selectValue = isCustomValue ? CUSTOM_ENUM_VALUE : currentValue;
 
     return (
-      <div className="space-y-2">
+      <div className="flex min-w-0 items-center gap-2">
         <select
           value={selectValue}
           disabled={disabled}
@@ -284,7 +288,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
             }
             setDraftValue(parameter.name, nextValue);
           }}
-          className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:opacity-60"
+          className="min-w-0 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:opacity-60"
         >
           {enumOptions.map((option) => (
             <option key={option} value={option}>
@@ -300,7 +304,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
             disabled={disabled}
             onChange={(event) => setDraftValue(parameter.name, event.target.value)}
             placeholder="Enter custom value"
-            className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:opacity-60"
+            className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:opacity-60"
           />
         )}
       </div>
@@ -449,66 +453,45 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                   return (
                     <div
                       key={parameter.name}
-                      className="rounded border border-slate-700 bg-slate-800/60 p-2 space-y-2"
+                      className="rounded border border-slate-700 bg-slate-800/60 px-1.5 py-2"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <label className="block text-xs font-medium text-slate-200">{parameter.label}</label>
-                          <div className="text-[11px] text-slate-400">
-                            {parameter.valueType ? `Type: ${parameter.valueType} | ` : ''}
-                            {parameter.defaultValue !== undefined
-                              ? `Default: ${parameter.defaultValue} | `
-                              : 'Default: none | '}
-                            {parameter.valueKind === 'enum' ? 'enum' : 'scalar'}
-                            {parameter.enumSource ? ` | Source: ${parameter.enumSource}` : ''}
-                            {parameter.uiHint ? ` | UI: ${parameter.uiHint}` : ''}
-                            {' | '}
-                            editable
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleControlAction(parameter)}
-                          disabled={!isControlWidgetParameterTarget(parameter)}
-                          title={binding ? 'Remove control' : 'Add control'}
-                          className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border text-sm leading-none ${
-                            binding
-                              ? 'border-rose-700/70 bg-rose-900/30 text-rose-100 hover:bg-rose-800/40'
-                              : 'border-emerald-700/70 bg-emerald-900/35 text-emerald-100 hover:bg-emerald-800/45'
-                          } disabled:cursor-not-allowed disabled:opacity-40`}
+                      <div className={PARAMETER_ROW_GRID}>
+                        <label
+                          title={getBlockParameterHoverTitle(parameter)}
+                          className="min-w-0 cursor-help truncate text-xs font-medium text-slate-200"
                         >
-                          {binding ? '−' : '+'}
-                        </button>
+                          {parameter.label}
+                        </label>
                         <select
                           value={draftValues[parameter.name]?.bindingKind ?? 'literal'}
                           onChange={(event) =>
                             setDraftBindingKind(parameter.name, event.target.value as DraftValue['bindingKind'])
                           }
-                          className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
+                          className="w-full min-w-0 rounded border border-slate-600 bg-slate-900 px-1.5 py-1 text-[11px] text-slate-200"
                         >
                           <option value="literal">Literal</option>
                           <option value="expression">Expression</option>
                         </select>
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0">
                           {renderParameterValueInput(parameter, false)}
                         </div>
+                        <span className="justify-self-end shrink-0 rounded border border-slate-600 bg-slate-800 px-1.5 py-1 text-[9px] uppercase tracking-wide text-slate-200">
+                          {getBlockParameterTypeLabel(parameter)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleControlAction(parameter)}
+                          disabled={!isControlWidgetParameterTarget(parameter)}
+                          title={binding ? 'Remove control' : 'Add control'}
+                          className={`justify-self-end inline-flex h-6 w-6 items-center justify-center rounded border text-sm leading-none ${
+                            binding
+                              ? 'border-rose-700/70 bg-rose-900/30 text-rose-100 hover:bg-rose-800/40'
+                              : 'border-emerald-700/70 bg-emerald-900/35 text-emerald-100 hover:bg-emerald-800/45'
+                          } disabled:cursor-not-allowed disabled:opacity-40`}
+                          >
+                            {binding ? '−' : '+'}
+                          </button>
                       </div>
-                      <p className="text-[11px] text-slate-500">
-                        {resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.state === 'resolved'
-                          ? `Resolved: ${String(
-                              resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.value ?? '',
-                            )}`
-                          : resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.reason ??
-                            'No resolved preview available.'}
-                      </p>
-                      {parameter.description && (
-                        <DoxygenText
-                          text={parameter.description}
-                          className="text-[11px] text-slate-500"
-                        />
-                      )}
                     </div>
                   );
                 })
@@ -525,27 +508,22 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                   return (
                     <div
                       key={parameter.name}
-                      className="rounded border border-slate-700 bg-slate-800/60 p-2 space-y-1"
+                      className="rounded border border-slate-700 bg-slate-800/60 px-1.5 py-2"
                     >
-                      <label className="block text-xs font-medium text-slate-200">{parameter.label}</label>
-                      {renderParameterValueInput(parameter, true)}
-                      <div className="text-[11px] text-slate-400">
-                        {parameter.valueType ? `Type: ${parameter.valueType} | ` : ''}
-                        {parameter.defaultValue !== undefined
-                          ? `Default: ${parameter.defaultValue} | `
-                          : 'Default: none | '}
-                        {parameter.valueKind === 'enum' ? 'enum' : 'scalar'}
-                        {parameter.enumSource ? ` | Source: ${parameter.enumSource}` : ''}
-                        {parameter.uiHint ? ` | UI: ${parameter.uiHint}` : ''}
-                        {' | '}
-                        read-only
+                      <div className={PARAMETER_ROW_GRID}>
+                        <label
+                          title={getBlockParameterHoverTitle(parameter)}
+                          className="min-w-0 cursor-help truncate text-xs font-medium text-slate-200"
+                        >
+                          {parameter.label}
+                        </label>
+                        <div className="min-w-0" aria-hidden="true" />
+                        <div className="min-w-0">{renderParameterValueInput(parameter, true)}</div>
+                        <span className="justify-self-end shrink-0 rounded border border-slate-600 bg-slate-800 px-1.5 py-1 text-[9px] uppercase tracking-wide text-slate-200">
+                          {getBlockParameterTypeLabel(parameter)}
+                        </span>
+                        <div aria-hidden="true" />
                       </div>
-                      {parameter.description && (
-                        <DoxygenText
-                          text={parameter.description}
-                          className="text-[11px] text-slate-500"
-                        />
-                      )}
                     </div>
                   );
                 })
@@ -566,53 +544,33 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                   return (
                     <div
                       key={parameter.name}
-                      className="rounded border border-slate-700 bg-slate-800/60 p-2 space-y-2"
+                      className="rounded border border-slate-700 bg-slate-800/60 px-1.5 py-2"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <label className="block text-xs font-medium text-slate-200">{parameter.label}</label>
-                          <div className="text-[11px] text-slate-400">
-                            {parameter.valueType ? `Type: ${parameter.valueType} | ` : ''}
-                            {parameter.defaultValue !== undefined
-                              ? `Default: ${parameter.defaultValue} | `
-                              : 'Default: none | '}
-                            {parameter.valueKind === 'enum' ? 'enum' : 'scalar'}
-                            {parameter.enumSource ? ` | Source: ${parameter.enumSource}` : ''}
-                            {parameter.uiHint ? ` | UI: ${parameter.uiHint}` : ''}
-                            {' | '}
-                            {isEditable ? 'editable (advanced)' : 'read-only (advanced)'}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
+                      <div className={PARAMETER_ROW_GRID}>
+                        <label
+                          title={getBlockParameterHoverTitle(parameter)}
+                          className="min-w-0 cursor-help truncate text-xs font-medium text-slate-200"
+                        >
+                          {parameter.label}
+                        </label>
                         <select
                           value={draftValues[parameter.name]?.bindingKind ?? 'literal'}
                           onChange={(event) =>
                             setDraftBindingKind(parameter.name, event.target.value as DraftValue['bindingKind'])
                           }
-                          className="rounded border border-slate-600 bg-slate-900 px-2 py-1 text-[11px] text-slate-200"
-                        >
+                          className="w-full min-w-0 rounded border border-slate-600 bg-slate-900 px-1.5 py-1 text-[11px] text-slate-200"
+                          >
                           <option value="literal">Literal</option>
                           <option value="expression">Expression</option>
                         </select>
-                        <div className="min-w-0 flex-1">
+                        <div className="min-w-0">
                           {renderParameterValueInput(parameter, !isEditable)}
                         </div>
+                        <span className="justify-self-end shrink-0 rounded border border-slate-600 bg-slate-800 px-1.5 py-1 text-[9px] uppercase tracking-wide text-slate-200">
+                          {getBlockParameterTypeLabel(parameter)}
+                        </span>
+                        <div aria-hidden="true" />
                       </div>
-                      <p className="text-[11px] text-slate-500">
-                        {resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.state === 'resolved'
-                          ? `Resolved: ${String(
-                              resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.value ?? '',
-                            )}`
-                          : resolvedGraph.parametersByNodeId[blockInstanceId]?.[parameter.name]?.reason ??
-                            'No resolved preview available.'}
-                      </p>
-                      {parameter.description && (
-                        <DoxygenText
-                          text={parameter.description}
-                          className="text-[11px] text-slate-500"
-                        />
-                      )}
                     </div>
                   );
                 })
