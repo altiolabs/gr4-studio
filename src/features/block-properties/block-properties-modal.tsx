@@ -28,7 +28,6 @@ type DraftValue = {
 
 type DraftMap = Record<string, DraftValue>;
 const EMPTY_STUDIO_PANELS: readonly StudioPanelSpec[] = [];
-const CUSTOM_ENUM_VALUE = '__custom__';
 const PARAMETER_ROW_GRID = 'grid grid-cols-[minmax(0,9.5rem)_6rem_minmax(0,1fr)_4rem_1.75rem] items-center gap-1.5';
 
 function isAdvancedParameterMeta(parameter: BlockParameterMeta): boolean {
@@ -41,6 +40,10 @@ export function getBlockParameterTypeLabel(parameter: BlockParameterMeta): strin
 
 export function getBlockParameterHoverTitle(parameter: BlockParameterMeta): string {
   return parameter.description?.trim() || parameter.label;
+}
+
+export function getBlockParameterEnumTypeLabel(parameter: BlockParameterMeta): string {
+  return parameter.enumType?.trim() || '';
 }
 
 export function isBooleanBlockParameter(parameter: BlockParameterMeta): boolean {
@@ -241,8 +244,9 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
     const bindingKind = draftValues[parameter.name]?.bindingKind ?? 'literal';
     const isLiteral = bindingKind === 'literal';
     const isBoolean = isBooleanBlockParameter(parameter);
-    const enumOptions = parameter.enumOptions ?? [];
-    const hasEnumOptions = parameter.valueKind === 'enum' && enumOptions.length > 0;
+    const enumChoices = parameter.enumChoices ?? [];
+    const enumTypeLabel = getBlockParameterEnumTypeLabel(parameter);
+    const hasEnumChoices = enumChoices.length > 0;
 
     if (isBoolean && isLiteral) {
       const checked = coerceBlockPropertyLiteralValue(currentValue) === true;
@@ -260,7 +264,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
       );
     }
 
-    if (!hasEnumOptions) {
+    if (!hasEnumChoices) {
       return (
         <input
           type="text"
@@ -272,41 +276,26 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
       );
     }
 
-    const isCustomValue = !enumOptions.includes(currentValue);
-    const selectValue = isCustomValue ? CUSTOM_ENUM_VALUE : currentValue;
+    const selectValue = currentValue;
+    const visibleOptions = currentValue && !enumChoices.includes(currentValue) ? [currentValue, ...enumChoices] : enumChoices;
 
     return (
       <div className="flex min-w-0 items-center gap-2">
         <select
           value={selectValue}
+          title={enumTypeLabel ? `enum_type: ${enumTypeLabel}` : undefined}
           disabled={disabled}
           onChange={(event) => {
-            const nextValue = event.target.value;
-            if (nextValue === CUSTOM_ENUM_VALUE) {
-              setDraftValue(parameter.name, '');
-              return;
-            }
-            setDraftValue(parameter.name, nextValue);
+            setDraftValue(parameter.name, event.target.value);
           }}
-          className="min-w-0 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:opacity-60"
+          className="w-full min-w-0 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:opacity-60"
         >
-          {enumOptions.map((option) => (
+          {visibleOptions.map((option) => (
             <option key={option} value={option}>
               {parameter.enumLabels?.[option] ?? option}
             </option>
           ))}
-          {parameter.allowCustomValue && <option value={CUSTOM_ENUM_VALUE}>Custom value...</option>}
         </select>
-        {parameter.allowCustomValue && isCustomValue && (
-          <input
-            type="text"
-            value={currentValue}
-            disabled={disabled}
-            onChange={(event) => setDraftValue(parameter.name, event.target.value)}
-            placeholder="Enter custom value"
-            className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:opacity-60"
-          />
-        )}
       </div>
     );
   };
@@ -449,6 +438,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
               ) : (
                 editableParameters.map((parameter) => {
                   const binding = findControlWidgetBinding(parameter.name);
+                  const enumTypeLabel = getBlockParameterEnumTypeLabel(parameter);
 
                   return (
                     <div
@@ -475,7 +465,10 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                         <div className="min-w-0">
                           {renderParameterValueInput(parameter, false)}
                         </div>
-                        <span className="justify-self-end shrink-0 rounded border border-slate-600 bg-slate-800 px-1.5 py-1 text-[9px] uppercase tracking-wide text-slate-200">
+                        <span
+                          title={enumTypeLabel ? `enum_type: ${enumTypeLabel}` : getBlockParameterTypeLabel(parameter)}
+                          className="justify-self-end shrink-0 rounded border border-slate-600 bg-slate-800 px-1.5 py-1 text-[9px] uppercase tracking-wide text-slate-200"
+                        >
                           {getBlockParameterTypeLabel(parameter)}
                         </span>
                         <button
@@ -505,6 +498,8 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                 <p className="text-sm text-slate-400">This block has no read-only parameters.</p>
               ) : (
                 readOnlyParameters.map((parameter) => {
+                  const enumTypeLabel = getBlockParameterEnumTypeLabel(parameter);
+
                   return (
                     <div
                       key={parameter.name}
@@ -519,7 +514,10 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                         </label>
                         <div className="min-w-0" aria-hidden="true" />
                         <div className="min-w-0">{renderParameterValueInput(parameter, true)}</div>
-                        <span className="justify-self-end shrink-0 rounded border border-slate-600 bg-slate-800 px-1.5 py-1 text-[9px] uppercase tracking-wide text-slate-200">
+                        <span
+                          title={enumTypeLabel ? `enum_type: ${enumTypeLabel}` : getBlockParameterTypeLabel(parameter)}
+                          className="justify-self-end shrink-0 rounded border border-slate-600 bg-slate-800 px-1.5 py-1 text-[9px] uppercase tracking-wide text-slate-200"
+                        >
                           {getBlockParameterTypeLabel(parameter)}
                         </span>
                         <div aria-hidden="true" />
@@ -540,6 +538,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
               ) : (
                 advancedParameters.map((parameter) => {
                   const isEditable = !parameter.readOnly && parameter.mutable;
+                  const enumTypeLabel = getBlockParameterEnumTypeLabel(parameter);
 
                   return (
                     <div
@@ -566,7 +565,10 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                         <div className="min-w-0">
                           {renderParameterValueInput(parameter, !isEditable)}
                         </div>
-                        <span className="justify-self-end shrink-0 rounded border border-slate-600 bg-slate-800 px-1.5 py-1 text-[9px] uppercase tracking-wide text-slate-200">
+                        <span
+                          title={enumTypeLabel ? `enum_type: ${enumTypeLabel}` : getBlockParameterTypeLabel(parameter)}
+                          className="justify-self-end shrink-0 rounded border border-slate-600 bg-slate-800 px-1.5 py-1 text-[9px] uppercase tracking-wide text-slate-200"
+                        >
                           {getBlockParameterTypeLabel(parameter)}
                         </span>
                         <div aria-hidden="true" />

@@ -171,6 +171,29 @@ describe('resolveControlPanelWidgetBindings', () => {
     expectState(result, 'ready');
   });
 
+  it('uses enum choice metadata when present', () => {
+    const result = resolveControlPanelWidgetBindings({
+      panel: makePanel({
+        inputKind: 'enum',
+      }),
+      nodeById: new Map([['node-a', makeNode()]]),
+      blockDetailsByType: new Map([
+        [
+          'gr4.example.Sink',
+          makeBlockDetails({
+            valueKind: 'scalar',
+            valueType: 'string',
+            enumChoices: ['a', 'b'],
+          }),
+        ],
+      ]),
+      runtime: makeRuntime(),
+    });
+
+    expectState(result, 'ready');
+    expect(result[0]?.enumOptions).toEqual(['a', 'b']);
+  });
+
   it('marks widgets offline when no linked session exists', () => {
     const result = resolveControlPanelWidgetBindings({
       panel: makePanel(),

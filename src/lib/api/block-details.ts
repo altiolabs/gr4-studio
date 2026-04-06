@@ -18,6 +18,8 @@ export type BlockParameterMeta = {
   valueType?: string;
   valueKind: 'scalar' | 'enum';
   enumOptions?: string[];
+  enumChoices?: string[];
+  enumType?: string;
   enumLabels?: Record<string, string>;
   enumSource?: string;
   uiHint?: string;
@@ -69,8 +71,10 @@ function normalizeParameter(param: ParameterMetaDto): BlockParameterMeta {
     mutable: !readOnly,
     readOnly,
     valueType,
-    valueKind: param.value_kind === 'enum' ? 'enum' : 'scalar',
-    enumOptions: param.enum_options,
+    valueKind: param.value_kind === 'enum' || Boolean(param.enum_choices?.length) ? 'enum' : 'scalar',
+    enumOptions: param.enum_choices ?? param.enum_options,
+    enumChoices: param.enum_choices,
+    enumType: param.enum_type,
     enumLabels: param.enum_labels,
     enumSource: param.enum_source,
     uiHint: param.ui_hint,

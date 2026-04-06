@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   coerceBlockPropertyLiteralValue,
+  getBlockParameterEnumTypeLabel,
   getBlockParameterHoverTitle,
   getBlockParameterTypeLabel,
   isBooleanBlockParameter,
@@ -71,5 +72,18 @@ describe('coerceBlockPropertyLiteralValue', () => {
         readOnly: false,
       }),
     ).toBe('Amplifier gain in dB.');
+  });
+
+  it('exposes enum type hints', () => {
+    expect(
+      getBlockParameterEnumTypeLabel({
+        name: 'mode',
+        label: 'Mode',
+        valueKind: 'enum',
+        enumType: 'MyEnum',
+        mutable: true,
+        readOnly: false,
+      }),
+    ).toBe('MyEnum');
   });
 });

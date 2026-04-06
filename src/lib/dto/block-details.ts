@@ -29,6 +29,8 @@ export const blockParameterDtoSchema = z
     runtime_mutability: z.string().optional(),
     value_kind: z.enum(['scalar', 'enum']).optional(),
     enum_options: z.array(z.string()).optional(),
+    enum_choices: z.array(z.string()).optional(),
+    enum_type: z.string().optional(),
     enum_labels: z.record(z.string(), z.string()).optional(),
     enum_source: z.string().optional(),
     ui_hint: z.string().optional(),
