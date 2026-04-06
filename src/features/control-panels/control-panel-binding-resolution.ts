@@ -69,7 +69,7 @@ function isCompatibleWidget(widget: StudioControlWidgetSpec, parameterMeta?: Blo
   }
 
   if (widget.inputKind === 'enum') {
-    return parameterMeta.valueKind === 'enum' || Boolean(parameterMeta.enumOptions?.length);
+    return parameterMeta.valueKind === 'enum' || Boolean(parameterMeta.enumChoices?.length);
   }
 
   if (widget.inputKind === 'boolean') {
@@ -203,7 +203,7 @@ export function resolveControlPanelWidgetBindings(input: {
 
     const blockDetails = input.blockDetailsByType.get(node.blockTypeId);
     const parameterMeta = blockDetails?.parameters.find((parameter) => parameter.name === binding.parameterName);
-    const enumOptions = widget.enumOptions ?? parameterMeta?.enumOptions;
+    const enumOptions = widget.enumOptions ?? parameterMeta?.enumChoices ?? parameterMeta?.enumOptions;
     const enumLabels = widget.enumLabels ?? parameterMeta?.enumLabels;
     if (parameterMeta && !isCompatibleWidget(widget, parameterMeta)) {
       return {

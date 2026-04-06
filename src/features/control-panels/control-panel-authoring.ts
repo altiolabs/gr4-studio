@@ -49,7 +49,7 @@ function inferVariableInputKind(value: JsonPrimitive | undefined): StudioControl
 }
 
 export function inferControlWidgetInputKind(parameter: BlockParameterMeta): StudioControlWidgetInputKind {
-  if (parameter.valueKind === 'enum' || Boolean(parameter.enumOptions?.length)) {
+  if (parameter.valueKind === 'enum' || Boolean(parameter.enumChoices?.length)) {
     return 'enum';
   }
 
@@ -73,7 +73,7 @@ export function getCompatibleControlWidgetInputKinds(
 ): StudioControlWidgetInputKind[] {
   const kinds: StudioControlWidgetInputKind[] = ['text'];
 
-  if (parameter.valueKind === 'enum' || Boolean(parameter.enumOptions?.length)) {
+  if (parameter.valueKind === 'enum' || Boolean(parameter.enumChoices?.length)) {
     kinds.push('enum');
   }
 

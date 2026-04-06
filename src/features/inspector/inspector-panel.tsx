@@ -238,6 +238,8 @@ function RuntimeSettingsCard({
   const renderRuntimeValue = (name: string, value: RuntimeSettingsValue, editable: boolean) => {
     const parameterMeta = parameterMetaByName.get(name);
     const typeLabel = parameterMeta?.valueType ?? typeof value;
+    const enumChoices = parameterMeta?.enumChoices ?? [];
+    const hasEnumChoices = enumChoices.length > 0;
 
     if (typeof value === 'boolean') {
       const checked = Boolean(draftValues[name]);
@@ -268,6 +270,37 @@ function RuntimeSettingsCard({
     if (typeof value === 'string' || typeof value === 'number') {
       const draftValue = draftValues[name];
       const inputValue = typeof draftValue === 'string' ? draftValue : String(value);
+      if (hasEnumChoices) {
+        const selectValue = inputValue;
+        const visibleChoices = inputValue && !enumChoices.includes(inputValue) ? [inputValue, ...enumChoices] : enumChoices;
+
+        return (
+          <label key={name} className="block rounded border border-slate-700 p-2">
+            <p className="text-xs uppercase tracking-wide text-slate-400">{name}</p>
+            <p className="mb-2 text-[11px] text-slate-500">{typeLabel}</p>
+            <select
+              value={selectValue}
+              disabled={!editable || mutation.isPending}
+              onChange={(event) => {
+                if (!editable) {
+                  return;
+                }
+                const nextValue = event.target.value;
+                setDraftValues((current) => ({ ...current, [name]: nextValue }));
+                void savePatch(name, nextValue);
+              }}
+              className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 outline-none focus:border-cyan-500 disabled:opacity-70"
+            >
+              {visibleChoices.map((choice) => (
+                <option key={choice} value={choice}>
+                  {choice}
+                </option>
+              ))}
+            </select>
+          </label>
+        );
+      }
+
       const commitScalar = async () => {
         if (!editable) {
           return;

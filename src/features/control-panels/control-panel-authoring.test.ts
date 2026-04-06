@@ -37,7 +37,7 @@ describe('control panel authoring', () => {
       inferControlWidgetInputKind(
         makeParameter({
           valueKind: 'enum',
-          enumOptions: ['a', 'b'],
+          enumChoices: ['a', 'b'],
         }),
       ),
     ).toBe('enum');
