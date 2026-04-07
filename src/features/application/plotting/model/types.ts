@@ -64,6 +64,7 @@ export type PlotDataFrame = {
     sequence?: number;
     emittedAtMs?: number;
     sampleRateHz?: number;
+    liveIngressFpsHz?: number;
     domain?: 'time' | 'frequency' | 'image';
     xyRenderMode?: PlotXyRenderMode;
     xyPointSize?: number;
@@ -71,6 +72,7 @@ export type PlotDataFrame = {
     state?: 'loading' | 'no-data' | 'error' | 'ready';
     errorKind?: 'invalid-binding' | 'runtime';
     errorMessage?: string;
+    statusMessage?: string;
   };
 };
 

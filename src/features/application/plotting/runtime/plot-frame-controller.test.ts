@@ -161,6 +161,25 @@ describe('plot frame controller', () => {
     expect(controller.getVersion()).toBe(2);
   });
 
+  it('carries diagnostic status messages through live updates', () => {
+    const controller = createPlotFrameController({
+      panelId: 'panel-1',
+      kind: 'timeseries',
+      source: { sinkId: 'sink-1' },
+      view: { kind: 'timeseries', windowSize: 8 },
+    });
+
+    controller.setLoading('Connecting websocket to ws://127.0.0.1:18080/spectrum…');
+    expect(controller.getFrame().meta?.statusMessage).toContain('Connecting websocket');
+
+    controller.ingestSeries([{ id: 'ch0', label: 'ch0', y: [1, 2, 3] }], 1000, 'replace', {
+      statusMessage: 'WebSocket connected · seq 1',
+    });
+
+    expect(controller.getFrame().meta?.state).toBe('ready');
+    expect(controller.getFrame().meta?.statusMessage).toBe('WebSocket connected · seq 1');
+  });
+
   it('keeps no-data state when ingested series are empty', () => {
     const controller = createPlotFrameController({
       panelId: 'panel-1',

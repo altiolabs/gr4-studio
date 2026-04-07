@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ApiClientError } from '../../lib/api/client';
 import {
   resolveRuntimeSettingsAvailability,
+  shouldApplyRuntimeSettingImmediately,
   toRuntimeSettingsErrorMessage,
 } from './runtime-settings-model';
 
@@ -142,5 +143,15 @@ describe('runtime-settings-model', () => {
         new ApiClientError('Request failed', 'HTTP', 504, 'timeout waiting for reply'),
       ),
     ).toBe('Timed out while waiting for the runtime settings reply.');
+  });
+
+  it('applies cadence and phosphor settings immediately', () => {
+    expect(shouldApplyRuntimeSettingImmediately('update_ms')).toBe(true);
+    expect(shouldApplyRuntimeSettingImmediately('poll_ms')).toBe(true);
+    expect(shouldApplyRuntimeSettingImmediately('persistence')).toBe(true);
+    expect(shouldApplyRuntimeSettingImmediately('phosphor_intensity')).toBe(true);
+    expect(shouldApplyRuntimeSettingImmediately('phosphor_decay_ms')).toBe(true);
+    expect(shouldApplyRuntimeSettingImmediately('sample_rate')).toBe(false);
+    expect(shouldApplyRuntimeSettingImmediately('endpoint')).toBe(false);
   });
 });

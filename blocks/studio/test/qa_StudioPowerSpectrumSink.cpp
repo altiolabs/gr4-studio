@@ -18,6 +18,7 @@ void configureBlock(TBlock& block) {
     block.num_averages = 2UZ;
     block.window = std::string("Rectangular");
     block.sample_rate = 8.0F;
+    block.update_ms = 125U;
     block.output_in_db = false;
     block.persistence = true;
     block.phosphor_intensity = 1.25F;
@@ -33,6 +34,7 @@ void configureBlock(TBlock& block) {
                                  {"num_averages", 2UZ},
                                  {"window", std::string("Rectangular")},
                                  {"sample_rate", 8.0F},
+                                 {"update_ms", 125U},
                                  {"output_in_db", false},
                                  {"persistence", true},
                                  {"phosphor_intensity", 1.25F},
@@ -67,6 +69,7 @@ void testFloatSpectrum() {
     const std::string json = block.snapshotJson();
     assert(json.find("\"payload_format\":\"dataset-xy-json-v1\"") != std::string::npos);
     assert(json.find("\"points\":2") != std::string::npos);
+    assert(json.find("\"update_ms\":125") != std::string::npos);
     assert(json.find("\"persistence\":true") != std::string::npos);
     assert(json.find("\"phosphor_intensity\":1.25") != std::string::npos);
     assert(json.find("\"phosphor_decay_ms\":750") != std::string::npos);

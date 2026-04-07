@@ -35,6 +35,14 @@ describe('known Studio block bindings', () => {
 
   it('uses a consistent phase-1 transport contract across all known blocks', () => {
     for (const binding of STUDIO_KNOWN_BLOCK_BINDINGS) {
+      if (binding.blockTypeId.startsWith('gr::studio::StudioPowerSpectrumSink<')) {
+        expect(binding.supportedTransports).toEqual([
+          'http_poll',
+          'websocket',
+        ]);
+        continue;
+      }
+
       expect(binding.supportedTransports).toEqual(STUDIO_PHASE1_SUPPORTED_TRANSPORTS);
     }
   });
@@ -149,9 +157,9 @@ describe('known Studio block bindings', () => {
     });
 
     const powerSpectrumConfigured = buildStudioBindingView('gr::studio::StudioPowerSpectrumSink<float32>', {
-      transport: 'http_snapshot',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18086/snapshot',
-      poll_ms: '150',
+      update_ms: '150',
       sample_rate: '48000',
       topic: 'spectrum',
     });
@@ -160,7 +168,7 @@ describe('known Studio block bindings', () => {
       status: 'configured',
       family: 'series2d',
       payloadFormat: 'dataset-xy-json-v1',
-      transport: 'http_snapshot',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18086/snapshot',
       sampleRate: 48000,
       topic: 'spectrum',

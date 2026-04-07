@@ -8,8 +8,8 @@ export type PlotFrameController = {
   getVersion: () => number;
   getFrame: () => PlotDataFrame;
   reset: () => void;
-  setLoading: () => void;
-  setNoData: () => void;
+  setLoading: (statusMessage?: string) => void;
+  setNoData: (statusMessage?: string) => void;
   setError: (message: string, errorKind?: 'invalid-binding' | 'runtime') => void;
   ingestSeries: (
     series: PlotSeriesFrame[],
@@ -19,6 +19,8 @@ export type PlotFrameController = {
       xyRenderMode?: NonNullable<PlotDataFrame['meta']>['xyRenderMode'];
       xyPointSize?: number;
       xyPointAlpha?: number;
+      statusMessage?: string;
+      liveIngressFpsHz?: number;
     },
   ) => void;
   ingestImage: (
@@ -89,8 +91,8 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
     markDirty();
   };
 
-  const setLoading = () => {
-    if (state.state === 'loading') {
+  const setLoading = (statusMessage?: string) => {
+    if (state.state === 'loading' && state.statusMessage === statusMessage) {
       return;
     }
     state = {
@@ -98,12 +100,13 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
       state: 'loading',
       errorKind: undefined,
       errorMessage: undefined,
+      statusMessage,
     };
     markDirty();
   };
 
-  const setNoData = () => {
-    if (state.state === 'no-data' && !state.errorMessage) {
+  const setNoData = (statusMessage?: string) => {
+    if (state.state === 'no-data' && !state.errorMessage && state.statusMessage === statusMessage) {
       return;
     }
     state = {
@@ -111,6 +114,7 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
       state: 'no-data',
       errorKind: undefined,
       errorMessage: undefined,
+      statusMessage,
     };
     markDirty();
   };
@@ -124,6 +128,7 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
       state: 'error',
       errorKind,
       errorMessage: message,
+      statusMessage: message,
     };
     markDirty();
   };
@@ -136,6 +141,8 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
       xyRenderMode?: NonNullable<PlotDataFrame['meta']>['xyRenderMode'];
       xyPointSize?: number;
       xyPointAlpha?: number;
+      statusMessage?: string;
+      liveIngressFpsHz?: number;
     },
   ) => {
     const windowSize = spec.view.windowSize;
@@ -187,6 +194,8 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
       xyRenderMode: metadata?.xyRenderMode,
       xyPointSize: metadata?.xyPointSize,
       xyPointAlpha: metadata?.xyPointAlpha,
+      statusMessage: metadata?.statusMessage,
+      liveIngressFpsHz: metadata?.liveIngressFpsHz,
       errorKind: undefined,
       errorMessage: undefined,
     };

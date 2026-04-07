@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlotDataFrame } from '../model/types';
-import { shouldRetainPreviousLiveFrame } from './timeseries-live-runtime';
+import { deriveWebSocketIngressFps, shouldRetainPreviousLiveFrame } from './timeseries-live-runtime';
 
 function frame(state: NonNullable<PlotDataFrame['meta']>['state'], points: number[]): PlotDataFrame {
   return {
@@ -14,6 +14,24 @@ function frame(state: NonNullable<PlotDataFrame['meta']>['state'], points: numbe
 }
 
 describe('timeseries live runtime retention', () => {
+  it('derives websocket ingress fps from arrival cadence', () => {
+    expect(
+      deriveWebSocketIngressFps({
+        previousArrivalMs: null,
+        previousFpsHz: null,
+        nowMs: 1000,
+      }),
+    ).toBeNull();
+
+    expect(
+      deriveWebSocketIngressFps({
+        previousArrivalMs: 0,
+        previousFpsHz: null,
+        nowMs: 1000,
+      }),
+    ).toBe(1);
+  });
+
   it('keeps the previous live frame during transient loading/no-data transitions', () => {
     expect(
       shouldRetainPreviousLiveFrame({
