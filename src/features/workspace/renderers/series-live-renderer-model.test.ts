@@ -14,7 +14,7 @@ describe('series live renderer model', () => {
     expect(normalizeSeriesPollMs(250.4)).toBe(250);
   });
 
-  it('gates supported binding to configured http_snapshot/http_poll with endpoint', () => {
+  it('gates supported binding to configured http_snapshot/http_poll/websocket with endpoint', () => {
     expect(
       isSupportedSeriesBinding({
         status: 'configured',
@@ -28,8 +28,8 @@ describe('series live renderer model', () => {
         status: 'configured',
         transport: 'websocket',
         endpoint: 'ws://127.0.0.1:9999',
-      }),
-    ).toEqual({ supported: false, reason: 'unsupported-transport' });
+      }).supported,
+    ).toBe(true);
     expect(
       isSupportedSeriesBinding({
         status: 'unconfigured',
@@ -75,5 +75,6 @@ describe('series live renderer model', () => {
     expect(clearInterval).toHaveBeenCalledWith(42);
 
     expect(createSeriesPollSubscription('http_snapshot', 250, onTick)).toBeUndefined();
+    expect(createSeriesPollSubscription('websocket', 250, onTick)).toBeUndefined();
   });
 });

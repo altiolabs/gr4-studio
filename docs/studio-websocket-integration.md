@@ -4,6 +4,7 @@ This note describes the pattern Studio uses for websocket-enabled sink blocks an
 
 Current websocket-enabled Studio sinks:
 
+- `StudioSeriesSink`
 - `StudioPowerSpectrumSink`
 - `StudioWaterfallSink`
 
@@ -55,8 +56,9 @@ Current websocket-enabled Studio sinks:
 
 ## Current examples
 
+- Series uses JSON websocket frames for bounded 1D sample windows.
 - Power spectrum uses binary websocket frames for dense numeric spectra.
 - Waterfall uses JSON websocket frames for bounded FFT-history snapshots.
-- Both use `update_ms` as the live send cadence while preserving a first-frame-immediate startup path.
+- All websocket-capable Studio sinks use `update_ms` as the live send cadence while preserving a first-frame-immediate startup path.
 
-Use those two blocks as the reference implementations when adding websocket support to another sink family.
+Use those blocks as the reference implementations when adding websocket support to another sink family.

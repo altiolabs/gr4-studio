@@ -72,66 +72,67 @@ function isSupportedTransport(value: string): value is StudioTransportMode {
 
 // TODO: Replace these placeholder IDs with final reflected fully qualified IDs
 // from the first-party blocks once block registration is finalized.
+const STUDIO_SERIES_SUPPORTED_TRANSPORTS = ['http_snapshot', 'http_poll', 'websocket'] as const;
 const STUDIO_POWER_SPECTRUM_SUPPORTED_TRANSPORTS = ['http_poll', 'websocket'] as const;
 const STUDIO_WATERFALL_SUPPORTED_TRANSPORTS = ['http_poll', 'websocket'] as const;
 export const STUDIO_KNOWN_BLOCK_BINDINGS: readonly StudioKnownBlockBinding[] = [
   {
     blockTypeId: 'gr::studio::StudioSeriesSink<float32>',
     family: 'series',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_SERIES_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       channels: 'channels',
       topic: 'topic',
     },
     payloadFormat: 'series-window-json-v1',
     // Where applicable, HTTP snapshot/poll semantics should follow
     // gr4-incubator HttpTimeSeriesSink behavior.
-    notes: 'Phase 1 supports only http_snapshot/http_poll. Unsupported for now: zmq_sub, websocket.',
+    notes: 'Series sink supports http_snapshot/http_poll/websocket. Update cadence uses update_ms.',
   },
   {
     blockTypeId: 'gr::studio::StudioSeriesSink<complex64>',
     family: 'series',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_SERIES_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       channels: 'channels',
       topic: 'topic',
     },
     payloadFormat: 'series-window-json-v1',
-    notes: 'Phase 1 supports only http_snapshot/http_poll. Unsupported for now: zmq_sub, websocket.',
+    notes: 'Series sink supports http_snapshot/http_poll/websocket. Update cadence uses update_ms.',
   },
   {
     blockTypeId: 'gr::studio::StudioSeriesSink<complex<float32>>',
     family: 'series',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_SERIES_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       channels: 'channels',
       topic: 'topic',
     },
     payloadFormat: 'series-window-json-v1',
-    notes: 'Phase 1 supports only http_snapshot/http_poll. Unsupported for now: zmq_sub, websocket.',
+    notes: 'Series sink supports http_snapshot/http_poll/websocket. Update cadence uses update_ms.',
   },
   {
     blockTypeId: 'gr::studio::StudioSeriesSink<std::complex<float32>>',
     family: 'series',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_SERIES_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       channels: 'channels',
       topic: 'topic',
     },
     payloadFormat: 'series-window-json-v1',
-    notes: 'Phase 1 supports only http_snapshot/http_poll. Unsupported for now: zmq_sub, websocket.',
+    notes: 'Series sink supports http_snapshot/http_poll/websocket. Update cadence uses update_ms.',
   },
   {
     blockTypeId: 'gr::studio::Studio2DSeriesSink<float32>',

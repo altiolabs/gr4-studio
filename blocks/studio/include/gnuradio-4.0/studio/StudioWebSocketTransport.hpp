@@ -33,7 +33,7 @@
 #include <unistd.h>
 #endif
 
-namespace gr::studio::waterfall_ws {
+namespace gr::studio::websocket_transport {
 
 inline std::string toLowerAscii(std::string_view text) {
     std::string out{text};
@@ -86,15 +86,15 @@ enum class WebSocketFrameKind {
     Binary,
 };
 
-class WaterfallWebSocketService {
+class SnapshotWebSocketService {
 public:
-    WaterfallWebSocketService() = default;
-    WaterfallWebSocketService(const WaterfallWebSocketService&) = delete;
-    WaterfallWebSocketService& operator=(const WaterfallWebSocketService&) = delete;
-    WaterfallWebSocketService(WaterfallWebSocketService&&) = delete;
-    WaterfallWebSocketService& operator=(WaterfallWebSocketService&&) = delete;
+    SnapshotWebSocketService() = default;
+    SnapshotWebSocketService(const SnapshotWebSocketService&) = delete;
+    SnapshotWebSocketService& operator=(const SnapshotWebSocketService&) = delete;
+    SnapshotWebSocketService(SnapshotWebSocketService&&) = delete;
+    SnapshotWebSocketService& operator=(SnapshotWebSocketService&&) = delete;
 
-    ~WaterfallWebSocketService() {
+    ~SnapshotWebSocketService() {
         stop();
     }
 
@@ -480,4 +480,4 @@ private:
 #endif
 };
 
-} // namespace gr::studio::waterfall_ws
+} // namespace gr::studio::websocket_transport

@@ -748,7 +748,7 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
 
     detail::WaterfallWindow<T> _window{};
     detail::SnapshotHttpService _http{};
-    waterfall_ws::WaterfallWebSocketService _websocket{};
+    websocket_transport::SnapshotWebSocketService _websocket{};
     std::chrono::steady_clock::time_point _lastWebSocketPublishAt{};
 
     void syncInputPortConstraints() {

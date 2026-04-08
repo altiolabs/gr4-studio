@@ -108,7 +108,7 @@ Where HTTP snapshot/polling is used, model behavior after `HttpTimeSeriesSink` f
 Studio binding resolves the block family and payload format.
 Rendering is handled separately:
 
-- scalar series -> live `series` renderer path
+- `StudioSeriesSink` uses the live `series` renderer path for JSON snapshots and websocket frames
 - `series2d-xy-json-v1` and `dataset-xy-json-v1` -> XY/vector plot path
 - `StudioPowerSpectrumSink` uses the `dataset-xy-json-v1` path for FFT-based spectrum rendering
 - `StudioPowerSpectrumSink` with `persistence=true` also uses the `dataset-xy-json-v1` path, but routes to the phosphor spectrum renderer with a persistent glow behind the live trace. The phosphor look is tuned via `phosphor_intensity` and `phosphor_decay_ms`.

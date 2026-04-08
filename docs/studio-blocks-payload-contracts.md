@@ -50,7 +50,7 @@ Semantics:
 
 Frontend routing:
 
-- `payloadFormat=series-window-json-v1` routes to the scalar timeseries parser.
+- `payloadFormat=series-window-json-v1` routes to the scalar timeseries parser, regardless of whether the sink is served over `http_snapshot`, `http_poll`, or websocket transport.
 
 ## Vector XY contract
 

@@ -4,6 +4,10 @@ import {
   type HttpTimeSeriesSnapshot,
   parseHttpTimeSeriesSnapshot,
 } from '../../graph-editor/runtime/http-time-series';
+import {
+  createJsonWebSocketSubscription,
+  normalizeJsonWebSocketEndpoint,
+} from '../../application/plotting/runtime/json-websocket-runtime';
 import type { WorkspaceLiveRendererContext } from './live-renderer-contract';
 import {
   createSeriesPollSubscription,
@@ -75,8 +79,12 @@ export function SeriesLiveRenderer({ liveContext }: SeriesLiveRendererProps) {
   const transport = liveContext.binding.transport;
   const bindingGate = isSupportedSeriesBinding(liveContext.binding);
   const runtimeActive = liveContext.executionState === 'running';
-  const supportsHttpLivePath = bindingGate.supported && runtimeActive;
+  const supportsHttpLivePath =
+    bindingGate.supported && runtimeActive && (transport === 'http_snapshot' || transport === 'http_poll');
+  const supportsWebSocketLivePath = bindingGate.supported && runtimeActive && transport === 'websocket';
+  const supportsLivePath = supportsHttpLivePath || supportsWebSocketLivePath;
   const pollMs = normalizeSeriesPollMs(liveContext.binding.pollMs);
+  const websocketEndpoint = normalizeJsonWebSocketEndpoint(endpoint);
 
   const refresh = useCallback(async () => {
     if (!supportsHttpLivePath || !endpoint || isFetchingRef.current) {
@@ -100,7 +108,7 @@ export function SeriesLiveRenderer({ liveContext }: SeriesLiveRendererProps) {
   }, [complexViewMode, endpoint, supportsHttpLivePath]);
 
   useEffect(() => {
-    if (!supportsHttpLivePath) {
+    if (!supportsLivePath) {
       setSnapshot(null);
       if (!runtimeActive && liveContext.binding.status === 'configured' && bindingGate.reason === undefined) {
         setError(null);
@@ -109,7 +117,7 @@ export function SeriesLiveRenderer({ liveContext }: SeriesLiveRendererProps) {
       }
       const fallbackError =
         bindingGate.reason === 'unsupported-transport'
-          ? 'Only http_snapshot/http_poll is supported for the first live series path.'
+          ? 'Only http_snapshot/http_poll/websocket is supported for the first live series path.'
           : null;
       setError(fallbackError);
       setState(liveContext.binding.status === 'invalid' || bindingGate.reason === 'unsupported-transport' ? 'error' : 'no-data');
@@ -117,7 +125,7 @@ export function SeriesLiveRenderer({ liveContext }: SeriesLiveRendererProps) {
     }
 
     void refresh();
-  }, [bindingGate.reason, liveContext.binding.status, refresh, runtimeActive, supportsHttpLivePath]);
+  }, [bindingGate.reason, liveContext.binding.status, refresh, runtimeActive, supportsLivePath]);
 
   useEffect(() => {
     if (!supportsHttpLivePath) {
@@ -128,6 +136,37 @@ export function SeriesLiveRenderer({ liveContext }: SeriesLiveRendererProps) {
       void refresh();
     });
   }, [pollMs, refresh, supportsHttpLivePath, transport]);
+
+  useEffect(() => {
+    if (!supportsWebSocketLivePath) {
+      return undefined;
+    }
+
+    setState('loading');
+    setError(null);
+    return createJsonWebSocketSubscription({
+      endpoint: websocketEndpoint,
+      onMessage: (payload) => {
+        const parsed = parseHttpTimeSeriesSnapshot(payload, complexViewMode);
+        setSnapshot(parsed);
+        setState(deriveSeriesLoadStateFromSnapshot(parsed));
+      },
+      onConnectionState: (state, message) => {
+        if (state === 'connecting' || state === 'reconnecting') {
+          setState('loading');
+          return;
+        }
+        if (state === 'open') {
+          setState('loading');
+          return;
+        }
+        if (state === 'error') {
+          setError(message ?? 'Series websocket connection failed.');
+          setState('error');
+        }
+      },
+    });
+  }, [complexViewMode, supportsWebSocketLivePath, websocketEndpoint]);
 
   const allValues = useMemo(
     () => (snapshot ? snapshot.seriesByChannel.flat() : []),
@@ -143,29 +182,31 @@ export function SeriesLiveRenderer({ liveContext }: SeriesLiveRendererProps) {
         <span className="text-[10px] text-slate-400">{transport ?? 'n/a'}</span>
       </div>
 
-      {!supportsHttpLivePath && (
+      {!supportsLivePath && (
         <p className="mt-2 text-[11px] text-slate-400">
           {liveContext.binding.status === 'configured'
-            ? 'Series live renderer currently supports http_snapshot/http_poll only.'
+            ? 'Series live renderer currently supports http_snapshot/http_poll/websocket.'
             : 'Configure binding transport and endpoint to enable live series rendering.'}
+      </p>
+      )}
+
+      {supportsLivePath && state === 'loading' && (
+        <p className="mt-2 text-[11px] text-sky-300">
+          {supportsWebSocketLivePath ? 'Connecting series websocket...' : 'Loading series snapshot...'}
         </p>
       )}
 
-      {supportsHttpLivePath && state === 'loading' && (
-        <p className="mt-2 text-[11px] text-sky-300">Loading series snapshot...</p>
-      )}
-
-      {supportsHttpLivePath && state === 'error' && (
+      {supportsLivePath && state === 'error' && (
         <p className="mt-2 text-[11px] text-rose-300 break-words">
-          Error: {error ?? 'Series snapshot request failed.'}
+          Error: {error ?? 'Series live request failed.'}
         </p>
       )}
 
-      {supportsHttpLivePath && state === 'no-data' && (
+      {supportsLivePath && state === 'no-data' && (
         <p className="mt-2 text-[11px] text-slate-400">No data in snapshot window yet.</p>
       )}
 
-      {supportsHttpLivePath && state === 'ready' && snapshot && (
+      {supportsLivePath && state === 'ready' && snapshot && (
         <div className="mt-2 space-y-2">
           <div className="text-[10px] text-slate-400">
             channels {snapshot.channelCount} · samples {snapshot.samplesPerChannel}

@@ -35,6 +35,15 @@ describe('known Studio block bindings', () => {
 
   it('uses a consistent phase-1 transport contract across all known blocks', () => {
     for (const binding of STUDIO_KNOWN_BLOCK_BINDINGS) {
+      if (binding.blockTypeId.startsWith('gr::studio::StudioSeriesSink<')) {
+        expect(binding.supportedTransports).toEqual([
+          'http_snapshot',
+          'http_poll',
+          'websocket',
+        ]);
+        continue;
+      }
+
       if (binding.blockTypeId.startsWith('gr::studio::StudioPowerSpectrumSink<')) {
         expect(binding.supportedTransports).toEqual([
           'http_poll',
@@ -60,16 +69,16 @@ describe('known Studio block bindings', () => {
     expect(series).toBeDefined();
 
     const result = resolveStudioBindingFromParameters(series!, {
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18080/snapshot',
-      poll_ms: '250',
+      update_ms: '250',
       channels: '2',
       topic: 'demo',
     });
 
     expect(result).toEqual({
       ok: true,
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18080/snapshot',
       pollMs: 250,
       channels: 2,
@@ -108,20 +117,24 @@ describe('known Studio block bindings', () => {
     });
     expect(unconfigured.status).toBe('unconfigured');
 
-    const invalid = buildStudioBindingView(knownSeriesId, {
+    const websocketConfigured = buildStudioBindingView(knownSeriesId, {
       transport: 'websocket',
       endpoint: 'ws://127.0.0.1:9999',
     });
-    expect(invalid.status).toBe('invalid');
+    expect(websocketConfigured).toMatchObject({
+      status: 'configured',
+      transport: 'websocket',
+      endpoint: 'ws://127.0.0.1:9999',
+    });
 
     const configured = buildStudioBindingView(knownSeriesId, {
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18080/snapshot',
-      poll_ms: '200',
+      update_ms: '200',
     });
     expect(configured).toMatchObject({
       status: 'configured',
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18080/snapshot',
       pollMs: 200,
     });
