@@ -60,17 +60,19 @@ Current supported transport modes for the included blocks:
 
 - `http_snapshot`
 - `http_poll`
+- `websocket`
 
 Reserved for future expansion:
 
 - `zmq_sub`
-- `websocket`
 
 Rules:
 
 - each block family supports only a subset of valid transports
 - do not assume all combinations are valid
 - validate parameters locally, not authoritatively
+
+Websocket transport currently exists for selected sinks only. When adding websocket support to a new sink, follow the implementation checklist in `docs/studio-websocket-integration.md`.
 
 ## Standard parameters
 
@@ -79,6 +81,7 @@ The current registry resolves these parameter names where relevant:
 - `transport`
 - `endpoint`
 - `poll_ms`
+- `update_ms`
 - `sample_rate`
 - `channels`
 - `topic`

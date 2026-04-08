@@ -55,6 +55,12 @@ void testPowerSpectrumRegistered() {
     assert(foundPowerSpectrum);
 }
 
+void testDefaultTransportAndCadence() {
+    gr::studio::StudioPowerSpectrumSink<float> block{};
+    assert(block.transport.value == "websocket");
+    assert(block.update_ms == 10U);
+}
+
 void testFloatSpectrum() {
     gr::studio::StudioPowerSpectrumSink<float> block{};
     configureBlock(block);
@@ -123,6 +129,7 @@ void testComplexSpectrum() {
 
 int main() {
     testPowerSpectrumRegistered();
+    testDefaultTransportAndCadence();
     testFloatSpectrum();
     testDbFloorIsFinite();
     testComplexSpectrum();

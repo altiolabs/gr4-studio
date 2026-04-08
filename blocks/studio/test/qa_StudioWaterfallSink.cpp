@@ -31,7 +31,13 @@ void configureBlock(TBlock& block, float timeSpanSeconds = 1.0F) {
                                  {"autoscale", true},
                                  {"z_min", -10.0F},
                                  {"z_max", 10.0F},
-                             });
+    });
+}
+
+void testDefaultTransportAndCadence() {
+    gr::studio::StudioWaterfallSink<float> block{};
+    assert(block.transport.value == "websocket");
+    assert(block.update_ms == 10U);
 }
 
 void testFloatWaterfall() {
@@ -190,6 +196,7 @@ void testHttpTransportHelpers() {
 } // namespace
 
 int main() {
+    testDefaultTransportAndCadence();
     testFloatWaterfall();
     testManualColorScaleWaterfall();
     testEmptyAndClampedWaterfall();

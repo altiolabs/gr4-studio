@@ -559,9 +559,9 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
 
     PortIn<T> in;
 
-    Annotated<std::string, "transport", Doc<"Data-plane transport mode">, Visible> transport = "http_poll";
+    Annotated<std::string, "transport", Doc<"Data-plane transport mode">, Visible> transport = "websocket";
     Annotated<std::string, "endpoint", Doc<"Transport endpoint URL/path">, Visible> endpoint = "http://127.0.0.1:18085/snapshot";
-    Annotated<std::uint32_t, "update_ms", Doc<"Suggested update interval in milliseconds for http_poll and websocket transports">, Visible> update_ms = 250U;
+    Annotated<std::uint32_t, "update_ms", Doc<"Suggested update interval in milliseconds for http_poll and websocket transports">, Visible> update_ms = 10U;
     Annotated<gr::Size_t, "fft_size", Doc<"FFT size used for each spectrum frame">, Visible> fft_size = 1024UZ;
     Annotated<gr::Size_t, "num_averages", Doc<"Number of FFT frames averaged into each history row">, Visible> num_averages = 8UZ;
     Annotated<float, "time_span", Doc<"Total waterfall history span in seconds (quantized to fft_size using sample_rate)">, Visible> time_span = 256.0F;
@@ -609,7 +609,6 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
     using Block<StudioWaterfallSink<T>>::Block;
 
     void start() {
-        waterfall_ws::traceWaterfallWebSocketTransport("StudioWaterfallSink::start");
         _window.configure(
             static_cast<std::size_t>(fft_size),
             static_cast<std::size_t>(num_averages),
@@ -623,7 +622,6 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
     }
 
     void stop() {
-        waterfall_ws::traceWaterfallWebSocketTransport("StudioWaterfallSink::stop");
         _http.stop();
         _websocket.stop();
     }
@@ -716,26 +714,14 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
 
     [[nodiscard]] std::string snapshotJson() const { return _window.snapshotJson(); }
 
-private:
+    private:
     void startTransport() {
-        {
-            std::ostringstream os;
-            os << "StudioWaterfallSink::startTransport transport=" << transport.value
-               << " endpoint=" << endpoint.value;
-            waterfall_ws::traceWaterfallWebSocketTransport(os.str());
-        }
         _http.stop();
         _websocket.stop();
+        _lastWebSocketPublishAt = std::chrono::steady_clock::time_point{};
 
         if (detail::isWebSocketTransport(transport.value)) {
             const auto parsed = detail::parseHttpEndpoint(endpoint.value);
-            {
-                std::ostringstream os;
-                os << "StudioWaterfallSink websocket parsed host=" << parsed.host
-                   << " port=" << parsed.port
-                   << " path=" << parsed.path;
-                waterfall_ws::traceWaterfallWebSocketTransport(os.str());
-            }
             if (!_websocket.start(parsed.host, parsed.port, parsed.path)) {
                 std::ostringstream message;
                 message << "StudioWaterfallSink failed to start websocket transport endpoint at ";
@@ -747,7 +733,6 @@ private:
                 std::fprintf(stderr, "%s\n", message.str().c_str());
                 throw gr::exception(message.str());
             }
-            waterfall_ws::traceWaterfallWebSocketTransport("StudioWaterfallSink websocket transport started");
             return;
         }
 
@@ -759,12 +744,12 @@ private:
         if (!_http.start(parsed, [this]() { return _window.snapshotJson(); })) {
             throw gr::exception("StudioWaterfallSink failed to start HTTP transport endpoint.");
         }
-        waterfall_ws::traceWaterfallWebSocketTransport("StudioWaterfallSink HTTP transport started");
     }
 
     detail::WaterfallWindow<T> _window{};
     detail::SnapshotHttpService _http{};
     waterfall_ws::WaterfallWebSocketService _websocket{};
+    std::chrono::steady_clock::time_point _lastWebSocketPublishAt{};
 
     void syncInputPortConstraints() {
         const auto chunkSize = static_cast<std::size_t>(fft_size);
@@ -776,6 +761,14 @@ private:
         if (!_websocket.isRunning()) {
             return;
         }
+
+        const auto now = std::chrono::steady_clock::now();
+        const auto interval = std::chrono::milliseconds(std::max<std::uint32_t>(1U, update_ms));
+        if (_lastWebSocketPublishAt != std::chrono::steady_clock::time_point{} &&
+            now - _lastWebSocketPublishAt < interval) {
+            return;
+        }
+        _lastWebSocketPublishAt = now;
 
         _websocket.publishText(_window.snapshotJson());
     }

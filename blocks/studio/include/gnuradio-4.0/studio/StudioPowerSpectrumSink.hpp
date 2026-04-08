@@ -959,9 +959,9 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
 
     PortIn<T> in;
 
-    Annotated<std::string, "transport", Doc<"Data-plane transport mode">, Visible> transport = "http_poll";
+    Annotated<std::string, "transport", Doc<"Data-plane transport mode">, Visible> transport = "websocket";
     Annotated<std::string, "endpoint", Doc<"Transport endpoint URL/path">, Visible> endpoint = "http://127.0.0.1:18085/snapshot";
-    Annotated<std::uint32_t, "update_ms", Doc<"Suggested update interval in milliseconds for http_poll and websocket transports">, Visible> update_ms = 250U;
+    Annotated<std::uint32_t, "update_ms", Doc<"Suggested update interval in milliseconds for http_poll and websocket transports">, Visible> update_ms = 10U;
     Annotated<gr::Size_t, "fft_size", Doc<"FFT size used for each spectrum frame">, Visible> fft_size = 1024UZ;
     Annotated<gr::Size_t, "num_averages", Doc<"Number of FFT frames averaged into the displayed spectrum">, Visible> num_averages = 8UZ;
     Annotated<std::string, "window", Doc<gr::algorithm::window::TypeNames>, Visible> window = std::string(magic_enum::enum_name(gr::algorithm::window::Type::BlackmanHarris));

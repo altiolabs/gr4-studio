@@ -35,11 +35,6 @@
 
 namespace gr::studio::waterfall_ws {
 
-inline void traceWaterfallWebSocketTransport(std::string_view message) {
-    std::fprintf(stderr, "[StudioWebSocket] %.*s\n", static_cast<int>(message.size()), message.data());
-    std::fflush(stderr);
-}
-
 inline std::string toLowerAscii(std::string_view text) {
     std::string out{text};
     std::ranges::transform(out, out.begin(), [](unsigned char c) {
@@ -100,11 +95,6 @@ public:
     WaterfallWebSocketService& operator=(WaterfallWebSocketService&&) = delete;
 
     ~WaterfallWebSocketService() {
-        std::ostringstream os;
-        os << "dtor this=" << static_cast<const void*>(this)
-           << " listenFd=" << _listenFd
-           << " clientFd=" << _clientFd;
-        traceWaterfallWebSocketTransport(os.str());
         stop();
     }
 
@@ -121,14 +111,8 @@ public:
         _pendingFrame.clear();
         _pendingFrameKind = WebSocketFrameKind::Text;
 
-        std::ostringstream startMessage;
-        startMessage << "start this=" << static_cast<const void*>(this)
-                     << " host=" << _host << " port=" << _port << " path=" << _path;
-        traceWaterfallWebSocketTransport(startMessage.str());
-
 #if defined(_WIN32)
         _lastError = "websocket transport is not implemented on this platform";
-        traceWaterfallWebSocketTransport(_lastError);
         return false;
 #else
         addrinfo hints{};
@@ -140,7 +124,6 @@ public:
         const std::string portText = std::to_string(_port);
         if (const int rc = ::getaddrinfo(_host.empty() ? nullptr : _host.c_str(), portText.c_str(), &hints, &resolved); rc != 0 || resolved == nullptr) {
             _lastError = "getaddrinfo failed for websocket endpoint " + _host + ":" + portText + " (" + std::string(::gai_strerror(rc)) + ")";
-            traceWaterfallWebSocketTransport(_lastError);
             return false;
         }
 
@@ -148,7 +131,6 @@ public:
             int listenFd = ::socket(candidate->ai_family, candidate->ai_socktype, candidate->ai_protocol);
             if (listenFd < 0) {
                 _lastError = "socket() failed for websocket endpoint " + _host + ":" + portText + " (" + std::string(std::strerror(errno)) + ")";
-                traceWaterfallWebSocketTransport(_lastError);
                 continue;
             }
 
@@ -159,14 +141,12 @@ public:
 
             if (::bind(listenFd, candidate->ai_addr, candidate->ai_addrlen) != 0) {
                 _lastError = "bind() failed for websocket endpoint " + _host + ":" + portText + _path + " (" + std::string(std::strerror(errno)) + ")";
-                traceWaterfallWebSocketTransport(_lastError);
                 closeSocket(listenFd);
                 continue;
             }
 
             if (::listen(listenFd, 1) != 0) {
                 _lastError = "listen() failed for websocket endpoint " + _host + ":" + portText + _path + " (" + std::string(std::strerror(errno)) + ")";
-                traceWaterfallWebSocketTransport(_lastError);
                 closeSocket(listenFd);
                 continue;
             }
@@ -179,7 +159,6 @@ public:
         if (_listenFd < 0) {
             if (_lastError.empty()) {
                 _lastError = "Unable to bind websocket endpoint " + _host + ":" + portText + _path;
-                traceWaterfallWebSocketTransport(_lastError);
             }
             return false;
         }
@@ -200,37 +179,23 @@ public:
             }
         }
 
-        std::ostringstream boundMessage;
-        boundMessage << "bound this=" << static_cast<const void*>(this)
-                     << " host=" << _host << " port=" << _boundPort << " path=" << _path
-                     << " listenFd=" << _listenFd;
-        traceWaterfallWebSocketTransport(boundMessage.str());
-
         _acceptThread = std::thread([this]() {
             try {
-                traceWaterfallWebSocketTransport("acceptLoop thread start");
                 acceptLoop();
-                traceWaterfallWebSocketTransport("acceptLoop thread exit");
             } catch (const std::exception& error) {
-                std::ostringstream os;
-                os << "acceptLoop thread exception: " << error.what();
-                traceWaterfallWebSocketTransport(os.str());
+                _lastError = std::string("acceptLoop thread exception: ") + error.what();
             } catch (...) {
-                traceWaterfallWebSocketTransport("acceptLoop thread exception: unknown");
+                _lastError = "acceptLoop thread exception: unknown";
             }
         });
 
         _senderThread = std::thread([this]() {
             try {
-                traceWaterfallWebSocketTransport("sendLoop thread start");
                 sendLoop();
-                traceWaterfallWebSocketTransport("sendLoop thread exit");
             } catch (const std::exception& error) {
-                std::ostringstream os;
-                os << "sendLoop thread exception: " << error.what();
-                traceWaterfallWebSocketTransport(os.str());
+                _lastError = std::string("sendLoop thread exception: ") + error.what();
             } catch (...) {
-                traceWaterfallWebSocketTransport("sendLoop thread exception: unknown");
+                _lastError = "sendLoop thread exception: unknown";
             }
         });
         return true;
@@ -238,11 +203,6 @@ public:
     }
 
     void stop() {
-        std::ostringstream stopMessage;
-        stopMessage << "stop this=" << static_cast<const void*>(this)
-                    << " listenFd=" << _listenFd << " clientFd=" << _clientFd;
-        traceWaterfallWebSocketTransport(stopMessage.str());
-
         {
             std::lock_guard lock(_mutex);
             _stopping = true;
@@ -256,14 +216,11 @@ public:
         closeCurrentClient();
 
         if (_acceptThread.joinable()) {
-            traceWaterfallWebSocketTransport("joining acceptLoop thread");
             _acceptThread.join();
         }
         if (_senderThread.joinable()) {
-            traceWaterfallWebSocketTransport("joining sendLoop thread");
             _senderThread.join();
         }
-        traceWaterfallWebSocketTransport("stop complete");
     }
 
     [[nodiscard]] bool isRunning() const noexcept { return _listenFd >= 0; }
@@ -332,7 +289,6 @@ private:
     bool performHandshake(int fd) const {
         const auto fail = [this](std::string reason) {
             _lastError = std::move(reason);
-            traceWaterfallWebSocketTransport(_lastError);
             return false;
         };
 
@@ -426,7 +382,6 @@ private:
             int clientFd = ::accept(_listenFd, reinterpret_cast<sockaddr*>(&clientAddr), &clientAddrLen);
             if (clientFd < 0) {
                 if (_stopping) {
-                    traceWaterfallWebSocketTransport("acceptLoop stop requested");
                     break;
                 }
                 continue;
@@ -434,7 +389,6 @@ private:
 
             configureSocket(clientFd);
             if (!performHandshake(clientFd)) {
-                traceWaterfallWebSocketTransport("acceptLoop handshake failed");
                 closeSocket(clientFd);
                 continue;
             }
@@ -449,7 +403,6 @@ private:
                     closeSocket(_clientFd);
                 }
                 _clientFd = clientFd;
-                traceWaterfallWebSocketTransport("acceptLoop client connected");
                 _cv.notify_all();
             }
         }
@@ -464,7 +417,6 @@ private:
                 std::unique_lock lock(_mutex);
                 _cv.wait(lock, [this]() { return _stopping || (_clientFd >= 0 && _hasPendingFrame); });
                 if (_stopping) {
-                    traceWaterfallWebSocketTransport("sendLoop stop requested");
                     break;
                 }
                 if (_clientFd < 0 || !_hasPendingFrame) {
