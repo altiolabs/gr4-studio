@@ -73,6 +73,7 @@ Rules:
 - validate parameters locally, not authoritatively
 
 Websocket transport currently exists for selected sinks only. When adding websocket support to a new sink, follow the implementation checklist in `docs/studio-websocket-integration.md`.
+For websocket-capable sinks, `update_ms` is the live cadence control used by the native send path.
 
 ## Standard parameters
 

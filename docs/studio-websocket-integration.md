@@ -27,12 +27,14 @@ Current websocket-enabled Studio sinks:
 8. Keep transport-specific state inside the block or a sink-local helper.
 9. Emit one complete frame per websocket message.
 10. Prefer latest-frame-wins behavior over unbounded queueing.
+11. Use `update_ms` as the live websocket cadence gate if the sink needs explicit rate limiting.
 
 ## Frame format guidance
 
 - If the payload is naturally tabular numeric data, a binary websocket frame is usually the best fit.
 - If the existing payload is already canonical JSON and the update rate is moderate, a JSON websocket frame is acceptable.
 - Keep the frame contract sink-specific; do not generalize all websocket sinks into a single shared payload format.
+- If the sink exposes `update_ms`, wire it into the websocket send path in the same way as the existing Studio power spectrum and waterfall sinks.
 
 ## Frontend checklist
 
@@ -55,5 +57,6 @@ Current websocket-enabled Studio sinks:
 
 - Power spectrum uses binary websocket frames for dense numeric spectra.
 - Waterfall uses JSON websocket frames for bounded FFT-history snapshots.
+- Both use `update_ms` as the live send cadence while preserving a first-frame-immediate startup path.
 
 Use those two blocks as the reference implementations when adding websocket support to another sink family.
