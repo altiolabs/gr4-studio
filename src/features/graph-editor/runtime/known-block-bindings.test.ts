@@ -35,6 +35,31 @@ describe('known Studio block bindings', () => {
 
   it('uses a consistent phase-1 transport contract across all known blocks', () => {
     for (const binding of STUDIO_KNOWN_BLOCK_BINDINGS) {
+      if (binding.blockTypeId.startsWith('gr::studio::StudioSeriesSink<')) {
+        expect(binding.supportedTransports).toEqual([
+          'http_snapshot',
+          'http_poll',
+          'websocket',
+        ]);
+        continue;
+      }
+
+      if (binding.blockTypeId.startsWith('gr::studio::StudioPowerSpectrumSink<')) {
+        expect(binding.supportedTransports).toEqual([
+          'http_poll',
+          'websocket',
+        ]);
+        continue;
+      }
+
+      if (binding.blockTypeId.startsWith('gr::studio::StudioWaterfallSink<')) {
+        expect(binding.supportedTransports).toEqual([
+          'http_poll',
+          'websocket',
+        ]);
+        continue;
+      }
+
       expect(binding.supportedTransports).toEqual(STUDIO_PHASE1_SUPPORTED_TRANSPORTS);
     }
   });
@@ -44,18 +69,18 @@ describe('known Studio block bindings', () => {
     expect(series).toBeDefined();
 
     const result = resolveStudioBindingFromParameters(series!, {
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18080/snapshot',
-      poll_ms: '250',
+      update_ms: '250',
       channels: '2',
       topic: 'demo',
     });
 
     expect(result).toEqual({
       ok: true,
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18080/snapshot',
-      pollMs: 250,
+      updateMs: 250,
       channels: 2,
       topic: 'demo',
       sampleRate: undefined,
@@ -92,22 +117,26 @@ describe('known Studio block bindings', () => {
     });
     expect(unconfigured.status).toBe('unconfigured');
 
-    const invalid = buildStudioBindingView(knownSeriesId, {
+    const websocketConfigured = buildStudioBindingView(knownSeriesId, {
       transport: 'websocket',
       endpoint: 'ws://127.0.0.1:9999',
     });
-    expect(invalid.status).toBe('invalid');
+    expect(websocketConfigured).toMatchObject({
+      status: 'configured',
+      transport: 'websocket',
+      endpoint: 'ws://127.0.0.1:9999',
+    });
 
     const configured = buildStudioBindingView(knownSeriesId, {
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18080/snapshot',
-      poll_ms: '200',
+      update_ms: '200',
     });
     expect(configured).toMatchObject({
       status: 'configured',
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18080/snapshot',
-      pollMs: 200,
+      updateMs: 200,
     });
 
     const complexSeriesConfigured = buildStudioBindingView('gr::studio::StudioSeriesSink<complex<float32>>', {
@@ -145,13 +174,13 @@ describe('known Studio block bindings', () => {
       payloadFormat: 'dataset-xy-json-v1',
       transport: 'http_poll',
       endpoint: 'http://127.0.0.1:18084/snapshot',
-      pollMs: 100,
+      updateMs: 100,
     });
 
     const powerSpectrumConfigured = buildStudioBindingView('gr::studio::StudioPowerSpectrumSink<float32>', {
-      transport: 'http_snapshot',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18086/snapshot',
-      poll_ms: '150',
+      update_ms: '150',
       sample_rate: '48000',
       topic: 'spectrum',
     });
@@ -160,16 +189,16 @@ describe('known Studio block bindings', () => {
       status: 'configured',
       family: 'series2d',
       payloadFormat: 'dataset-xy-json-v1',
-      transport: 'http_snapshot',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18086/snapshot',
       sampleRate: 48000,
       topic: 'spectrum',
     });
 
     const waterfallConfigured = buildStudioBindingView('gr::studio::StudioWaterfallSink<float32>', {
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18087/snapshot',
-      poll_ms: '200',
+      update_ms: '200',
       sample_rate: '48000',
       topic: 'waterfall',
     });
@@ -177,8 +206,9 @@ describe('known Studio block bindings', () => {
       status: 'configured',
       family: 'waterfall',
       payloadFormat: 'waterfall-spectrum-json-v1',
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18087/snapshot',
+      updateMs: 200,
       sampleRate: 48000,
       topic: 'waterfall',
     });
@@ -211,7 +241,7 @@ describe('known Studio block bindings', () => {
       endpoint: 'http://127.0.0.1:18083/snapshot',
       sampleRate: 48000,
       channels: 2,
-      pollMs: 120,
+      updateMs: 120,
     });
   });
 });

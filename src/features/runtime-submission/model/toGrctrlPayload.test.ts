@@ -79,8 +79,8 @@ function makeStudioSeriesSinkDetails(): BlockDetails {
         valueKind: 'scalar',
       },
       {
-        name: 'poll_ms',
-        label: 'poll_ms',
+        name: 'update_ms',
+        label: 'update_ms',
         defaultValue: '250',
         mutable: true,
         readOnly: false,
@@ -194,7 +194,7 @@ describe('toGrctrlContentSubmission', () => {
 
     expect(submission.content).toContain('autoscale: true');
     expect(submission.content).toContain('endpoint: "http://127.0.0.1:18080/snapshot"');
-    expect(submission.content).toContain('poll_ms: 250');
+    expect(submission.content).toContain('update_ms: 250');
   });
 
   it('produces deterministic output and hash for equivalent documents', () => {

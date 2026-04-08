@@ -3,6 +3,7 @@
 #include <gnuradio-4.0/Block.hpp>
 #include <gnuradio-4.0/BlockRegistry.hpp>
 
+#include <chrono>
 #include <httplib.h>
 
 #include <algorithm>
@@ -21,6 +22,8 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#include <gnuradio-4.0/studio/StudioWebSocketTransport.hpp>
 
 namespace gr::studio {
 
@@ -266,6 +269,10 @@ inline bool isHttpTransport(const std::string& transport) {
     return transport == "http_snapshot" || transport == "http_poll";
 }
 
+inline bool isWebSocketTransport(const std::string& transport) {
+    return transport == "websocket";
+}
+
 } // namespace detail
 
 GR_REGISTER_BLOCK("gr::studio::StudioSeriesSink", gr::studio::StudioSeriesSink, ([T]), [ float, std::complex<float> ])
@@ -278,7 +285,7 @@ struct StudioSeriesSink : Block<StudioSeriesSink<T>> {
 
     Annotated<std::string, "transport", Doc<"Data-plane transport mode">, Visible> transport = "http_poll";
     Annotated<std::string, "endpoint", Doc<"Transport endpoint URL/path">, Visible> endpoint = "http://127.0.0.1:18080/snapshot";
-    Annotated<std::uint32_t, "poll_ms", Doc<"Suggested poll interval in milliseconds for poll transports">, Visible> poll_ms = 250U;
+    Annotated<std::uint32_t, "update_ms", Doc<"Suggested update interval in milliseconds for http_poll and websocket transports">, Visible> update_ms = 250U;
     Annotated<gr::Size_t, "window_size", Doc<"Samples per channel kept in memory">, Visible> window_size = 1024UZ;
     Annotated<gr::Size_t, "channels", Doc<"Interleaved input channel count">, Visible> channels = 1UZ;
     Annotated<std::string, "plot_title", Doc<"Optional semantic plot title for Studio Application">, Visible> plot_title = "";
@@ -297,7 +304,7 @@ struct StudioSeriesSink : Block<StudioSeriesSink<T>> {
         in,
         transport,
         endpoint,
-        poll_ms,
+        update_ms,
         window_size,
         channels,
         plot_title,
@@ -320,6 +327,7 @@ struct StudioSeriesSink : Block<StudioSeriesSink<T>> {
 
     void stop() {
         _http.stop();
+        _websocket.stop();
     }
 
     void settingsChanged(const property_map&, const property_map& new_settings) {
@@ -335,6 +343,7 @@ struct StudioSeriesSink : Block<StudioSeriesSink<T>> {
     [[nodiscard]] work::Status processBulk(InputSpanLike auto& input) noexcept {
         if (!input.empty()) {
             _window.pushInterleaved(std::span<const T>(input.data(), input.size()));
+            publishWebSocketFrame();
             std::ignore = input.consume(input.size());
         }
         return work::Status::OK;
@@ -342,8 +351,27 @@ struct StudioSeriesSink : Block<StudioSeriesSink<T>> {
 
 private:
     void startTransport() {
+        _http.stop();
+        _websocket.stop();
+        _lastWebSocketPublishAt = {};
+
+        if (detail::isWebSocketTransport(transport.value)) {
+            const auto parsed = detail::parseHttpEndpoint(endpoint.value);
+            if (!_websocket.start(parsed.host, parsed.port, parsed.path)) {
+                std::ostringstream message;
+                message << "StudioSeriesSink failed to start websocket transport endpoint at ";
+                message << endpoint.value << " (parsed host=" << parsed.host << ", port=" << parsed.port << ", path=" << parsed.path << ")";
+                const auto reason = _websocket.lastErrorMessage();
+                if (!reason.empty()) {
+                    message << ": " << reason;
+                }
+                throw gr::exception(message.str());
+            }
+            return;
+        }
+
         if (!detail::isHttpTransport(transport.value)) {
-            throw gr::exception("StudioSeriesSink currently supports only http_snapshot and http_poll transports.");
+            throw gr::exception("StudioSeriesSink currently supports only http_snapshot, http_poll, and websocket transports.");
         }
 
         const auto parsed = detail::parseHttpEndpoint(endpoint.value);
@@ -354,6 +382,24 @@ private:
 
     detail::SeriesWindow<T>     _window{};
     detail::SnapshotHttpService _http{};
+    websocket_transport::SnapshotWebSocketService _websocket{};
+    std::chrono::steady_clock::time_point _lastWebSocketPublishAt{};
+
+    void publishWebSocketFrame() {
+        if (!_websocket.isRunning()) {
+            return;
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        const auto interval = std::chrono::milliseconds(std::max<std::uint32_t>(1U, update_ms));
+        if (_lastWebSocketPublishAt != std::chrono::steady_clock::time_point{} &&
+            now - _lastWebSocketPublishAt < interval) {
+            return;
+        }
+
+        _lastWebSocketPublishAt = now;
+        _websocket.publishText(_window.snapshotJson());
+    }
 };
 
 } // namespace gr::studio

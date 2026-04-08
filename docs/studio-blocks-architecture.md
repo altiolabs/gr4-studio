@@ -60,17 +60,20 @@ Current supported transport modes for the included blocks:
 
 - `http_snapshot`
 - `http_poll`
+- `websocket`
 
 Reserved for future expansion:
 
 - `zmq_sub`
-- `websocket`
 
 Rules:
 
 - each block family supports only a subset of valid transports
 - do not assume all combinations are valid
 - validate parameters locally, not authoritatively
+
+Websocket transport currently exists for selected sinks only. When adding websocket support to a new sink, follow the implementation checklist in `docs/studio-websocket-integration.md`.
+For websocket-capable sinks, `update_ms` is the live cadence control used by the native send path.
 
 ## Standard parameters
 
@@ -79,6 +82,7 @@ The current registry resolves these parameter names where relevant:
 - `transport`
 - `endpoint`
 - `poll_ms`
+- `update_ms`
 - `sample_rate`
 - `channels`
 - `topic`
@@ -104,7 +108,7 @@ Where HTTP snapshot/polling is used, model behavior after `HttpTimeSeriesSink` f
 Studio binding resolves the block family and payload format.
 Rendering is handled separately:
 
-- scalar series -> live `series` renderer path
+- `StudioSeriesSink` uses the live `series` renderer path for JSON snapshots and websocket frames
 - `series2d-xy-json-v1` and `dataset-xy-json-v1` -> XY/vector plot path
 - `StudioPowerSpectrumSink` uses the `dataset-xy-json-v1` path for FFT-based spectrum rendering
 - `StudioPowerSpectrumSink` with `persistence=true` also uses the `dataset-xy-json-v1` path, but routes to the phosphor spectrum renderer with a persistent glow behind the live trace. The phosphor look is tuned via `phosphor_intensity` and `phosphor_decay_ms`.

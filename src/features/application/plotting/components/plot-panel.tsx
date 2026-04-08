@@ -15,5 +15,5 @@ export function PlotPanel({ spec, binding, executionState }: PlotPanelProps) {
     executionState,
   });
 
-  return <PlotSurface spec={spec.view} frame={frame} />;
+  return <PlotSurface spec={spec.view} frame={frame} binding={binding} />;
 }

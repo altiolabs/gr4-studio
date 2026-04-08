@@ -45,6 +45,12 @@ export function resolveRuntimeSettingsAvailability(params: {
   };
 }
 
+const LIVE_UPDATABLE_SETTING_NAMES = new Set(['poll_ms', 'update_ms', 'persistence', 'phosphor_intensity', 'phosphor_decay_ms']);
+
+export function shouldApplyRuntimeSettingImmediately(name: string): boolean {
+  return LIVE_UPDATABLE_SETTING_NAMES.has(name.trim().toLowerCase());
+}
+
 export function toRuntimeSettingsErrorMessage(error: unknown): string {
   if (error instanceof ApiClientError) {
     if (error.code === 'NETWORK') {

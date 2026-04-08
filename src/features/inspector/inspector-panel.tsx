@@ -10,6 +10,7 @@ import { useBlockDetailsQuery } from './hooks/use-block-details-query';
 import { useRuntimeBlockSettings } from './hooks/use-runtime-block-settings';
 import {
   resolveRuntimeSettingsAvailability,
+  shouldApplyRuntimeSettingImmediately,
   toRuntimeSettingsErrorMessage,
 } from './runtime-settings-model';
 import { useEditorStore } from '../graph-editor/store/editorStore';
@@ -159,6 +160,7 @@ function RuntimeSettingsCard({
         patch: {
           [name]: value,
         },
+        mode: shouldApplyRuntimeSettingImmediately(name) ? 'immediate' : 'staged',
       });
     } catch (error) {
       setSaveError(toRuntimeSettingsErrorMessage(error));
@@ -565,10 +567,10 @@ function SelectionTab({
               </div>
             )}
 
-            {typeof studioBinding.pollMs === 'number' && (
+            {typeof studioBinding.updateMs === 'number' && (
               <div>
-                <SummaryLabel>Poll Interval (ms)</SummaryLabel>
-                <SummaryValue>{String(studioBinding.pollMs)}</SummaryValue>
+                <SummaryLabel>Update Interval (ms)</SummaryLabel>
+                <SummaryValue>{String(studioBinding.updateMs)}</SummaryValue>
               </div>
             )}
 

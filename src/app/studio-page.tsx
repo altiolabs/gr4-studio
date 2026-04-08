@@ -46,6 +46,7 @@ import { GlobalSessionsDrawer } from '../features/runtime-session/components/glo
 import { useRuntimeSessionStore } from '../features/runtime-session/store/runtimeSessionStore';
 import { setBlockSettings } from '../lib/api/block-settings';
 import { buildCurrentGraphSubmissionFromEditorSnapshot } from '../features/runtime-submission/model/current-graph-submission';
+import { shouldApplyRuntimeSettingImmediately } from '../features/inspector/runtime-settings-model';
 import { WorkspaceView, type WorkspacePanelViewModel } from '../features/workspace/workspace-view';
 import { resolveGraphVariables } from '../features/variables/model/resolveGraphVariables';
 import { deriveDefaultStudioPanelsFromNodes } from '../features/workspace/model/panel-derivation';
@@ -454,7 +455,7 @@ export function StudioPage() {
         bindingStatus: bindingView.status,
         bindingTransport: bindingView.transport,
         bindingEndpoint: bindingView.endpoint,
-        bindingPollMs: bindingView.pollMs,
+        bindingUpdateMs: bindingView.updateMs,
       };
     });
   }, [blockDetailsByType, controlWidgetRuntime, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes, resolvedGraph]);
@@ -475,6 +476,19 @@ export function StudioPage() {
 
     let cancelled = false;
     const pushResolvedValues = async () => {
+      const hasWebSocketBinding = nodes.some((node) => {
+        const resolvedParameters = resolvedGraph.parametersByNodeId[node.instanceId];
+        const transportResolved = resolvedParameters?.transport;
+        if (transportResolved?.state !== 'resolved') {
+          return false;
+        }
+        return typeof transportResolved.value === 'string' && transportResolved.value.trim().toLowerCase() === 'websocket';
+      });
+
+      if (hasWebSocketBinding) {
+        return;
+      }
+
       const updates = nodes.flatMap((node) => {
         const blockDetails = blockDetailsByType.get(node.blockTypeId);
         if (!blockDetails) {
@@ -489,6 +503,9 @@ export function StudioPage() {
         const patch: Record<string, string | number | boolean | null> = {};
         blockDetails.parameters.forEach((parameter) => {
           if (parameter.readOnly || !parameter.mutable) {
+            return;
+          }
+          if (!shouldApplyRuntimeSettingImmediately(parameter.name)) {
             return;
           }
           const resolvedParameter = resolvedParameters[parameter.name];

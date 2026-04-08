@@ -24,7 +24,7 @@ export function isSupportedSeriesBinding(binding: WorkspaceLiveBindingInfo): {
   if (!endpoint) {
     return { supported: false, reason: 'missing-endpoint' };
   }
-  if (transport !== 'http_snapshot' && transport !== 'http_poll') {
+  if (transport !== 'http_snapshot' && transport !== 'http_poll' && transport !== 'websocket') {
     return { supported: false, reason: 'unsupported-transport' };
   }
   return { supported: true };

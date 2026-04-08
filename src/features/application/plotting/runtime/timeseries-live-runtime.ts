@@ -6,7 +6,6 @@ import {
 import {
   createSeriesPollSubscription,
   normalizeSeriesPollMs,
-  isSupportedSeriesBinding,
 } from '../../../workspace/renderers/series-live-renderer-model';
 import { hasRenderableImage, hasRenderableSeries } from '../components/plot-visible-state';
 import type { PlotDataFrame, PlotPanelSpec, PlotRuntimeBinding, PlotSeriesFrame } from '../model/types';
@@ -17,6 +16,15 @@ import {
   parseHttpDatasetXySnapshot,
   parseHttpVectorSnapshot,
 } from './vector-frame';
+import {
+  createPowerSpectrumWebSocketSubscription,
+  mapPowerSpectrumWebSocketFrameToSeriesFrame,
+  normalizePowerSpectrumWebSocketEndpoint,
+} from './power-spectrum-websocket-runtime';
+import {
+  createJsonWebSocketSubscription,
+  normalizeJsonWebSocketEndpoint,
+} from './json-websocket-runtime';
 import { mapWaterfallSnapshotToImage, parseHttpWaterfallSnapshot } from './waterfall-frame';
 
 const PLOT_PUBLISH_MS = 120;
@@ -42,10 +50,19 @@ type ParsedLivePayload =
       image: NonNullable<PlotDataFrame['image']>;
     };
 
+type PendingWebSocketFrame = {
+  payload: ParsedLivePayload;
+  liveIngressFpsHz: number | null;
+  emittedAtMs: number;
+  statusMessage: string;
+};
+
 export type BindingFailure = {
   errorKind: 'invalid-binding';
   message: string;
 };
+
+export type LiveTransportMode = 'http' | 'websocket' | 'unsupported';
 
 export function deriveBindingFailureMessage(params: {
   status: PlotRuntimeBinding['status'];
@@ -61,6 +78,35 @@ export function deriveBindingFailureMessage(params: {
     return 'Missing endpoint for runtime plotting.';
   }
   return null;
+}
+
+export function resolveLiveTransportMode(binding: PlotRuntimeBinding): LiveTransportMode {
+  if (binding.status !== 'configured') {
+    return 'unsupported';
+  }
+  if (binding.transport === 'websocket') {
+    return 'websocket';
+  }
+  if (binding.transport === 'http_snapshot' || binding.transport === 'http_poll') {
+    return 'http';
+  }
+  return 'unsupported';
+}
+
+export function deriveWebSocketIngressFps(params: {
+  previousArrivalMs: number | null;
+  previousFpsHz: number | null;
+  nowMs: number;
+}): number | null {
+  if (params.previousArrivalMs === null) {
+    return params.previousFpsHz;
+  }
+  const elapsedMs = params.nowMs - params.previousArrivalMs;
+  if (elapsedMs <= 0) {
+    return params.previousFpsHz;
+  }
+  const instantFps = 1000 / elapsedMs;
+  return params.previousFpsHz === null ? instantFps : params.previousFpsHz * 0.75 + instantFps * 0.25;
 }
 
 export function deriveBindingFailure(params: {
@@ -345,13 +391,34 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
   const publishWindowStartedAtRef = useRef(typeof performance !== 'undefined' ? performance.now() : Date.now());
   const pendingNoDataTimeoutRef = useRef<number | null>(null);
   const pendingNoDataFrameRef = useRef<PlotDataFrame | null>(null);
+  const websocketStatsRef = useRef<{
+    lastArrivalMs: number | null;
+    liveIngressFpsHz: number | null;
+    lastSeq: number | null;
+  }>({
+    lastArrivalMs: null,
+    liveIngressFpsHz: null,
+    lastSeq: null,
+  });
+  const websocketPendingFrameRef = useRef<PendingWebSocketFrame | null>(null);
+  const websocketRenderHandleRef = useRef<number | null>(null);
 
   const endpoint = binding.endpoint?.trim() ?? '';
-  const bindingGate = isSupportedSeriesBinding(binding);
+  const powerSpectrumWebSocketEndpoint = normalizePowerSpectrumWebSocketEndpoint(endpoint);
+  const seriesWebSocketEndpoint = normalizeJsonWebSocketEndpoint(endpoint);
+  const waterfallWebSocketEndpoint = normalizeJsonWebSocketEndpoint(endpoint);
   const runtimeActive = executionState === 'running';
-  const supportsHttpLivePath = bindingGate.supported && runtimeActive;
-  const pollMs = normalizeSeriesPollMs(binding.pollMs);
+  const transportMode = resolveLiveTransportMode(binding);
   const expectedContract = resolvePayloadContract(spec.source.payloadFormat);
+  const hasEndpoint = endpoint.length > 0;
+  const supportsHttpLivePath = transportMode === 'http' && runtimeActive && hasEndpoint;
+  const supportsSeriesWebSocketLivePath =
+    transportMode === 'websocket' && runtimeActive && hasEndpoint && expectedContract === 'series-window-json-v1';
+  const supportsWaterfallWebSocketLivePath =
+    transportMode === 'websocket' && runtimeActive && hasEndpoint && expectedContract === 'waterfall-spectrum-json-v1';
+  const supportsPowerSpectrumWebSocketLivePath =
+    transportMode === 'websocket' && runtimeActive && hasEndpoint && expectedContract === 'dataset-xy-json-v1';
+  const updateMs = normalizeSeriesPollMs(binding.updateMs);
 
   useEffect(() => {
     fetchGenerationRef.current += 1;
@@ -428,45 +495,453 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
         transport: binding.transport,
         endpoint,
       });
-      controllerRef.current.setLoading();
+      controllerRef.current.setLoading(`Connecting ${binding.transport}…`);
       void refresh();
+      return;
+    }
+
+    if (supportsPowerSpectrumWebSocketLivePath) {
+      tracePlotDiagnostic('binding-route', {
+        panelId: spec.panelId,
+        contract: expectedContract,
+        transport: binding.transport,
+        endpoint: powerSpectrumWebSocketEndpoint,
+        mode: 'websocket',
+      });
+      controllerRef.current.setLoading(`Connecting websocket to ${powerSpectrumWebSocketEndpoint}…`);
+      return;
+    }
+
+    if (supportsWaterfallWebSocketLivePath) {
+      tracePlotDiagnostic('binding-route', {
+        panelId: spec.panelId,
+        contract: expectedContract,
+        transport: binding.transport,
+        endpoint: waterfallWebSocketEndpoint,
+        mode: 'websocket',
+      });
+      controllerRef.current.setLoading(`Connecting websocket to ${waterfallWebSocketEndpoint}…`);
       return;
     }
 
     fetchGenerationRef.current += 1;
     controllerRef.current.reset();
-    if (!runtimeActive && binding.status === 'configured' && bindingGate.supported) {
+    if (!runtimeActive && binding.status === 'configured' && transportMode !== 'unsupported' && hasEndpoint) {
       controllerRef.current.setNoData();
       setFrame(controllerRef.current.getFrame());
       return;
     }
-    const failure = deriveBindingFailure({
-      status: binding.status,
-      reason: bindingGate.reason,
-    });
+    const failure =
+      binding.status === 'invalid' || (binding.status === 'configured' && transportMode === 'unsupported')
+        ? deriveBindingFailure({
+            status: binding.status,
+            reason: binding.status === 'configured' ? 'unsupported-transport' : undefined,
+          })
+        : null;
     if (failure) {
       tracePlotDiagnostic('binding-invalid', {
         panelId: spec.panelId,
         contract: expectedContract,
         status: binding.status,
-        reason: bindingGate.reason,
+        reason: transportMode,
         transport: binding.transport,
         endpoint,
       });
       controllerRef.current.setError(failure.message, failure.errorKind);
     }
     setFrame(controllerRef.current.getFrame());
-  }, [binding.status, binding.transport, bindingGate.reason, endpoint, expectedContract, refresh, runtimeActive, spec.panelId, supportsHttpLivePath]);
+  }, [
+    binding.status,
+    binding.transport,
+    endpoint,
+    hasEndpoint,
+    expectedContract,
+    refresh,
+    runtimeActive,
+    spec.panelId,
+    supportsHttpLivePath,
+    supportsPowerSpectrumWebSocketLivePath,
+    supportsWaterfallWebSocketLivePath,
+    transportMode,
+  ]);
 
   useEffect(() => {
     if (!supportsHttpLivePath) {
       return undefined;
     }
 
-    return createSeriesPollSubscription(binding.transport, pollMs, () => {
+    return createSeriesPollSubscription(binding.transport, updateMs, () => {
       void refresh();
     });
-  }, [binding.transport, pollMs, refresh, supportsHttpLivePath]);
+  }, [binding.transport, refresh, supportsHttpLivePath, updateMs]);
+
+  useEffect(() => {
+    if (!supportsSeriesWebSocketLivePath) {
+      return undefined;
+    }
+
+    websocketStatsRef.current = {
+      lastArrivalMs: null,
+      liveIngressFpsHz: null,
+      lastSeq: null,
+    };
+    websocketPendingFrameRef.current = null;
+    const publishControllerFrame = () => {
+      const nextFrame = controllerRef.current.getFrame();
+      frameRef.current = nextFrame;
+      setFrame(nextFrame);
+      return nextFrame;
+    };
+
+    const scheduleWebSocketRender = () => {
+      if (websocketRenderHandleRef.current !== null) {
+        return;
+      }
+      websocketRenderHandleRef.current = window.requestAnimationFrame(() => {
+        websocketRenderHandleRef.current = null;
+
+        const pending = websocketPendingFrameRef.current;
+        if (!pending) {
+          return;
+        }
+
+        websocketPendingFrameRef.current = null;
+        if (pending.payload.kind !== 'series') {
+          return;
+        }
+        controllerRef.current.ingestSeries(
+          pending.payload.series,
+          pending.emittedAtMs,
+          'replace',
+          {
+            xyRenderMode: pending.payload.xyRenderMode,
+            xyPointSize: pending.payload.xyPointSize,
+            xyPointAlpha: pending.payload.xyPointAlpha,
+            statusMessage: pending.statusMessage,
+            liveIngressFpsHz: pending.liveIngressFpsHz ?? undefined,
+          },
+        );
+        lastPublishedVersionRef.current = controllerRef.current.getVersion();
+        publishControllerFrame();
+
+        if (websocketPendingFrameRef.current !== null) {
+          scheduleWebSocketRender();
+        }
+      });
+    };
+
+    controllerRef.current.setLoading();
+    publishControllerFrame();
+    return createJsonWebSocketSubscription({
+      endpoint: seriesWebSocketEndpoint,
+      onMessage: (payload) => {
+        const nowMs = Date.now();
+        const previous = websocketStatsRef.current;
+        const liveIngressFpsHz = deriveWebSocketIngressFps({
+          previousArrivalMs: previous.lastArrivalMs,
+          previousFpsHz: previous.liveIngressFpsHz,
+          nowMs,
+        });
+        websocketStatsRef.current = {
+          lastArrivalMs: nowMs,
+          liveIngressFpsHz,
+          lastSeq: null,
+        };
+
+        const parsed = parseLiveFrameFromPayload({
+          payloadFormat: spec.source.payloadFormat,
+          seriesLabels: spec.view.seriesLabels,
+          payload,
+        });
+        tracePlotDiagnostic('websocket-frame', {
+          panelId: spec.panelId,
+          endpoint: seriesWebSocketEndpoint,
+          payloadFormat: spec.source.payloadFormat,
+          kind: parsed.kind,
+        });
+        websocketPendingFrameRef.current = {
+          payload: parsed,
+          liveIngressFpsHz,
+          emittedAtMs: nowMs,
+          statusMessage: 'WebSocket connected · series frame',
+        };
+        scheduleWebSocketRender();
+      },
+      onConnectionState: (state, message) => {
+        tracePlotDiagnostic('websocket-state', {
+          panelId: spec.panelId,
+          endpoint: seriesWebSocketEndpoint,
+          state,
+          message,
+        });
+        if (state === 'connecting' || state === 'reconnecting') {
+          controllerRef.current.setLoading(
+            state === 'reconnecting'
+              ? `Reconnecting websocket to ${seriesWebSocketEndpoint}…`
+              : `Connecting websocket to ${seriesWebSocketEndpoint}…`,
+          );
+          publishControllerFrame();
+          return;
+        }
+        if (state === 'open') {
+          controllerRef.current.setLoading(`WebSocket connected to ${seriesWebSocketEndpoint}. Waiting for series…`);
+          publishControllerFrame();
+          return;
+        }
+        if (state === 'error') {
+          controllerRef.current.setError(message ?? 'Series websocket connection failed.', 'runtime');
+          publishControllerFrame();
+        }
+      },
+    });
+  }, [seriesWebSocketEndpoint, spec.panelId, spec.source.payloadFormat, spec.view.seriesLabels, supportsSeriesWebSocketLivePath]);
+
+  useEffect(() => {
+    if (!supportsPowerSpectrumWebSocketLivePath) {
+      return undefined;
+    }
+
+    websocketStatsRef.current = {
+      lastArrivalMs: null,
+      liveIngressFpsHz: null,
+      lastSeq: null,
+    };
+    websocketPendingFrameRef.current = null;
+    const publishControllerFrame = () => {
+      const nextFrame = controllerRef.current.getFrame();
+      frameRef.current = nextFrame;
+      setFrame(nextFrame);
+      return nextFrame;
+    };
+
+    const scheduleWebSocketRender = () => {
+      if (websocketRenderHandleRef.current !== null) {
+        return;
+      }
+      websocketRenderHandleRef.current = window.requestAnimationFrame(() => {
+        websocketRenderHandleRef.current = null;
+
+        const pending = websocketPendingFrameRef.current;
+        if (!pending) {
+          return;
+        }
+
+        websocketPendingFrameRef.current = null;
+        if (pending.payload.kind !== 'series') {
+          return;
+        }
+        controllerRef.current.ingestSeries(
+          pending.payload.series,
+          pending.emittedAtMs,
+          'replace',
+          {
+            xyRenderMode: pending.payload.xyRenderMode,
+            xyPointSize: pending.payload.xyPointSize,
+            xyPointAlpha: pending.payload.xyPointAlpha,
+            statusMessage: pending.statusMessage,
+            liveIngressFpsHz: pending.liveIngressFpsHz ?? undefined,
+          },
+        );
+        lastPublishedVersionRef.current = controllerRef.current.getVersion();
+        publishControllerFrame();
+
+        if (websocketPendingFrameRef.current !== null) {
+          scheduleWebSocketRender();
+        }
+      });
+    };
+
+    controllerRef.current.setLoading();
+    publishControllerFrame();
+    return createPowerSpectrumWebSocketSubscription({
+      endpoint: powerSpectrumWebSocketEndpoint,
+      onFrame: (spectrumFrame) => {
+        const nowMs = Date.now();
+        const previous = websocketStatsRef.current;
+        const liveIngressFpsHz = deriveWebSocketIngressFps({
+          previousArrivalMs: previous.lastArrivalMs,
+          previousFpsHz: previous.liveIngressFpsHz,
+          nowMs,
+        });
+        websocketStatsRef.current = {
+          lastArrivalMs: nowMs,
+          liveIngressFpsHz,
+          lastSeq: spectrumFrame.seq,
+        };
+        tracePlotDiagnostic('websocket-frame', {
+          panelId: spec.panelId,
+          endpoint: powerSpectrumWebSocketEndpoint,
+          seq: spectrumFrame.seq,
+          bins: spectrumFrame.bins,
+          centerHz: spectrumFrame.centerHz,
+          spanHz: spectrumFrame.spanHz,
+          timestampSec: spectrumFrame.timestampSec,
+        });
+        websocketPendingFrameRef.current = {
+          payload: {
+            kind: 'series',
+            series: [mapPowerSpectrumWebSocketFrameToSeriesFrame(spectrumFrame, spec.view.seriesLabels?.[0])],
+            xyRenderMode: 'line',
+          },
+          liveIngressFpsHz,
+          emittedAtMs: Math.round(spectrumFrame.timestampSec * 1000),
+          statusMessage: `WebSocket connected · seq ${spectrumFrame.seq}`,
+        };
+        scheduleWebSocketRender();
+      },
+      onConnectionState: (state, message) => {
+        tracePlotDiagnostic('websocket-state', {
+          panelId: spec.panelId,
+          endpoint: powerSpectrumWebSocketEndpoint,
+          state,
+          message,
+        });
+        if (state === 'connecting' || state === 'reconnecting') {
+          controllerRef.current.setLoading(
+            state === 'reconnecting'
+              ? `Reconnecting websocket to ${powerSpectrumWebSocketEndpoint}…`
+              : `Connecting websocket to ${powerSpectrumWebSocketEndpoint}…`,
+          );
+          publishControllerFrame();
+          return;
+        }
+        if (state === 'open') {
+          controllerRef.current.setLoading(`WebSocket connected to ${powerSpectrumWebSocketEndpoint}. Waiting for spectrum…`);
+          publishControllerFrame();
+          return;
+        }
+        if (state === 'error') {
+          controllerRef.current.setError(message ?? 'Power spectrum websocket connection failed.', 'runtime');
+          publishControllerFrame();
+        }
+      },
+    });
+  }, [spec.view.seriesLabels, supportsPowerSpectrumWebSocketLivePath, powerSpectrumWebSocketEndpoint]);
+
+  useEffect(() => {
+    if (!supportsWaterfallWebSocketLivePath) {
+      return undefined;
+    }
+
+    websocketStatsRef.current = {
+      lastArrivalMs: null,
+      liveIngressFpsHz: null,
+      lastSeq: null,
+    };
+    websocketPendingFrameRef.current = null;
+    const publishControllerFrame = () => {
+      const nextFrame = controllerRef.current.getFrame();
+      frameRef.current = nextFrame;
+      setFrame(nextFrame);
+      return nextFrame;
+    };
+
+    const scheduleWebSocketRender = () => {
+      if (websocketRenderHandleRef.current !== null) {
+        return;
+      }
+      websocketRenderHandleRef.current = window.requestAnimationFrame(() => {
+        websocketRenderHandleRef.current = null;
+
+        const pending = websocketPendingFrameRef.current;
+        if (!pending) {
+          return;
+        }
+
+        websocketPendingFrameRef.current = null;
+        if (pending.payload.kind === 'series') {
+          controllerRef.current.ingestSeries(
+            pending.payload.series,
+            pending.emittedAtMs,
+            'replace',
+            {
+              xyRenderMode: pending.payload.xyRenderMode,
+              xyPointSize: pending.payload.xyPointSize,
+              xyPointAlpha: pending.payload.xyPointAlpha,
+              statusMessage: pending.statusMessage,
+              liveIngressFpsHz: pending.liveIngressFpsHz ?? undefined,
+            },
+          );
+        } else {
+          controllerRef.current.ingestImage(pending.payload.image, pending.emittedAtMs, {
+            statusMessage: pending.statusMessage,
+            liveIngressFpsHz: pending.liveIngressFpsHz ?? undefined,
+          });
+        }
+        lastPublishedVersionRef.current = controllerRef.current.getVersion();
+        publishControllerFrame();
+
+        if (websocketPendingFrameRef.current !== null) {
+          scheduleWebSocketRender();
+        }
+      });
+    };
+
+    controllerRef.current.setLoading();
+    publishControllerFrame();
+    return createJsonWebSocketSubscription({
+      endpoint: waterfallWebSocketEndpoint,
+      onMessage: (payload) => {
+        const nowMs = Date.now();
+        const previous = websocketStatsRef.current;
+        const liveIngressFpsHz = deriveWebSocketIngressFps({
+          previousArrivalMs: previous.lastArrivalMs,
+          previousFpsHz: previous.liveIngressFpsHz,
+          nowMs,
+        });
+        websocketStatsRef.current = {
+          lastArrivalMs: nowMs,
+          liveIngressFpsHz,
+          lastSeq: null,
+        };
+
+        const parsed = parseLiveFrameFromPayload({
+          payloadFormat: spec.source.payloadFormat,
+          seriesLabels: spec.view.seriesLabels,
+          payload,
+        });
+        tracePlotDiagnostic('websocket-frame', {
+          panelId: spec.panelId,
+          endpoint: waterfallWebSocketEndpoint,
+          payloadFormat: spec.source.payloadFormat,
+          kind: parsed.kind,
+        });
+        websocketPendingFrameRef.current = {
+          payload: parsed,
+          liveIngressFpsHz,
+          emittedAtMs: nowMs,
+          statusMessage: 'WebSocket connected · waterfall frame',
+        };
+        scheduleWebSocketRender();
+      },
+      onConnectionState: (state, message) => {
+        tracePlotDiagnostic('websocket-state', {
+          panelId: spec.panelId,
+          endpoint: waterfallWebSocketEndpoint,
+          state,
+          message,
+        });
+        if (state === 'connecting' || state === 'reconnecting') {
+          controllerRef.current.setLoading(
+            state === 'reconnecting'
+              ? `Reconnecting websocket to ${waterfallWebSocketEndpoint}…`
+              : `Connecting websocket to ${waterfallWebSocketEndpoint}…`,
+          );
+          publishControllerFrame();
+          return;
+        }
+        if (state === 'open') {
+          controllerRef.current.setLoading(`WebSocket connected to ${waterfallWebSocketEndpoint}. Waiting for waterfall…`);
+          publishControllerFrame();
+          return;
+        }
+        if (state === 'error') {
+          controllerRef.current.setError(message ?? 'Waterfall websocket connection failed.', 'runtime');
+          publishControllerFrame();
+        }
+      },
+    });
+  }, [spec.panelId, spec.source.payloadFormat, spec.view.seriesLabels, supportsWaterfallWebSocketLivePath, waterfallWebSocketEndpoint]);
 
   useEffect(() => {
     const handle = window.setInterval(() => {
@@ -530,6 +1005,11 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
         window.clearTimeout(pendingNoDataTimeoutRef.current);
         pendingNoDataTimeoutRef.current = null;
       }
+      if (websocketRenderHandleRef.current !== null) {
+        window.cancelAnimationFrame(websocketRenderHandleRef.current);
+        websocketRenderHandleRef.current = null;
+      }
+      websocketPendingFrameRef.current = null;
       window.clearInterval(handle);
     };
   }, [spec.panelId]);
