@@ -80,7 +80,7 @@ describe('known Studio block bindings', () => {
       ok: true,
       transport: 'websocket',
       endpoint: 'http://127.0.0.1:18080/snapshot',
-      pollMs: 250,
+      updateMs: 250,
       channels: 2,
       topic: 'demo',
       sampleRate: undefined,
@@ -136,7 +136,7 @@ describe('known Studio block bindings', () => {
       status: 'configured',
       transport: 'websocket',
       endpoint: 'http://127.0.0.1:18080/snapshot',
-      pollMs: 200,
+      updateMs: 200,
     });
 
     const complexSeriesConfigured = buildStudioBindingView('gr::studio::StudioSeriesSink<complex<float32>>', {
@@ -174,7 +174,7 @@ describe('known Studio block bindings', () => {
       payloadFormat: 'dataset-xy-json-v1',
       transport: 'http_poll',
       endpoint: 'http://127.0.0.1:18084/snapshot',
-      pollMs: 100,
+      updateMs: 100,
     });
 
     const powerSpectrumConfigured = buildStudioBindingView('gr::studio::StudioPowerSpectrumSink<float32>', {
@@ -208,7 +208,7 @@ describe('known Studio block bindings', () => {
       payloadFormat: 'waterfall-spectrum-json-v1',
       transport: 'websocket',
       endpoint: 'http://127.0.0.1:18087/snapshot',
-      pollMs: 200,
+      updateMs: 200,
       sampleRate: 48000,
       topic: 'waterfall',
     });
@@ -241,7 +241,7 @@ describe('known Studio block bindings', () => {
       endpoint: 'http://127.0.0.1:18083/snapshot',
       sampleRate: 48000,
       channels: 2,
-      pollMs: 120,
+      updateMs: 120,
     });
   });
 });

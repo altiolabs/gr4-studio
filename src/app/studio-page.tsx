@@ -455,7 +455,7 @@ export function StudioPage() {
         bindingStatus: bindingView.status,
         bindingTransport: bindingView.transport,
         bindingEndpoint: bindingView.endpoint,
-        bindingPollMs: bindingView.pollMs,
+        bindingUpdateMs: bindingView.updateMs,
       };
     });
   }, [blockDetailsByType, controlWidgetRuntime, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes, resolvedGraph]);

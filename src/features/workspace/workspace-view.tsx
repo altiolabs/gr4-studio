@@ -34,7 +34,7 @@ export type WorkspacePanelViewModel = {
   bindingStatus?: 'unsupported' | 'unconfigured' | 'configured' | 'invalid';
   bindingTransport?: string;
   bindingEndpoint?: string;
-  bindingPollMs?: number;
+  bindingUpdateMs?: number;
 };
 
 export type WorkspacePanelEditHandlers = {

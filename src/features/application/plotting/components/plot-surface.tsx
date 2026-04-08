@@ -89,6 +89,7 @@ function formatConnectionBadge(frame: PlotDataFrame): string | null {
 export function PlotSurface({ spec, frame, binding }: PlotSurfaceProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [diagnosticsCollapsed, setDiagnosticsCollapsed] = useState(false);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -160,22 +161,53 @@ export function PlotSurface({ spec, frame, binding }: PlotSurfaceProps) {
     <div ref={hostRef} className="relative h-full w-full min-h-0 min-w-0">
       {showAdapter ? <PlotAdapterSwitch spec={spec} frame={frame} width={size.width} height={size.height} /> : null}
       {showDiagnostics ? (
-        <div className="absolute right-2 top-2 z-20 max-w-[70%] rounded border border-slate-700/80 bg-slate-950/90 px-2 py-1 text-[10px] text-slate-200 shadow-lg shadow-slate-950/40 backdrop-blur">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold uppercase tracking-wide text-slate-400">{statusLabel}</span>
-            <span className="rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 text-slate-100">
-              {transportLabel}
-            </span>
-            {sequenceLabel ? <span className="text-slate-400">{sequenceLabel}</span> : null}
-            {rateLabel ? <span className="text-slate-400">{rateLabel}</span> : null}
-          </div>
-          {connectionBadge ? <div className="mt-0.5 truncate text-slate-300">{connectionBadge}</div> : null}
-          {endpointLabel ? (
-            <div className="mt-0.5 truncate text-slate-400" title={binding?.endpoint}>
-              {endpointLabel}
+        <div
+          className={
+            diagnosticsCollapsed
+              ? 'absolute right-2 top-2 z-20 rounded border border-slate-700/80 bg-slate-950/90 p-1 text-[10px] text-slate-200 shadow-lg shadow-slate-950/40 backdrop-blur'
+              : 'absolute right-2 top-2 z-20 max-w-[70%] rounded border border-slate-700/80 bg-slate-950/90 px-2 py-1 text-[10px] text-slate-200 shadow-lg shadow-slate-950/40 backdrop-blur'
+          }
+        >
+          {diagnosticsCollapsed ? (
+            <button
+              type="button"
+              className="flex h-5 w-5 items-center justify-center rounded border border-slate-700/70 bg-slate-950/70 text-[10px] leading-none text-slate-300/90 opacity-70 shadow-sm shadow-slate-950/30 transition hover:opacity-100 hover:border-slate-500 hover:bg-slate-900/90"
+              onClick={() => setDiagnosticsCollapsed(false)}
+              aria-label="Expand diagnostics"
+              title="Expand diagnostics"
+            >
+              +
+            </button>
+          ) : (
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold uppercase tracking-wide text-slate-400">{statusLabel}</span>
+                  <span className="rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 text-slate-100">
+                    {transportLabel}
+                  </span>
+                  {sequenceLabel ? <span className="text-slate-400">{sequenceLabel}</span> : null}
+                  {rateLabel ? <span className="text-slate-400">{rateLabel}</span> : null}
+                </div>
+                {connectionBadge ? <div className="mt-0.5 truncate text-slate-300">{connectionBadge}</div> : null}
+                {endpointLabel ? (
+                  <div className="mt-0.5 truncate text-slate-400" title={binding?.endpoint}>
+                    {endpointLabel}
+                  </div>
+                ) : null}
+                {statusText ? <div className="mt-0.5 truncate text-slate-300">{statusText}</div> : null}
+              </div>
+              <button
+                type="button"
+                className="shrink-0 rounded border border-slate-700 bg-slate-900/80 px-1.5 py-0.5 text-[10px] leading-none text-slate-200 transition hover:border-slate-500 hover:bg-slate-800"
+                onClick={() => setDiagnosticsCollapsed(true)}
+                aria-label="Collapse diagnostics"
+                title="Collapse diagnostics"
+              >
+                -
+              </button>
             </div>
-          ) : null}
-          {statusText ? <div className="mt-0.5 truncate text-slate-300">{statusText}</div> : null}
+          )}
         </div>
       ) : null}
       {!showAdapter ? (

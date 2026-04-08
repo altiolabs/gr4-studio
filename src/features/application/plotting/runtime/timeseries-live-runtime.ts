@@ -418,7 +418,7 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
     transportMode === 'websocket' && runtimeActive && hasEndpoint && expectedContract === 'waterfall-spectrum-json-v1';
   const supportsPowerSpectrumWebSocketLivePath =
     transportMode === 'websocket' && runtimeActive && hasEndpoint && expectedContract === 'dataset-xy-json-v1';
-  const pollMs = normalizeSeriesPollMs(binding.pollMs);
+  const updateMs = normalizeSeriesPollMs(binding.updateMs);
 
   useEffect(() => {
     fetchGenerationRef.current += 1;
@@ -570,10 +570,10 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
       return undefined;
     }
 
-    return createSeriesPollSubscription(binding.transport, pollMs, () => {
+    return createSeriesPollSubscription(binding.transport, updateMs, () => {
       void refresh();
     });
-  }, [binding.transport, pollMs, refresh, supportsHttpLivePath]);
+  }, [binding.transport, refresh, supportsHttpLivePath, updateMs]);
 
   useEffect(() => {
     if (!supportsSeriesWebSocketLivePath) {

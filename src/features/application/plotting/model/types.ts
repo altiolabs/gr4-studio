@@ -92,7 +92,7 @@ export type PlotRuntimeBinding = {
   status: 'unsupported' | 'unconfigured' | 'configured' | 'invalid';
   transport?: string;
   endpoint?: string;
-  pollMs?: number;
+  updateMs?: number;
 };
 
 export type PlotAdapterProps = {

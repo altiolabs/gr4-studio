@@ -567,10 +567,10 @@ function SelectionTab({
               </div>
             )}
 
-            {typeof studioBinding.pollMs === 'number' && (
+            {typeof studioBinding.updateMs === 'number' && (
               <div>
                 <SummaryLabel>Update Interval (ms)</SummaryLabel>
-                <SummaryValue>{String(studioBinding.pollMs)}</SummaryValue>
+                <SummaryValue>{String(studioBinding.updateMs)}</SummaryValue>
               </div>
             )}
 

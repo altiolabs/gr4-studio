@@ -83,7 +83,7 @@ export function SeriesLiveRenderer({ liveContext }: SeriesLiveRendererProps) {
     bindingGate.supported && runtimeActive && (transport === 'http_snapshot' || transport === 'http_poll');
   const supportsWebSocketLivePath = bindingGate.supported && runtimeActive && transport === 'websocket';
   const supportsLivePath = supportsHttpLivePath || supportsWebSocketLivePath;
-  const pollMs = normalizeSeriesPollMs(liveContext.binding.pollMs);
+  const updateMs = normalizeSeriesPollMs(liveContext.binding.updateMs);
   const websocketEndpoint = normalizeJsonWebSocketEndpoint(endpoint);
 
   const refresh = useCallback(async () => {
@@ -132,10 +132,10 @@ export function SeriesLiveRenderer({ liveContext }: SeriesLiveRendererProps) {
       return undefined;
     }
 
-    return createSeriesPollSubscription(transport, pollMs, () => {
+    return createSeriesPollSubscription(transport, updateMs, () => {
       void refresh();
     });
-  }, [pollMs, refresh, supportsHttpLivePath, transport]);
+  }, [refresh, supportsHttpLivePath, transport, updateMs]);
 
   useEffect(() => {
     if (!supportsWebSocketLivePath) {

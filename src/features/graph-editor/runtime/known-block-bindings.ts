@@ -28,7 +28,7 @@ export type StudioBindingResolution =
       transport: StudioTransportMode;
       endpoint: string;
       topic?: string;
-      pollMs?: number;
+      updateMs?: number;
       sampleRate?: number;
       channels?: number;
     }
@@ -46,7 +46,7 @@ export type StudioBindingView = {
   payloadFormat?: string;
   transport?: string;
   endpoint?: string;
-  pollMs?: number;
+  updateMs?: number;
   sampleRate?: number;
   channels?: number;
   topic?: string;
@@ -467,7 +467,7 @@ export function resolveStudioBindingFromParameters(
   }
 
   const cadenceParameter = binding.parameters.updateMs ?? binding.parameters.pollMs;
-  const pollMs = cadenceParameter
+  const updateMs = cadenceParameter
     ? parseInteger(parameterValues[cadenceParameter])
     : undefined;
   const sampleRate = binding.parameters.sampleRate
@@ -485,7 +485,7 @@ export function resolveStudioBindingFromParameters(
     transport: transportRaw,
     endpoint,
     topic,
-    pollMs,
+    updateMs,
     sampleRate,
     channels,
   };
@@ -538,7 +538,7 @@ export function buildStudioBindingView(
     payloadFormat: binding.payloadFormat,
     transport: resolved.transport,
     endpoint: resolved.endpoint,
-    pollMs: resolved.pollMs,
+    updateMs: resolved.updateMs,
     sampleRate: resolved.sampleRate,
     channels: resolved.channels,
     topic: resolved.topic,
