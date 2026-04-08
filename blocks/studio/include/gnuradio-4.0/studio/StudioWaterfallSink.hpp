@@ -6,6 +6,7 @@
 #include <httplib.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <concepts>
@@ -17,6 +18,7 @@
 #include <memory>
 #include <mutex>
 #include <span>
+#include <cstdio>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -27,6 +29,7 @@
 #include <gnuradio-4.0/algorithm/fourier/fft.hpp>
 #include <gnuradio-4.0/algorithm/fourier/fft_common.hpp>
 #include <gnuradio-4.0/algorithm/fourier/window.hpp>
+#include <gnuradio-4.0/studio/StudioWebSocketTransport.hpp>
 
 namespace gr::studio {
 
@@ -542,6 +545,10 @@ inline bool isHttpTransport(const std::string& transport) {
     return transport == "http_snapshot" || transport == "http_poll";
 }
 
+inline bool isWebSocketTransport(const std::string& transport) {
+    return transport == "websocket";
+}
+
 } // namespace detail
 
 GR_REGISTER_BLOCK("gr::studio::StudioWaterfallSink", gr::studio::StudioWaterfallSink, ([T]), [ float, std::complex<float> ])
@@ -554,7 +561,7 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
 
     Annotated<std::string, "transport", Doc<"Data-plane transport mode">, Visible> transport = "http_poll";
     Annotated<std::string, "endpoint", Doc<"Transport endpoint URL/path">, Visible> endpoint = "http://127.0.0.1:18085/snapshot";
-    Annotated<std::uint32_t, "poll_ms", Doc<"Suggested poll interval in milliseconds for poll transports">, Visible> poll_ms = 250U;
+    Annotated<std::uint32_t, "update_ms", Doc<"Suggested update interval in milliseconds for http_poll and websocket transports">, Visible> update_ms = 250U;
     Annotated<gr::Size_t, "fft_size", Doc<"FFT size used for each spectrum frame">, Visible> fft_size = 1024UZ;
     Annotated<gr::Size_t, "num_averages", Doc<"Number of FFT frames averaged into each history row">, Visible> num_averages = 8UZ;
     Annotated<float, "time_span", Doc<"Total waterfall history span in seconds (quantized to fft_size using sample_rate)">, Visible> time_span = 256.0F;
@@ -579,7 +586,7 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
         in,
         transport,
         endpoint,
-        poll_ms,
+        update_ms,
         fft_size,
         num_averages,
         time_span,
@@ -602,6 +609,7 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
     using Block<StudioWaterfallSink<T>>::Block;
 
     void start() {
+        waterfall_ws::traceWaterfallWebSocketTransport("StudioWaterfallSink::start");
         _window.configure(
             static_cast<std::size_t>(fft_size),
             static_cast<std::size_t>(num_averages),
@@ -614,11 +622,23 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
         startTransport();
     }
 
-    void stop() { _http.stop(); }
+    void stop() {
+        waterfall_ws::traceWaterfallWebSocketTransport("StudioWaterfallSink::stop");
+        _http.stop();
+        _websocket.stop();
+    }
 
     void settingsChanged(const property_map&, const property_map& new_settings) {
-        if (new_settings.contains("fft_size") || new_settings.contains("num_averages") || new_settings.contains("window") ||
-            new_settings.contains("sample_rate") || new_settings.contains("output_in_db") || new_settings.contains("time_span")) {
+        if (
+            new_settings.contains("fft_size") ||
+            new_settings.contains("num_averages") ||
+            new_settings.contains("time_span") ||
+            new_settings.contains("window") ||
+            new_settings.contains("sample_rate") ||
+            new_settings.contains("output_in_db") ||
+            new_settings.contains("autoscale") ||
+            new_settings.contains("z_min") ||
+            new_settings.contains("z_max")) {
             _window.configure(
                 static_cast<std::size_t>(fft_size),
                 static_cast<std::size_t>(num_averages),
@@ -626,11 +646,8 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
                 sample_rate,
                 window.value,
                 output_in_db);
-            syncInputPortConstraints();
-        }
-
-        if (new_settings.contains("autoscale") || new_settings.contains("z_min") || new_settings.contains("z_max")) {
             _window.configureColorScale(autoscale, z_min, z_max);
+            syncInputPortConstraints();
         }
 
         if (new_settings.contains("transport") || new_settings.contains("endpoint")) {
@@ -643,7 +660,24 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
             return;
         }
 
-        _window.processFrame(input.first(static_cast<std::size_t>(fft_size)));
+        try {
+            _window.processFrame(input.first(static_cast<std::size_t>(fft_size)));
+            publishWebSocketFrame();
+        } catch (const std::exception& error) {
+            if (detail::isWebSocketTransport(transport.value)) {
+                std::fprintf(stderr, "StudioWaterfallSink websocket processSamples failed: %s\n", error.what());
+                std::fflush(stderr);
+                return;
+            }
+            throw;
+        } catch (...) {
+            if (detail::isWebSocketTransport(transport.value)) {
+                std::fprintf(stderr, "StudioWaterfallSink websocket processSamples failed: unknown exception\n");
+                std::fflush(stderr);
+                return;
+            }
+            throw;
+        }
     }
 
     [[nodiscard]] work::Status processBulk(InputSpanLike auto& input) noexcept {
@@ -652,12 +686,29 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
             const std::size_t frameSize  = static_cast<std::size_t>(fft_size);
             const std::size_t frames     = available / frameSize;
 
-            for (std::size_t frame = 0UZ; frame < frames; ++frame) {
-                const std::size_t offset = frame * frameSize;
-                _window.processFrame(std::span<const T>(input.data() + offset, frameSize));
-            }
+            try {
+                for (std::size_t frame = 0UZ; frame < frames; ++frame) {
+                    const std::size_t offset = frame * frameSize;
+                    _window.processFrame(std::span<const T>(input.data() + offset, frameSize));
+                    publishWebSocketFrame();
+                }
 
-            std::ignore = input.consume(available);
+                std::ignore = input.consume(available);
+            } catch (const std::exception& error) {
+                if (detail::isWebSocketTransport(transport.value)) {
+                    std::fprintf(stderr, "StudioWaterfallSink websocket processBulk failed: %s\n", error.what());
+                    std::fflush(stderr);
+                    return work::Status::OK;
+                }
+                throw;
+            } catch (...) {
+                if (detail::isWebSocketTransport(transport.value)) {
+                    std::fprintf(stderr, "StudioWaterfallSink websocket processBulk failed: unknown exception\n");
+                    std::fflush(stderr);
+                    return work::Status::OK;
+                }
+                throw;
+            }
         }
 
         return work::Status::OK;
@@ -667,23 +718,66 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
 
 private:
     void startTransport() {
+        {
+            std::ostringstream os;
+            os << "StudioWaterfallSink::startTransport transport=" << transport.value
+               << " endpoint=" << endpoint.value;
+            waterfall_ws::traceWaterfallWebSocketTransport(os.str());
+        }
+        _http.stop();
+        _websocket.stop();
+
+        if (detail::isWebSocketTransport(transport.value)) {
+            const auto parsed = detail::parseHttpEndpoint(endpoint.value);
+            {
+                std::ostringstream os;
+                os << "StudioWaterfallSink websocket parsed host=" << parsed.host
+                   << " port=" << parsed.port
+                   << " path=" << parsed.path;
+                waterfall_ws::traceWaterfallWebSocketTransport(os.str());
+            }
+            if (!_websocket.start(parsed.host, parsed.port, parsed.path)) {
+                std::ostringstream message;
+                message << "StudioWaterfallSink failed to start websocket transport endpoint at ";
+                message << endpoint.value << " (parsed host=" << parsed.host << ", port=" << parsed.port << ", path=" << parsed.path << ")";
+                const auto reason = _websocket.lastErrorMessage();
+                if (!reason.empty()) {
+                    message << ": " << reason;
+                }
+                std::fprintf(stderr, "%s\n", message.str().c_str());
+                throw gr::exception(message.str());
+            }
+            waterfall_ws::traceWaterfallWebSocketTransport("StudioWaterfallSink websocket transport started");
+            return;
+        }
+
         if (!detail::isHttpTransport(transport.value)) {
-            throw gr::exception("StudioWaterfallSink currently supports only http_snapshot and http_poll transports.");
+            throw gr::exception("StudioWaterfallSink currently supports only http_snapshot, http_poll, and websocket transports.");
         }
 
         const auto parsed = detail::parseHttpEndpoint(endpoint.value);
         if (!_http.start(parsed, [this]() { return _window.snapshotJson(); })) {
             throw gr::exception("StudioWaterfallSink failed to start HTTP transport endpoint.");
         }
+        waterfall_ws::traceWaterfallWebSocketTransport("StudioWaterfallSink HTTP transport started");
     }
 
     detail::WaterfallWindow<T> _window{};
     detail::SnapshotHttpService _http{};
+    waterfall_ws::WaterfallWebSocketService _websocket{};
 
     void syncInputPortConstraints() {
         const auto chunkSize = static_cast<std::size_t>(fft_size);
         in.min_samples = chunkSize;
         in.max_samples = chunkSize;
+    }
+
+    void publishWebSocketFrame() {
+        if (!_websocket.isRunning()) {
+            return;
+        }
+
+        _websocket.publishText(_window.snapshotJson());
     }
 };
 

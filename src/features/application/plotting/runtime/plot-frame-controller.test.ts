@@ -58,12 +58,18 @@ describe('plot frame controller', () => {
         axisUnit: 'Hz',
       },
       1234,
+      {
+        statusMessage: 'WebSocket connected · waterfall frame',
+        liveIngressFpsHz: 8.5,
+      },
     );
 
     expect(controller.getFrame().kind).toBe('waterfall');
     expect(controller.getFrame().meta?.state).toBe('ready');
     expect(controller.getFrame().meta?.sequence).toBe(1);
     expect(controller.getFrame().meta?.emittedAtMs).toBe(1234);
+    expect(controller.getFrame().meta?.statusMessage).toBe('WebSocket connected · waterfall frame');
+    expect(controller.getFrame().meta?.liveIngressFpsHz).toBe(8.5);
     expect(controller.getFrame().image).toEqual({
       width: 2,
       height: 2,

@@ -73,6 +73,7 @@ function isSupportedTransport(value: string): value is StudioTransportMode {
 // TODO: Replace these placeholder IDs with final reflected fully qualified IDs
 // from the first-party blocks once block registration is finalized.
 const STUDIO_POWER_SPECTRUM_SUPPORTED_TRANSPORTS = ['http_poll', 'websocket'] as const;
+const STUDIO_WATERFALL_SUPPORTED_TRANSPORTS = ['http_poll', 'websocket'] as const;
 export const STUDIO_KNOWN_BLOCK_BINDINGS: readonly StudioKnownBlockBinding[] = [
   {
     blockTypeId: 'gr::studio::StudioSeriesSink<float32>',
@@ -295,58 +296,58 @@ export const STUDIO_KNOWN_BLOCK_BINDINGS: readonly StudioKnownBlockBinding[] = [
   {
     blockTypeId: 'gr::studio::StudioWaterfallSink<float32>',
     family: 'waterfall',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_WATERFALL_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       sampleRate: 'sample_rate',
       topic: 'topic',
     },
     payloadFormat: 'waterfall-spectrum-json-v1',
-    notes: 'Waterfall history payload backed by a bounded matrix snapshot. Phase 1 supports only http_snapshot/http_poll.',
+    notes: 'Waterfall history payload backed by a bounded matrix snapshot. Supports http_poll/websocket.',
   },
   {
     blockTypeId: 'gr::studio::StudioWaterfallSink<complex64>',
     family: 'waterfall',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_WATERFALL_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       sampleRate: 'sample_rate',
       topic: 'topic',
     },
     payloadFormat: 'waterfall-spectrum-json-v1',
-    notes: 'Waterfall history payload backed by a bounded matrix snapshot. Phase 1 supports only http_snapshot/http_poll.',
+    notes: 'Waterfall history payload backed by a bounded matrix snapshot. Supports http_poll/websocket.',
   },
   {
     blockTypeId: 'gr::studio::StudioWaterfallSink<complex<float32>>',
     family: 'waterfall',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_WATERFALL_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       sampleRate: 'sample_rate',
       topic: 'topic',
     },
     payloadFormat: 'waterfall-spectrum-json-v1',
-    notes: 'Waterfall history payload backed by a bounded matrix snapshot. Phase 1 supports only http_snapshot/http_poll.',
+    notes: 'Waterfall history payload backed by a bounded matrix snapshot. Supports http_poll/websocket.',
   },
   {
     blockTypeId: 'gr::studio::StudioWaterfallSink<std::complex<float32>>',
     family: 'waterfall',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_WATERFALL_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       sampleRate: 'sample_rate',
       topic: 'topic',
     },
     payloadFormat: 'waterfall-spectrum-json-v1',
-    notes: 'Waterfall history payload backed by a bounded matrix snapshot. Phase 1 supports only http_snapshot/http_poll.',
+    notes: 'Waterfall history payload backed by a bounded matrix snapshot. Supports http_poll/websocket.',
   },
   {
     blockTypeId: 'gr::studio::StudioAudioMonitor<float32>',

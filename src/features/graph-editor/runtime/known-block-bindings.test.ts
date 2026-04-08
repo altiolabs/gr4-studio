@@ -43,6 +43,14 @@ describe('known Studio block bindings', () => {
         continue;
       }
 
+      if (binding.blockTypeId.startsWith('gr::studio::StudioWaterfallSink<')) {
+        expect(binding.supportedTransports).toEqual([
+          'http_poll',
+          'websocket',
+        ]);
+        continue;
+      }
+
       expect(binding.supportedTransports).toEqual(STUDIO_PHASE1_SUPPORTED_TRANSPORTS);
     }
   });
@@ -175,9 +183,9 @@ describe('known Studio block bindings', () => {
     });
 
     const waterfallConfigured = buildStudioBindingView('gr::studio::StudioWaterfallSink<float32>', {
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18087/snapshot',
-      poll_ms: '200',
+      update_ms: '200',
       sample_rate: '48000',
       topic: 'waterfall',
     });
@@ -185,8 +193,9 @@ describe('known Studio block bindings', () => {
       status: 'configured',
       family: 'waterfall',
       payloadFormat: 'waterfall-spectrum-json-v1',
-      transport: 'http_poll',
+      transport: 'websocket',
       endpoint: 'http://127.0.0.1:18087/snapshot',
+      pollMs: 200,
       sampleRate: 48000,
       topic: 'waterfall',
     });

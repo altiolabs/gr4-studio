@@ -26,6 +26,10 @@ export type PlotFrameController = {
   ingestImage: (
     image: NonNullable<PlotDataFrame['image']>,
     emittedAtMs?: number,
+    metadata?: {
+      statusMessage?: string;
+      liveIngressFpsHz?: number;
+    },
   ) => void;
 };
 
@@ -205,6 +209,10 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
   const ingestImage = (
     image: NonNullable<PlotDataFrame['image']>,
     emittedAtMs?: number,
+    metadata?: {
+      statusMessage?: string;
+      liveIngressFpsHz?: number;
+    },
   ) => {
     const nextValues = image.values;
     const hasPixels = image.width > 0 && image.height > 0 && nextValues.length > 0;
@@ -219,6 +227,8 @@ export function createPlotFrameController(spec: PlotPanelSpec): PlotFrameControl
       sequence,
       emittedAtMs,
       state: hasPixels ? 'ready' : 'no-data',
+      statusMessage: metadata?.statusMessage,
+      liveIngressFpsHz: metadata?.liveIngressFpsHz,
       errorKind: undefined,
       errorMessage: undefined,
       domain: spec.kind === 'waterfall' ? 'frequency' : state.domain,
