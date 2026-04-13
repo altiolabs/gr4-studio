@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueries } from '@tanstack/react-query';
-import { StatusBadge } from '../components/status-badge';
 import { StatusPill } from '../components/status-pill';
+import { StudioMark } from '../components/studio-mark';
+import { StatusBadge } from '../components/status-badge';
 import { ApplicationView } from '../features/application/application-view';
 import { VariablesView } from '../features/variables/variables-view';
 import {
@@ -586,6 +587,10 @@ export function StudioPage() {
     [activeDocument, capabilities],
   );
   const saveAsTooltip = useMemo(() => buildSaveAsTooltip(capabilities), [capabilities]);
+  const backendEndpointLabel = useMemo(
+    () => config.controlPlaneBaseUrl.replace(/^https?:\/\//, ''),
+    [config.controlPlaneBaseUrl],
+  );
 
   useEffect(() => {
     if (!initializedTabs) {
@@ -877,6 +882,35 @@ export function StudioPage() {
     }
   };
 
+  useEffect(() => {
+    const onMenuCommand = window.gr4StudioShell?.onMenuCommand;
+    if (!onMenuCommand) {
+      return;
+    }
+
+    return onMenuCommand((command) => {
+      if (command === 'new') {
+        handleCreateTab();
+        return;
+      }
+      if (command === 'open') {
+        void handleOpenCommand();
+        return;
+      }
+      if (command === 'save') {
+        void handleSaveCurrentDocument();
+        return;
+      }
+      if (command === 'saveAs') {
+        void handleSaveAsCurrentDocument();
+        return;
+      }
+      if (command === 'rename') {
+        handleRenameCurrentDocument();
+      }
+    });
+  }, [handleCreateTab, handleOpenCommand, handleRenameCurrentDocument, handleSaveAsCurrentDocument, handleSaveCurrentDocument]);
+
   const performCloseTab = (tabId: string) => {
     const result = closeTab(tabId);
     removeTabContext(tabId);
@@ -1017,16 +1051,13 @@ export function StudioPage() {
 
   return (
     <div className="h-screen overflow-hidden bg-slate-900 text-slate-100 flex flex-col">
-      <header className="h-14 shrink-0 border-b border-border bg-panelAlt px-4 flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-lg font-semibold tracking-wide">gr4-studio</h1>
-          <p className="text-xs text-slate-400 truncate">
-            {activeTab?.document.displayName ?? STUDIO_UNTITLED_NAME}
-            {activeTab?.document.isDirty ? ' •' : ''} · Backend: {config.controlPlaneBaseUrl}
-          </p>
-          <p className="text-[11px] text-slate-500 truncate">{capabilityIndicatorText}</p>
+      <header className="h-16 shrink-0 border-b border-cyan-950/70 bg-slate-950/92 px-4 flex items-center justify-between gap-4 shadow-[0_10px_40px_rgba(2,132,199,0.06)]">
+        <div className="min-w-0 flex items-center gap-3">
+          <StudioMark className="h-9 w-9 shrink-0" />
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold tracking-[0.22em] uppercase text-slate-100">gr4-studio</h1>
+          </div>
         </div>
-
         <div className="flex items-center gap-2 shrink-0">
           <details className="relative">
             <summary className="cursor-pointer list-none rounded border border-slate-600 bg-slate-800 px-2 py-1 text-xs text-slate-200 hover:bg-slate-700">
@@ -1109,14 +1140,12 @@ export function StudioPage() {
           >
             Save As...
           </button>
-          <button
-            type="button"
-            onClick={() => setIsSessionsDrawerOpen(true)}
-            className="rounded border border-indigo-700/70 bg-indigo-900/30 px-2 py-1 text-xs text-indigo-200 hover:bg-indigo-800/40"
+          <span
+            className="rounded-full border border-slate-600 bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-200"
+            title={config.controlPlaneBaseUrl}
           >
-            Sessions
-          </button>
-          <span className="text-xs text-slate-400">Catalog API</span>
+            {backendEndpointLabel}
+          </span>
           <StatusBadge status={connectionStatus} />
         </div>
       </header>

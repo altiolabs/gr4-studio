@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
   const proxyTarget = env.VITE_CONTROL_PLANE_BASE_URL || DEFAULT_GRCTRL_BASE_URL;
 
   return {
+    base: mode === 'desktop' ? './' : '/',
     plugins: [
       react(),
       {

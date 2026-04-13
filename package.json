@@ -3,9 +3,14 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "desktop/main.mjs",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/build.mjs",
+    "build:web": "tsc -b && vite build",
+    "desktop:build": "tsc -b && vite build --mode desktop",
+    "desktop:dev": "node scripts/desktop-dev.mjs",
+    "desktop:install": "node scripts/install-desktop.mjs",
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run"

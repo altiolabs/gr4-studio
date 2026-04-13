@@ -7,3 +7,13 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+interface Window {
+  gr4StudioRuntime?: {
+    readonly controlPlaneBaseUrl?: string;
+    readonly backendMode?: 'local' | 'remote' | 'unknown';
+  };
+  gr4StudioShell?: {
+    readonly onMenuCommand?: (callback: (command: 'new' | 'open' | 'save' | 'saveAs' | 'rename') => void) => () => void;
+  };
+}
