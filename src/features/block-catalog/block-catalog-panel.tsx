@@ -15,6 +15,7 @@ import {
   type CategoryTreeNode,
 } from './catalog-tree';
 import { useBlockCatalogQuery } from './hooks/use-block-catalog-query';
+import { config } from '../../lib/config';
 
 function BlockVariantButton({ block }: { block: BlockCatalogItem }) {
   const addNodeFromCatalogItem = useEditorStore((state) => state.addNodeFromCatalogItem);
@@ -131,6 +132,12 @@ function CategoryTreeView({
 export function BlockCatalogPanel() {
   const { data, isPending, isError, error } = useBlockCatalogQuery();
   const [searchQuery, setSearchQuery] = useState('');
+  const loadingMessage =
+    config.backendMode === 'local'
+      ? 'Connecting to local gr4cp...'
+      : config.backendMode === 'remote'
+        ? 'Connecting to remote gr4cp...'
+        : 'Connecting to backend...';
 
   const filteredBlocks = useMemo(() => {
     if (!data) {
@@ -226,7 +233,7 @@ export function BlockCatalogPanel() {
           />
         </div>
 
-        {isPending && <p className="text-sm text-slate-400">Loading blocks...</p>}
+        {isPending && <p className="text-sm text-slate-400">{loadingMessage} Loading blocks...</p>}
 
         {isError && (
           <div className="rounded-md border border-rose-900 bg-rose-950/40 p-3 text-sm text-rose-200">

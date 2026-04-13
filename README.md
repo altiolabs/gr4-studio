@@ -112,6 +112,25 @@ Runtime config is centralized in `src/lib/config.ts`.
 2. `npm run dev`
 3. open `http://localhost:5173`
 
+### Desktop launcher
+
+1. `npm install`
+2. `GR4_PREFIX_PATH=/path/to/prefix npm run build`
+3. run `/path/to/prefix/bin/gr4-studio`
+
+For local desktop development, `npm run desktop:dev` launches Electron against the Vite dev server.
+
+The first desktop cut loads the installed frontend from `share/gr4-studio`, injects the control-plane base URL into the renderer, and resolves `gr4cp_server` from `PATH` after the launcher prepends the prefix `bin/` directory. If the backend needs explicit host/port flags, wire them into `desktop/main.mjs` where the TODO is marked.
+
+If you want the old browser-only production bundle, use `npm run build:web`.
+
+Launch modes:
+
+- `gr4-studio` starts a local `gr4cp_server`
+- `gr4-studio --remote http://host:8080` opens Studio against the given endpoint
+- `gr4-studio --remote` prompts for a remote endpoint and remembers recent choices
+- setting `GR4_STUDIO_CONTROL_PLANE_BASE_URL` also selects remote mode
+
 ### Docker
 
 ```bash
