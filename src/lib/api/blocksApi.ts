@@ -17,12 +17,63 @@ export type BlockCatalogItem = {
   parameters: BlockParameterDto[];
 };
 
+type ParsedBlocksPayload =
+  | {
+      success: true;
+      data: BlockListResponseDto;
+    }
+  | {
+      success: false;
+      details: string;
+    };
+
 function normalizeItems(response: BlockListResponseDto): BlockSummaryDto[] {
   if (Array.isArray(response)) {
     return response;
   }
 
   return response.blocks;
+}
+
+function describePayloadShape(payload: unknown): string {
+  if (Array.isArray(payload)) {
+    return `payload=array(len=${payload.length})`;
+  }
+
+  if (payload === null) {
+    return 'payload=null';
+  }
+
+  if (payload === undefined) {
+    return 'payload=undefined';
+  }
+
+  if (typeof payload === 'object') {
+    const keys = Object.keys(payload as Record<string, unknown>).slice(0, 10);
+    return `payload=object(keys=${keys.join(',') || '(none)'})`;
+  }
+
+  if (typeof payload === 'string') {
+    return `payload=string(len=${payload.length})`;
+  }
+
+  return `payload=${typeof payload}`;
+}
+
+function parseBlocksPayload(payload: unknown): ParsedBlocksPayload {
+  const parsed = blockListResponseDtoSchema.safeParse(payload);
+  if (parsed.success) {
+    return {
+      success: true,
+      data: parsed.data,
+    };
+  }
+
+  const schemaIssue = parsed.error.issues.map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`).join('; ');
+  return {
+    success: false,
+    details: `${schemaIssue} (${describePayloadShape(payload)})`,
+  };
 }
 
 function mapBlock(dto: BlockSummaryDto): BlockCatalogItem {
@@ -47,10 +98,9 @@ export async function getBlocks(): Promise<BlockCatalogItem[]> {
     method: 'GET',
   });
 
-  const parsed = blockListResponseDtoSchema.safeParse(payload);
+  const parsed = parseBlocksPayload(payload);
   if (!parsed.success) {
-    const schemaIssue = parsed.error.issues.map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`).join('; ');
-    throw new ApiClientError('Block response schema mismatch', 'PARSE', undefined, schemaIssue);
+    throw new ApiClientError('Block response schema mismatch', 'PARSE', undefined, parsed.details);
   }
 
   return normalizeItems(parsed.data).map(mapBlock);

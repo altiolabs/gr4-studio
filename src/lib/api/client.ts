@@ -70,8 +70,11 @@ export async function jsonRequest<T>({ path, ...init }: JsonRequestOptions): Pro
   try {
     response = await fetch(url, {
       ...init,
+      cache: init.cache ?? 'no-store',
       headers: {
         Accept: 'application/json',
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
         ...(init.headers ?? {}),
       },
     });
@@ -105,6 +108,10 @@ export async function jsonRequest<T>({ path, ...init }: JsonRequestOptions): Pro
     );
   }
 
+  if (response.status === 204 || response.status === 205) {
+    return undefined as T;
+  }
+
   let body = '';
   try {
     body = await response.text();
@@ -113,7 +120,12 @@ export async function jsonRequest<T>({ path, ...init }: JsonRequestOptions): Pro
   }
 
   if (!body.trim()) {
-    return {} as T;
+    throw new ApiClientError(
+      `Response body was empty for ${path}`,
+      'PARSE',
+      response.status,
+      `status=${response.status} url=${url}`,
+    );
   }
 
   try {

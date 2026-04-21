@@ -22,12 +22,20 @@
 #include <utility>
 #include <vector>
 
+#include <gnuradio-4.0/studio/StudioWebSocketTransport.hpp>
+
 namespace gr::studio {
 
 namespace detail {
 
 template<typename T>
 concept Supported2DSample = std::same_as<T, float> || std::same_as<T, std::complex<float>>;
+
+enum class Series2DTransport {
+    http_snapshot,
+    http_poll,
+    websocket,
+};
 
 struct XYPoint {
     float x = 0.0F;
@@ -143,9 +151,11 @@ inline std::string normalizeSnapshotPath(const std::string& rawPath) {
 
 inline ParsedHttpEndpoint parseHttpEndpoint(const std::string& endpoint) {
     std::string remaining = endpoint;
-    constexpr std::string_view prefix = "http://";
-    if (remaining.starts_with(prefix)) {
-        remaining.erase(0UZ, prefix.size());
+    for (const std::string_view prefix : {"http://", "https://", "ws://", "wss://"}) {
+        if (remaining.starts_with(prefix)) {
+            remaining.erase(0UZ, prefix.size());
+            break;
+        }
     }
 
     const std::size_t slash = remaining.find('/');
@@ -237,8 +247,12 @@ private:
     std::thread                      _serverThread;
 };
 
-inline bool isHttpTransport(const std::string& transport) {
-    return transport == "http_snapshot" || transport == "http_poll";
+inline bool isHttpTransport(const Series2DTransport transport) {
+    return transport == Series2DTransport::http_snapshot || transport == Series2DTransport::http_poll;
+}
+
+inline bool isWebSocketTransport(const Series2DTransport transport) {
+    return transport == Series2DTransport::websocket;
 }
 
 inline std::string_view normalizeRenderMode(std::string_view render_mode) {
@@ -255,9 +269,9 @@ struct Studio2DSeriesSink : Block<Studio2DSeriesSink<T>> {
 
     PortIn<T> in;
 
-    Annotated<std::string, "transport", Doc<"Data-plane transport mode">, Visible> transport = "http_poll";
+    Annotated<detail::Series2DTransport, "transport", Doc<"Data-plane transport mode">, Visible> transport = detail::Series2DTransport::http_poll;
     Annotated<std::string, "endpoint", Doc<"Transport endpoint URL/path">, Visible> endpoint = "http://127.0.0.1:18081/snapshot";
-    Annotated<std::uint32_t, "poll_ms", Doc<"Suggested poll interval in milliseconds for poll transports">, Visible> poll_ms = 250U;
+    Annotated<std::uint32_t, "update_ms", Doc<"Suggested update interval in milliseconds for http_poll and websocket transports">, Visible> update_ms = 250U;
     Annotated<gr::Size_t, "window_size", Doc<"2D points kept in memory">, Visible> window_size = 1024UZ;
     Annotated<std::string, "render_mode", Doc<"XY render hint: line or scatter">, Visible> render_mode = "line";
     Annotated<bool, "autoscale", Doc<"Enable automatic axis scaling in Studio Application">, Visible> autoscale = true;
@@ -267,7 +281,7 @@ struct Studio2DSeriesSink : Block<Studio2DSeriesSink<T>> {
     Annotated<float, "y_max", Doc<"Optional y-axis maximum when autoscale is disabled">, Visible> y_max = 0.0F;
     Annotated<std::string, "topic", Doc<"Optional stream topic for pub/sub transports">, Visible> topic = "";
 
-    GR_MAKE_REFLECTABLE(Studio2DSeriesSink, in, transport, endpoint, poll_ms, window_size, render_mode, autoscale, x_min, x_max, y_min, y_max, topic);
+    GR_MAKE_REFLECTABLE(Studio2DSeriesSink, in, transport, endpoint, update_ms, window_size, render_mode, autoscale, x_min, x_max, y_min, y_max, topic);
 
     using Block<Studio2DSeriesSink<T>>::Block;
 
@@ -276,7 +290,10 @@ struct Studio2DSeriesSink : Block<Studio2DSeriesSink<T>> {
         startTransport();
     }
 
-    void stop() { _http.stop(); }
+    void stop() {
+        _http.stop();
+        _websocket.stop();
+    }
 
     void settingsChanged(const property_map&, const property_map& new_settings) {
         if (new_settings.contains("window_size")) {
@@ -298,21 +315,45 @@ struct Studio2DSeriesSink : Block<Studio2DSeriesSink<T>> {
         } else {
             _window.pushComplexSamples(std::span<const std::complex<float>>(input.data(), input.size()));
         }
+        publishWebSocketFrame();
         std::ignore = input.consume(input.size());
         return work::Status::OK;
     }
 
+    [[nodiscard]] std::string snapshotJson() const {
+        const char* sampleType = std::same_as<T, float> ? "xy_float32" : "xy_complex64";
+        return _window.snapshotJson(sampleType, detail::normalizeRenderMode(render_mode.value));
+    }
+
 private:
     void startTransport() {
+        _http.stop();
+        _websocket.stop();
+        _lastWebSocketPublishAt = {};
+
+        if (detail::isWebSocketTransport(transport.value)) {
+            const auto parsed = detail::parseHttpEndpoint(endpoint.value);
+            if (!_websocket.start(parsed.host, parsed.port, parsed.path)) {
+                std::ostringstream message;
+                message << "Studio2DSeriesSink failed to start websocket transport endpoint at ";
+                message << endpoint.value << " (parsed host=" << parsed.host << ", port=" << parsed.port << ", path=" << parsed.path << ")";
+                const auto reason = _websocket.lastErrorMessage();
+                if (!reason.empty()) {
+                    message << ": " << reason;
+                }
+                throw gr::exception(message.str());
+            }
+            return;
+        }
+
         if (!detail::isHttpTransport(transport.value)) {
-            throw gr::exception("Studio2DSeriesSink currently supports only http_snapshot and http_poll transports.");
+            throw gr::exception("Studio2DSeriesSink currently supports only http_snapshot, http_poll, and websocket transports.");
         }
 
         const auto parsed = detail::parseHttpEndpoint(endpoint.value);
-        const char* sampleType = std::same_as<T, float> ? "xy_float32" : "xy_complex64";
         if (!_http.start(parsed,
-                         [this, sampleType]() {
-                             return _window.snapshotJson(sampleType, detail::normalizeRenderMode(render_mode.value));
+                         [this]() {
+                             return snapshotJson();
                          })) {
             throw gr::exception("Studio2DSeriesSink failed to start HTTP transport endpoint.");
         }
@@ -320,6 +361,24 @@ private:
 
     detail::XYPointWindow      _window{};
     detail::SnapshotHttpService _http{};
+    websocket_transport::SnapshotWebSocketService _websocket{};
+    std::chrono::steady_clock::time_point _lastWebSocketPublishAt{};
+
+    void publishWebSocketFrame() {
+        if (!_websocket.isRunning()) {
+            return;
+        }
+
+        const auto now = std::chrono::steady_clock::now();
+        const auto interval = std::chrono::milliseconds(std::max<std::uint32_t>(1U, update_ms));
+        if (_lastWebSocketPublishAt != std::chrono::steady_clock::time_point{} &&
+            now - _lastWebSocketPublishAt < interval) {
+            return;
+        }
+
+        _lastWebSocketPublishAt = now;
+        _websocket.publishText(snapshotJson());
+    }
 };
 
 } // namespace gr::studio

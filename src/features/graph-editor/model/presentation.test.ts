@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { toCanonicalBlockDisplayName, toDisambiguatedShortBlockName, toShortBlockName } from './presentation';
+import {
+  buildBlockCardSummary,
+  toCanonicalBlockDisplayName,
+  toDisambiguatedShortBlockName,
+  toShortBlockName,
+} from './presentation';
 
 describe('graph node short-name presentation', () => {
   it('keeps short names without template disambiguation', () => {
@@ -57,5 +62,39 @@ describe('graph node short-name presentation', () => {
         'gr::studio::StudioPowerSpectrumSink<complex<float32>>',
       ),
     ).toBe('StudioPowerSpectrumSink');
+  });
+
+  it('hides managed endpoint parameters from graph-node summary chips', () => {
+    const summary = buildBlockCardSummary(
+      {
+        displayName: 'StudioSeriesSink<float32>',
+        blockTypeId: 'gr::studio::StudioSeriesSink<float32>',
+        parameters: {
+          transport: { value: 'http_poll', bindingKind: 'literal' },
+          endpoint: { value: 'http://127.0.0.1:18080/snapshot', bindingKind: 'literal' },
+          channels: { value: '1', bindingKind: 'literal' },
+        },
+      },
+      undefined,
+    );
+
+    expect(summary.parameterLines).toEqual(['transport=http_poll', 'channels=1']);
+    expect(summary.parameterLines.some((line) => line.startsWith('endpoint='))).toBe(false);
+  });
+
+  it('keeps endpoint parameters in graph-node summary chips for unsupported families', () => {
+    const summary = buildBlockCardSummary(
+      {
+        displayName: 'StudioWaterfallSink<float32>',
+        blockTypeId: 'gr::studio::StudioWaterfallSink<float32>',
+        parameters: {
+          transport: { value: 'http_poll', bindingKind: 'literal' },
+          endpoint: { value: 'http://127.0.0.1:18087/snapshot', bindingKind: 'literal' },
+        },
+      },
+      undefined,
+    );
+
+    expect(summary.parameterLines).toEqual(['transport=http_poll', 'endpoint=http://127.0.0.1:18087/snapshot']);
   });
 });

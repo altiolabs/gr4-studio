@@ -92,7 +92,9 @@ export type PlotRuntimeBinding = {
   status: 'unsupported' | 'unconfigured' | 'configured' | 'invalid';
   transport?: string;
   endpoint?: string;
+  showEndpointInUi?: boolean;
   updateMs?: number;
+  reason?: string;
 };
 
 export type PlotAdapterProps = {

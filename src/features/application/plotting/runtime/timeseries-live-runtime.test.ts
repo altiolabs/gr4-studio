@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { PlotDataFrame } from '../model/types';
-import { deriveWebSocketIngressFps, parseLiveFrameFromPayload, shouldRetainPreviousLiveFrame } from './timeseries-live-runtime';
+import { WATERFALL_NORMAL_FIXTURE } from './fixtures/waterfall-contract-fixtures';
+import {
+  deriveWebSocketIngressFps,
+  inactiveExecutionStateMessage,
+  parseLiveFrameFromPayload,
+  resolveLiveTransportMode,
+  shouldRetainPreviousLiveFrame,
+  shouldTreatBindingFailureAsInactiveState,
+} from './timeseries-live-runtime';
 
 function frame(state: NonNullable<PlotDataFrame['meta']>['state'], points: number[]): PlotDataFrame {
   return {
@@ -108,5 +116,130 @@ describe('timeseries live runtime retention', () => {
     expect(parsed.series).toHaveLength(1);
     expect(parsed.series[0]?.label).toBe('A');
     expect(parsed.series[0]?.y).toEqual([1, 2, 3]);
+  });
+
+  it('parses dataset payloads through the power spectrum live route unchanged', () => {
+    const parsed = parseLiveFrameFromPayload({
+      payloadFormat: 'dataset-xy-json-v1',
+      seriesLabels: ['Spectrum'],
+      payload: {
+        payload_format: 'dataset-xy-json-v1',
+        layout: 'pairs_xy',
+        points: 3,
+        signal_name: 'Legacy Spectrum',
+        data: [
+          [10, -20],
+          [20, -15],
+          [30, -10],
+        ],
+      },
+    });
+
+    expect(parsed.kind).toBe('series');
+    if (parsed.kind !== 'series') {
+      return;
+    }
+    expect(parsed.xyRenderMode).toBe('line');
+    expect(parsed.series).toHaveLength(1);
+    expect(parsed.series[0]?.label).toBe('Spectrum');
+    expect(parsed.series[0]?.x).toEqual([10, 20, 30]);
+    expect(parsed.series[0]?.y).toEqual([-20, -15, -10]);
+  });
+
+  it('parses 2D series payloads through the XY live route unchanged', () => {
+    const parsed = parseLiveFrameFromPayload({
+      payloadFormat: 'series2d-xy-json-v1',
+      seriesLabels: ['Constellation'],
+      payload: {
+        payload_format: 'series2d-xy-json-v1',
+        layout: 'pairs_xy',
+        points: 3,
+        render_mode: 'scatter',
+        data: [
+          [-1, 1],
+          [0, 0],
+          [1, -1],
+        ],
+      },
+    });
+
+    expect(parsed.kind).toBe('series');
+    if (parsed.kind !== 'series') {
+      return;
+    }
+    expect(parsed.xyRenderMode).toBe('scatter');
+    expect(parsed.series).toHaveLength(1);
+    expect(parsed.series[0]?.label).toBe('Constellation');
+    expect(parsed.series[0]?.x).toEqual([-1, 0, 1]);
+    expect(parsed.series[0]?.y).toEqual([1, 0, -1]);
+  });
+
+  it('parses waterfall payloads through the existing waterfall live route unchanged', () => {
+    const parsed = parseLiveFrameFromPayload({
+      payloadFormat: 'waterfall-spectrum-json-v1',
+      seriesLabels: ['Waterfall'],
+      payload: WATERFALL_NORMAL_FIXTURE,
+    });
+
+    expect(parsed.kind).toBe('image');
+    if (parsed.kind !== 'image') {
+      return;
+    }
+    expect(parsed.image.width).toBe(3);
+    expect(parsed.image.height).toBe(2);
+    expect(Array.from(parsed.image.values)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(parsed.image.timeSpan).toBe(0.012);
+    expect(parsed.image.signalName).toBe('Waterfall');
+  });
+
+  it('treats configured Waterfall websocket bindings as live websocket runtime', () => {
+    expect(
+      resolveLiveTransportMode({
+        status: 'configured',
+        transport: 'websocket',
+        endpoint: '/sessions/sess-1/streams/waterfall0/ws',
+      }),
+    ).toBe('websocket');
+  });
+
+  it('treats configured 2D series websocket bindings as live websocket runtime', () => {
+    expect(
+      resolveLiveTransportMode({
+        status: 'configured',
+        transport: 'websocket',
+        endpoint: '/sessions/sess-1/streams/xy0/ws',
+      }),
+    ).toBe('websocket');
+  });
+
+  it('treats stopped-session managed binding failures as inactive lifecycle state instead of hard errors', () => {
+    expect(
+      shouldTreatBindingFailureAsInactiveState({
+        executionState: 'stopped',
+        status: 'invalid',
+        reason: 'Linked session is not running.',
+      }),
+    ).toBe(true);
+
+    expect(
+      shouldTreatBindingFailureAsInactiveState({
+        executionState: 'stopped',
+        status: 'invalid',
+        reason: 'Runtime stream "spectrum0" advertised unsupported transport "zmq_sub" for gr::studio::StudioPowerSpectrumSink<float32>.',
+      }),
+    ).toBe(false);
+
+    expect(inactiveExecutionStateMessage('stopped')).toBe(
+      'Linked session is stopped. Start or rerun the session to resume this plot.',
+    );
+    expect(inactiveExecutionStateMessage('ready')).toBe(
+      'Linked session is ready but not running. Start the session to resume this plot.',
+    );
+    expect(inactiveExecutionStateMessage('error')).toBe(
+      'Linked session is in an error state. Clear the session error or rerun to resume this plot.',
+    );
+    expect(inactiveExecutionStateMessage('idle')).toBe(
+      'No linked session is running. Run the graph to resume this plot.',
+    );
   });
 });

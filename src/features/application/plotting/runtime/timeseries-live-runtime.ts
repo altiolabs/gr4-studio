@@ -26,6 +26,7 @@ import {
   normalizeJsonWebSocketEndpoint,
 } from './json-websocket-runtime';
 import { mapWaterfallSnapshotToImage, parseHttpWaterfallSnapshot } from './waterfall-frame';
+import { fetchRuntimeJsonPayload } from '../../../../lib/api/runtime-http-fetch';
 
 const PLOT_PUBLISH_MS = 120;
 const PLOT_NO_DATA_GRACE_MS = 1200;
@@ -69,7 +70,7 @@ export function deriveBindingFailureMessage(params: {
   reason?: string;
 }): string | null {
   if (params.status === 'invalid') {
-    return 'Binding is invalid for runtime plotting.';
+    return params.reason ?? 'Binding is invalid for runtime plotting.';
   }
   if (params.reason === 'unsupported-transport') {
     return 'Only http_snapshot/http_poll is supported for this live plot path.';
@@ -78,6 +79,44 @@ export function deriveBindingFailureMessage(params: {
     return 'Missing endpoint for runtime plotting.';
   }
   return null;
+}
+
+function isInactiveManagedRuntimeReason(reason?: string): boolean {
+  if (!reason) {
+    return false;
+  }
+
+  return (
+    reason === 'Linked session is not running.' ||
+    reason === 'No linked session is available for this descriptor-based Studio binding.' ||
+    reason === 'No linked session is available for this managed Studio runtime binding.' ||
+    reason.startsWith('Linked session "') ||
+    reason.startsWith('Running session advertised streams, but none matched block instance "') ||
+    reason.includes(' is not ready.')
+  );
+}
+
+export function shouldTreatBindingFailureAsInactiveState(params: {
+  executionState?: 'idle' | 'ready' | 'running' | 'stopped' | 'error';
+  status: PlotRuntimeBinding['status'];
+  reason?: string;
+}): boolean {
+  return params.executionState !== 'running' && params.status === 'invalid' && isInactiveManagedRuntimeReason(params.reason);
+}
+
+export function inactiveExecutionStateMessage(
+  executionState?: 'idle' | 'ready' | 'running' | 'stopped' | 'error',
+): string {
+  if (executionState === 'stopped') {
+    return 'Linked session is stopped. Start or rerun the session to resume this plot.';
+  }
+  if (executionState === 'ready') {
+    return 'Linked session is ready but not running. Start the session to resume this plot.';
+  }
+  if (executionState === 'error') {
+    return 'Linked session is in an error state. Clear the session error or rerun to resume this plot.';
+  }
+  return 'No linked session is running. Run the graph to resume this plot.';
 }
 
 export function resolveLiveTransportMode(binding: PlotRuntimeBinding): LiveTransportMode {
@@ -136,32 +175,6 @@ export function shouldRetainPreviousLiveFrame(params: {
     params.currentFrame.meta?.state === 'ready' &&
     (hasRenderableSeries(params.currentFrame) || hasRenderableImage(params.currentFrame))
   );
-}
-
-async function fetchSnapshotPayload(endpointUrl: string): Promise<unknown> {
-  if (import.meta.env.DEV) {
-    const proxied = await fetch(`/__gr4studio/runtime-http-proxy?target=${encodeURIComponent(endpointUrl)}`, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-      },
-    });
-    if (!proxied.ok) {
-      throw new Error(`Proxy HTTP ${proxied.status}`);
-    }
-    return proxied.json();
-  }
-
-  const directResponse = await fetch(endpointUrl, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-  if (!directResponse.ok) {
-    throw new Error(`HTTP ${directResponse.status}`);
-  }
-  return directResponse.json();
 }
 
 export function mapSnapshotToPlotSeriesFrames(
@@ -412,8 +425,11 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
   const expectedContract = resolvePayloadContract(spec.source.payloadFormat);
   const hasEndpoint = endpoint.length > 0;
   const supportsHttpLivePath = transportMode === 'http' && runtimeActive && hasEndpoint;
-  const supportsSeriesWebSocketLivePath =
-    transportMode === 'websocket' && runtimeActive && hasEndpoint && expectedContract === 'series-window-json-v1';
+  const supportsJsonWebSocketLivePath =
+    transportMode === 'websocket' &&
+    runtimeActive &&
+    hasEndpoint &&
+    (expectedContract === 'series-window-json-v1' || expectedContract === 'series2d-xy-json-v1');
   const supportsWaterfallWebSocketLivePath =
     transportMode === 'websocket' && runtimeActive && hasEndpoint && expectedContract === 'waterfall-spectrum-json-v1';
   const supportsPowerSpectrumWebSocketLivePath =
@@ -439,7 +455,7 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
     const refreshGeneration = fetchGenerationRef.current;
     isFetchingRef.current = true;
     try {
-      const payload = await fetchSnapshotPayload(endpoint);
+      const payload = await fetchRuntimeJsonPayload(endpoint);
       if (refreshGeneration !== fetchGenerationRef.current) {
         return;
       }
@@ -526,8 +542,15 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
 
     fetchGenerationRef.current += 1;
     controllerRef.current.reset();
-    if (!runtimeActive && binding.status === 'configured' && transportMode !== 'unsupported' && hasEndpoint) {
-      controllerRef.current.setNoData();
+    if (
+      (!runtimeActive && binding.status === 'configured' && transportMode !== 'unsupported' && hasEndpoint) ||
+      shouldTreatBindingFailureAsInactiveState({
+        executionState,
+        status: binding.status,
+        reason: binding.reason,
+      })
+    ) {
+      controllerRef.current.setNoData(inactiveExecutionStateMessage(executionState));
       setFrame(controllerRef.current.getFrame());
       return;
     }
@@ -535,7 +558,7 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
       binding.status === 'invalid' || (binding.status === 'configured' && transportMode === 'unsupported')
         ? deriveBindingFailure({
             status: binding.status,
-            reason: binding.status === 'configured' ? 'unsupported-transport' : undefined,
+            reason: binding.status === 'configured' ? 'unsupported-transport' : binding.reason,
           })
         : null;
     if (failure) {
@@ -551,18 +574,23 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
     }
     setFrame(controllerRef.current.getFrame());
   }, [
+    binding.reason,
     binding.status,
     binding.transport,
     endpoint,
     hasEndpoint,
     expectedContract,
+    executionState,
+    powerSpectrumWebSocketEndpoint,
     refresh,
     runtimeActive,
     spec.panelId,
     supportsHttpLivePath,
+    supportsJsonWebSocketLivePath,
     supportsPowerSpectrumWebSocketLivePath,
     supportsWaterfallWebSocketLivePath,
     transportMode,
+    waterfallWebSocketEndpoint,
   ]);
 
   useEffect(() => {
@@ -576,7 +604,7 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
   }, [binding.transport, refresh, supportsHttpLivePath, updateMs]);
 
   useEffect(() => {
-    if (!supportsSeriesWebSocketLivePath) {
+    if (!supportsJsonWebSocketLivePath) {
       return undefined;
     }
 
@@ -663,7 +691,7 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
           payload: parsed,
           liveIngressFpsHz,
           emittedAtMs: nowMs,
-          statusMessage: 'WebSocket connected · series frame',
+          statusMessage: 'WebSocket connected · plot frame',
         };
         scheduleWebSocketRender();
       },
@@ -684,17 +712,17 @@ export function useTimeseriesLiveFrame({ spec, binding, executionState }: UseTim
           return;
         }
         if (state === 'open') {
-          controllerRef.current.setLoading(`WebSocket connected to ${seriesWebSocketEndpoint}. Waiting for series…`);
+          controllerRef.current.setLoading(`WebSocket connected to ${seriesWebSocketEndpoint}. Waiting for plot frame…`);
           publishControllerFrame();
           return;
         }
         if (state === 'error') {
-          controllerRef.current.setError(message ?? 'Series websocket connection failed.', 'runtime');
+          controllerRef.current.setError(message ?? 'Plot websocket connection failed.', 'runtime');
           publishControllerFrame();
         }
       },
     });
-  }, [seriesWebSocketEndpoint, spec.panelId, spec.source.payloadFormat, spec.view.seriesLabels, supportsSeriesWebSocketLivePath]);
+  }, [seriesWebSocketEndpoint, spec.panelId, spec.source.payloadFormat, spec.view.seriesLabels, supportsJsonWebSocketLivePath]);
 
   useEffect(() => {
     if (!supportsPowerSpectrumWebSocketLivePath) {

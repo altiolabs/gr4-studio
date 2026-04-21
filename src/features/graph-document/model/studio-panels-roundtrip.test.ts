@@ -155,4 +155,38 @@ describe('studio panel metadata round-trip', () => {
     const restored = editorGraphFromDocument(document);
     expect(restored.nodes[0].rotation).toBe(90);
   });
+
+  it('preserves legacy endpoint parameter values across document round-trip', () => {
+    const snapshot = {
+      metadata: {
+        name: 'Graph',
+      },
+      nodes: [
+        {
+          instanceId: 'series0',
+          blockTypeId: 'gr::studio::StudioSeriesSink<float32>',
+          displayName: 'Series',
+          category: 'Studio',
+          parameters: {
+            transport: { value: 'websocket', bindingKind: 'literal' as const },
+            endpoint: { value: 'http://legacy-host:18080/legacy-series', bindingKind: 'literal' as const },
+          },
+          position: { x: 5, y: 10 },
+        },
+      ],
+      edges: [],
+    };
+
+    const document = graphDocumentFromEditor(snapshot);
+    expect(document.graph.nodes[0]?.parameters.endpoint).toEqual({
+      kind: 'literal',
+      value: 'http://legacy-host:18080/legacy-series',
+    });
+
+    const restored = editorGraphFromDocument(document);
+    expect(restored.nodes[0]?.parameters.endpoint).toEqual({
+      value: 'http://legacy-host:18080/legacy-series',
+      bindingKind: 'literal',
+    });
+  });
 });

@@ -40,10 +40,10 @@ import {
 import { GraphEditorPanel } from '../features/graph-editor/graph-editor-panel';
 import { GraphTabsBar } from '../features/graph-tabs/components/graph-tabs-bar';
 import { useGraphTabsStore, type EditorSnapshot } from '../features/graph-tabs/store/graphTabsStore';
-import { buildStudioBindingView } from '../features/graph-editor/runtime/known-block-bindings';
 import { useEditorStore } from '../features/graph-editor/store/editorStore';
 import { InspectorPanel } from '../features/inspector/inspector-panel';
 import { GlobalSessionsDrawer } from '../features/runtime-session/components/global-sessions-drawer';
+import { resolveCurrentSessionStudioBindingView } from '../features/runtime-session/model/runtime-binding-resolution';
 import { useRuntimeSessionStore } from '../features/runtime-session/store/runtimeSessionStore';
 import { setBlockSettings } from '../lib/api/block-settings';
 import { buildCurrentGraphSubmissionFromEditorSnapshot } from '../features/runtime-submission/model/current-graph-submission';
@@ -70,6 +70,7 @@ import { PlotStyleModal } from '../features/workspace/plot-style-modal';
 import type { StudioPlotStyleConfig, StudioVariable } from '../features/graph-document/model/studio-workspace';
 import { getBlockDetails, type BlockDetails } from '../lib/api/block-details';
 import { config } from '../lib/config';
+import { isDescriptorBasedBindingFamily } from '../features/graph-editor/runtime/studio-managed-runtime-authoring';
 
 type ConnectionStatus = 'idle' | 'loading' | 'connected' | 'error';
 type CenterViewMode = 'graph' | 'variables' | 'workspace' | 'application';
@@ -432,7 +433,12 @@ export function StudioPage() {
         sourceNode.parameters,
         blockDetailsByType.get(sourceNode.blockTypeId),
       );
-      const bindingView = buildStudioBindingView(sourceNode.blockTypeId, effectiveParameterValues);
+      const bindingView = resolveCurrentSessionStudioBindingView({
+        blockTypeId: sourceNode.blockTypeId,
+        nodeInstanceId: sourceNode.instanceId,
+        parameterValues: effectiveParameterValues,
+        session: activeRuntimeContext?.session,
+      });
 
       const controlWidgets =
         panel.kind === 'control'
@@ -456,10 +462,12 @@ export function StudioPage() {
         bindingStatus: bindingView.status,
         bindingTransport: bindingView.transport,
         bindingEndpoint: bindingView.endpoint,
+        bindingShowEndpointInUi: !isDescriptorBasedBindingFamily(sourceNode.blockTypeId),
         bindingUpdateMs: bindingView.updateMs,
+        bindingReason: bindingView.reason,
       };
     });
-  }, [blockDetailsByType, controlWidgetRuntime, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes, resolvedGraph]);
+  }, [activeRuntimeContext?.session, blockDetailsByType, controlWidgetRuntime, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes, resolvedGraph]);
 
   useEffect(() => {
     if (!activeTabId || !activeRuntimeContext?.sessionId || !runtimeView) {

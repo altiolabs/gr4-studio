@@ -73,7 +73,7 @@ Semantics:
 
 Frontend routing:
 
-- `payloadFormat=series2d-xy-json-v1` routes to the vector XY parser.
+- `payloadFormat=series2d-xy-json-v1` routes to the vector XY parser, regardless of whether the sink is served over `http_snapshot`, `http_poll`, or websocket transport.
 
 ## Dataset XY contract
 

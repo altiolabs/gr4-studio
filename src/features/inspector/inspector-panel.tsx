@@ -19,10 +19,13 @@ import type { RuntimeSettingsValue } from '../../lib/api/block-settings';
 import { useRuntimeSessionStore } from '../runtime-session/store/runtimeSessionStore';
 import { buildCurrentGraphSubmissionFromEditorSnapshot } from '../runtime-submission/model/current-graph-submission';
 import { canDownloadCurrentGraph, downloadCurrentGraphAsGr4c } from '../document-file/gr4c-download';
-import { buildStudioBindingView } from '../graph-editor/runtime/known-block-bindings';
 import { toCanonicalBlockDisplayName } from '../graph-editor/model/presentation';
 import type { BlockDetails, BlockParameterMeta } from '../../lib/api/block-details';
 import { getBlockDetails } from '../../lib/api/block-details';
+import {
+  buildStudioAuthoringBindingView,
+  getDescriptorBindingAuthoringMessage,
+} from '../graph-editor/runtime/studio-managed-runtime-authoring';
 
 type InspectorTabId = 'selection' | 'graph' | 'session';
 
@@ -481,10 +484,13 @@ function SelectionTab({
   const studioBinding = useMemo(
     () =>
       selectedBlock
-        ? buildStudioBindingView(selectedBlock.blockTypeId, effectiveParameterValues)
+        ? buildStudioAuthoringBindingView(selectedBlock.blockTypeId, effectiveParameterValues)
         : null,
     [effectiveParameterValues, selectedBlock],
   );
+  const descriptorBindingAuthoringMessage = selectedBlock
+    ? getDescriptorBindingAuthoringMessage(selectedBlock.blockTypeId)
+    : null;
 
   const renderedPorts =
     blockDetailsQuery.data && selectedBlock
@@ -637,6 +643,10 @@ function SelectionTab({
 
             {studioBinding.reason && (
               <p className="text-xs text-slate-300 break-words">{studioBinding.reason}</p>
+            )}
+
+            {descriptorBindingAuthoringMessage && (
+              <p className="text-[11px] text-sky-200 break-words">{descriptorBindingAuthoringMessage}</p>
             )}
 
             <p className="text-[11px] text-slate-500">

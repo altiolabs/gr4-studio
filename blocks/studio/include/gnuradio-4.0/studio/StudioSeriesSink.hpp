@@ -29,6 +29,12 @@ namespace gr::studio {
 
 namespace detail {
 
+enum class SeriesTransport {
+    http_snapshot,
+    http_poll,
+    websocket,
+};
+
 template<typename T>
 concept SupportedSample = std::same_as<T, float> || std::same_as<T, std::complex<float>>;
 
@@ -171,9 +177,11 @@ inline std::string normalizeSnapshotPath(const std::string& rawPath) {
 
 inline ParsedHttpEndpoint parseHttpEndpoint(const std::string& endpoint) {
     std::string remaining = endpoint;
-    constexpr std::string_view prefix = "http://";
-    if (remaining.starts_with(prefix)) {
-        remaining.erase(0UZ, prefix.size());
+    for (const std::string_view prefix : {"http://", "https://", "ws://", "wss://"}) {
+        if (remaining.starts_with(prefix)) {
+            remaining.erase(0UZ, prefix.size());
+            break;
+        }
     }
 
     const std::size_t slash = remaining.find('/');
@@ -265,12 +273,12 @@ private:
     std::thread                     _serverThread;
 };
 
-inline bool isHttpTransport(const std::string& transport) {
-    return transport == "http_snapshot" || transport == "http_poll";
+inline bool isHttpTransport(const SeriesTransport transport) {
+    return transport == SeriesTransport::http_snapshot || transport == SeriesTransport::http_poll;
 }
 
-inline bool isWebSocketTransport(const std::string& transport) {
-    return transport == "websocket";
+inline bool isWebSocketTransport(const SeriesTransport transport) {
+    return transport == SeriesTransport::websocket;
 }
 
 } // namespace detail
@@ -283,7 +291,7 @@ struct StudioSeriesSink : Block<StudioSeriesSink<T>> {
 
     PortIn<T> in;
 
-    Annotated<std::string, "transport", Doc<"Data-plane transport mode">, Visible> transport = "http_poll";
+    Annotated<detail::SeriesTransport, "transport", Doc<"Data-plane transport mode">, Visible> transport = detail::SeriesTransport::http_poll;
     Annotated<std::string, "endpoint", Doc<"Transport endpoint URL/path">, Visible> endpoint = "http://127.0.0.1:18080/snapshot";
     Annotated<std::uint32_t, "update_ms", Doc<"Suggested update interval in milliseconds for http_poll and websocket transports">, Visible> update_ms = 250U;
     Annotated<gr::Size_t, "window_size", Doc<"Samples per channel kept in memory">, Visible> window_size = 1024UZ;

@@ -49,6 +49,11 @@ namespace gr::studio {
 
 namespace detail {
 
+enum class PowerSpectrumTransport {
+    http_poll,
+    websocket,
+};
+
 template<typename T>
 concept SupportedPowerSpectrumSample = std::same_as<T, float> || std::same_as<T, std::complex<float>>;
 
@@ -711,6 +716,7 @@ public:
     }
 
     [[nodiscard]] bool isRunning() const noexcept { return _listenFd >= 0; }
+    [[nodiscard]] std::uint16_t boundPort() const noexcept { return _boundPort; }
 
     void publish(std::string frame) {
         if (frame.empty()) {
@@ -741,6 +747,7 @@ private:
 
     static void closeSocket(int& fd) {
         if (fd >= 0) {
+            std::ignore = ::shutdown(fd, SHUT_RDWR);
             ::close(fd);
             fd = -1;
         }
@@ -945,8 +952,12 @@ private:
 #endif
 };
 
-inline bool isHttpPollTransport(const std::string& transport) {
-    return transport == "http_poll";
+inline bool isHttpPollTransport(const PowerSpectrumTransport transport) {
+    return transport == PowerSpectrumTransport::http_poll;
+}
+
+inline bool isWebSocketTransport(const PowerSpectrumTransport transport) {
+    return transport == PowerSpectrumTransport::websocket;
 }
 
 } // namespace detail
@@ -959,7 +970,7 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
 
     PortIn<T> in;
 
-    Annotated<std::string, "transport", Doc<"Data-plane transport mode">, Visible> transport = "websocket";
+    Annotated<detail::PowerSpectrumTransport, "transport", Doc<"Data-plane transport mode">, Visible> transport = detail::PowerSpectrumTransport::websocket;
     Annotated<std::string, "endpoint", Doc<"Transport endpoint URL/path">, Visible> endpoint = "http://127.0.0.1:18085/snapshot";
     Annotated<std::uint32_t, "update_ms", Doc<"Suggested update interval in milliseconds for http_poll and websocket transports">, Visible> update_ms = 10U;
     Annotated<gr::Size_t, "fft_size", Doc<"FFT size used for each spectrum frame">, Visible> fft_size = 1024UZ;
@@ -1106,7 +1117,7 @@ private:
         _websocket.stop();
         _lastWebSocketPublishAt = {};
 
-        if (transport.value == "websocket") {
+        if (detail::isWebSocketTransport(transport.value)) {
             const auto parsed = detail::parseHttpEndpoint(endpoint.value);
             if (!_websocket.start(parsed)) {
                 throw gr::exception("StudioPowerSpectrumSink failed to start websocket transport endpoint.");

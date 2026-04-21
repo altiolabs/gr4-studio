@@ -13,6 +13,11 @@ import {
 } from '../control-panels/control-panel-authoring';
 import type { ExpressionBinding } from '../variables/model/types';
 import { DoxygenText } from '../documentation/model/doxygen';
+import {
+  getAuthoringParameterLabel,
+  getDescriptorBindingAuthoringMessage,
+  isDescriptorBindingHiddenParameter,
+} from '../graph-editor/runtime/studio-managed-runtime-authoring';
 
 type BlockPropertiesModalProps = {
   instanceId: string;
@@ -160,9 +165,12 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
     () =>
       parameterRows.filter(
         (parameter) =>
-          !isAdvancedParameterMeta(parameter) && !parameter.readOnly && parameter.mutable,
+          !isAdvancedParameterMeta(parameter) &&
+          !isDescriptorBindingHiddenParameter(block?.blockTypeId ?? '', parameter.name) &&
+          !parameter.readOnly &&
+          parameter.mutable,
       ),
-    [parameterRows],
+    [block?.blockTypeId, parameterRows],
   );
   const readOnlyParameters = useMemo(
     () =>
@@ -174,9 +182,13 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
   const advancedParameters = useMemo(
     () =>
       parameterRows.filter(
-        (parameter) => isAdvancedParameterMeta(parameter) && !parameter.readOnly && parameter.mutable,
+        (parameter) =>
+          isAdvancedParameterMeta(parameter) &&
+          !isDescriptorBindingHiddenParameter(block?.blockTypeId ?? '', parameter.name) &&
+          !parameter.readOnly &&
+          parameter.mutable,
       ),
-    [parameterRows],
+    [block?.blockTypeId, parameterRows],
   );
   const canCommit = isDraftInitialized && !blockDetailsQuery.isPending && !blockDetailsQuery.isError;
   const setDraftValue = (parameterName: string, value: string) => {
@@ -339,6 +351,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
 
   const canonicalDisplayName = toCanonicalBlockDisplayName(block.displayName, block.blockTypeId);
   const blockInstanceId = block.instanceId;
+  const descriptorBindingAuthoringMessage = getDescriptorBindingAuthoringMessage(block.blockTypeId);
 
   return (
     <div
@@ -433,6 +446,11 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
 
           {activeTab === 'general' && blockDetailsQuery.data && (
             <div className="space-y-2">
+              {descriptorBindingAuthoringMessage && (
+                <div className="rounded border border-sky-800/70 bg-sky-950/25 p-3 text-xs text-sky-100">
+                  {descriptorBindingAuthoringMessage}
+                </div>
+              )}
               {editableParameters.length === 0 ? (
                 <p className="text-sm text-slate-400">This block has no editable parameters in General.</p>
               ) : (
@@ -450,7 +468,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                           title={getBlockParameterHoverTitle(parameter)}
                           className="min-w-0 cursor-help truncate text-xs font-medium text-slate-200"
                         >
-                          {parameter.label}
+                          {getAuthoringParameterLabel(block.blockTypeId, parameter.name, parameter.label)}
                         </label>
                         <select
                           value={draftValues[parameter.name]?.bindingKind ?? 'literal'}
@@ -550,7 +568,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                           title={getBlockParameterHoverTitle(parameter)}
                           className="min-w-0 cursor-help truncate text-xs font-medium text-slate-200"
                         >
-                          {parameter.label}
+                          {getAuthoringParameterLabel(block.blockTypeId, parameter.name, parameter.label)}
                         </label>
                         <select
                           value={draftValues[parameter.name]?.bindingKind ?? 'literal'}
@@ -580,6 +598,9 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
 
               {blockDetailsQuery.data && (
                 <div className="rounded border border-slate-700 bg-slate-800/50 p-3 text-xs text-slate-400">
+                  {descriptorBindingAuthoringMessage && (
+                    <p className="mb-2 text-sky-200">{descriptorBindingAuthoringMessage}</p>
+                  )}
                   <p>Block Type ID: {blockDetailsQuery.data.blockTypeId}</p>
                   <p className="mt-1">
                     Ports: {blockDetailsQuery.data.inputPorts.length} input / {blockDetailsQuery.data.outputPorts.length} output

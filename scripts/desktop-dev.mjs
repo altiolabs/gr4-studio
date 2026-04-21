@@ -52,7 +52,7 @@ async function main() {
     ? spawnDetached(process.env.GR4_STUDIO_ELECTRON_BIN, [projectRoot], {
         GR4_STUDIO_DEV_SERVER_URL: DEV_SERVER_URL,
         GR4_STUDIO_CONTROL_PLANE_BASE_URL:
-          process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL || process.env.GR4_CONTROL_PLANE_URL || 'http://localhost:8080',
+          process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL || process.env.GR4_CONTROL_PLANE_URL || 'http://127.0.0.1:8080',
       })
     : (await fs
         .stat(sourceElectron)
@@ -62,7 +62,7 @@ async function main() {
             GR4_STUDIO_CONTROL_PLANE_BASE_URL:
               process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL ||
               process.env.GR4_CONTROL_PLANE_URL ||
-              'http://localhost:8080',
+              'http://127.0.0.1:8080',
           }),
         )
         .catch(() =>
@@ -71,7 +71,7 @@ async function main() {
             GR4_STUDIO_CONTROL_PLANE_BASE_URL:
               process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL ||
               process.env.GR4_CONTROL_PLANE_URL ||
-              'http://localhost:8080',
+              'http://127.0.0.1:8080',
           }),
         ));
 

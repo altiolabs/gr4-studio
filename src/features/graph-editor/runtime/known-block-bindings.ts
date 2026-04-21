@@ -73,6 +73,7 @@ function isSupportedTransport(value: string): value is StudioTransportMode {
 // TODO: Replace these placeholder IDs with final reflected fully qualified IDs
 // from the first-party blocks once block registration is finalized.
 const STUDIO_SERIES_SUPPORTED_TRANSPORTS = ['http_snapshot', 'http_poll', 'websocket'] as const;
+const STUDIO_2D_SERIES_SUPPORTED_TRANSPORTS = ['http_snapshot', 'http_poll', 'websocket'] as const;
 const STUDIO_POWER_SPECTRUM_SUPPORTED_TRANSPORTS = ['http_poll', 'websocket'] as const;
 const STUDIO_WATERFALL_SUPPORTED_TRANSPORTS = ['http_poll', 'websocket'] as const;
 export const STUDIO_KNOWN_BLOCK_BINDINGS: readonly StudioKnownBlockBinding[] = [
@@ -137,54 +138,54 @@ export const STUDIO_KNOWN_BLOCK_BINDINGS: readonly StudioKnownBlockBinding[] = [
   {
     blockTypeId: 'gr::studio::Studio2DSeriesSink<float32>',
     family: 'series2d',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_2D_SERIES_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       topic: 'topic',
     },
     payloadFormat: 'series2d-xy-json-v1',
-    notes: 'Phase 1 supports only http_snapshot/http_poll. Unsupported for now: zmq_sub, websocket.',
+    notes: '2D XY sink supports http_snapshot/http_poll/websocket. Live cadence uses update_ms.',
   },
   {
     blockTypeId: 'gr::studio::Studio2DSeriesSink<complex64>',
     family: 'series2d',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_2D_SERIES_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       topic: 'topic',
     },
     payloadFormat: 'series2d-xy-json-v1',
-    notes: 'Phase 1 supports only http_snapshot/http_poll. Unsupported for now: zmq_sub, websocket.',
+    notes: '2D XY sink supports http_snapshot/http_poll/websocket. Live cadence uses update_ms.',
   },
   {
     blockTypeId: 'gr::studio::Studio2DSeriesSink<complex<float32>>',
     family: 'series2d',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_2D_SERIES_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       topic: 'topic',
     },
     payloadFormat: 'series2d-xy-json-v1',
-    notes: 'Phase 1 supports only http_snapshot/http_poll. Unsupported for now: zmq_sub, websocket.',
+    notes: '2D XY sink supports http_snapshot/http_poll/websocket. Live cadence uses update_ms.',
   },
   {
     blockTypeId: 'gr::studio::Studio2DSeriesSink<std::complex<float32>>',
     family: 'series2d',
-    supportedTransports: STUDIO_PHASE1_SUPPORTED_TRANSPORTS,
+    supportedTransports: STUDIO_2D_SERIES_SUPPORTED_TRANSPORTS,
     parameters: {
       transport: 'transport',
       endpoint: 'endpoint',
-      pollMs: 'poll_ms',
+      updateMs: 'update_ms',
       topic: 'topic',
     },
     payloadFormat: 'series2d-xy-json-v1',
-    notes: 'Phase 1 supports only http_snapshot/http_poll. Unsupported for now: zmq_sub, websocket.',
+    notes: '2D XY sink supports http_snapshot/http_poll/websocket. Live cadence uses update_ms.',
   },
   {
     blockTypeId: 'gr::studio::StudioDataSetSink<float32>',

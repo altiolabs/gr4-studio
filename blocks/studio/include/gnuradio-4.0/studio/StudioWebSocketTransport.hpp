@@ -224,6 +224,7 @@ public:
     }
 
     [[nodiscard]] bool isRunning() const noexcept { return _listenFd >= 0; }
+    [[nodiscard]] std::uint16_t boundPort() const noexcept { return _boundPort; }
 
     [[nodiscard]] const std::string& lastErrorMessage() const noexcept { return _lastError; }
 
@@ -244,6 +245,7 @@ private:
 
     static void closeSocket(int& fd) {
         if (fd >= 0) {
+            std::ignore = ::shutdown(fd, SHUT_RDWR);
             ::close(fd);
             fd = -1;
         }

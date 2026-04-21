@@ -120,9 +120,11 @@ inline std::string normalizeSnapshotPath(const std::string& rawPath) {
 
 inline ParsedHttpEndpoint parseHttpEndpoint(const std::string& endpoint) {
     std::string remaining = endpoint;
-    constexpr std::string_view prefix = "http://";
-    if (remaining.starts_with(prefix)) {
-        remaining.erase(0UZ, prefix.size());
+    for (const std::string_view prefix : {"http://", "https://", "ws://", "wss://"}) {
+        if (remaining.starts_with(prefix)) {
+            remaining.erase(0UZ, prefix.size());
+            break;
+        }
     }
 
     const std::size_t slash = remaining.find('/');

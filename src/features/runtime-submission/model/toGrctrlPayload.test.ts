@@ -197,6 +197,33 @@ describe('toGrctrlContentSubmission', () => {
     expect(submission.content).toContain('update_ms: 250');
   });
 
+  it('exports payload_format for known Studio stream blocks even without block details hydration', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: { name: 'studio-power-spectrum-sink' },
+      graph: {
+        nodes: [
+          {
+            id: 'spectrum_1',
+            blockType: 'gr::studio::StudioPowerSpectrumSink<complex<float32>>',
+            title: 'StudioPowerSpectrumSink<complex<float32>>',
+            position: { x: 0, y: 0 },
+            parameters: {
+              name: { kind: 'expression', expr: 'spectrum_1' },
+            },
+          },
+        ],
+        edges: [],
+      },
+    };
+
+    const submission = toGrctrlContentSubmission(document);
+
+    expect(submission.content).toContain('- id: "gr::studio::StudioPowerSpectrumSink<complex<float32>>"');
+    expect(submission.content).toContain('payload_format: dataset-xy-json-v1');
+  });
+
   it('produces deterministic output and hash for equivalent documents', () => {
     const left = toGrctrlContentSubmission(makeDocument('graph', '"{}"'));
     const right = toGrctrlContentSubmission(makeDocument('graph', '"{}"'));

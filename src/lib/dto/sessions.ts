@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+export const sessionStreamDtoSchema = z
+  .object({
+    id: z.string(),
+    block_instance_name: z.string(),
+    transport: z.string(),
+    payload_format: z.string(),
+    path: z.string(),
+    ready: z.boolean(),
+  })
+  .passthrough();
+
 export const sessionDtoSchema = z
   .object({
     id: z.string(),
@@ -8,6 +19,7 @@ export const sessionDtoSchema = z
     created_at: z.string(),
     updated_at: z.string(),
     last_error: z.string().nullable(),
+    streams: z.array(sessionStreamDtoSchema).optional(),
   })
   .passthrough();
 
@@ -29,3 +41,4 @@ export const sessionDeleteResponseSchema = z
   .optional();
 
 export type SessionDto = z.infer<typeof sessionDtoSchema>;
+export type SessionStreamDto = z.infer<typeof sessionStreamDtoSchema>;

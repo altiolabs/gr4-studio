@@ -22,6 +22,7 @@ Current included blocks:
 Notes:
 
 - HTTP snapshot/poll semantics for series-style sinks should follow `HttpTimeSeriesSink` behavior where applicable.
+- `Studio2DSeriesSink` exposes `series2d-xy-json-v1` payloads and now supports websocket transport using the same JSON frame contract as its HTTP snapshot path. Live cadence is controlled by `update_ms`.
 - `StudioDataSetSink` exposes `dataset-xy-json-v1` payloads (`layout: pairs_xy`) for DataSet-backed visualization paths.
 - `StudioPowerSpectrumSink` also exposes `dataset-xy-json-v1` payloads and is intended for FFT-based averaged power spectrum visualization.
 - `StudioPowerSpectrumSink` with `persistence=true` uses the same `dataset-xy-json-v1` payload path, but the Studio UI renders it as a GQRX-style phosphor spectrum with a persistent glow behind the live trace. The phosphor look is tuned with `phosphor_intensity` and `phosphor_decay_ms`.
@@ -33,6 +34,7 @@ Notes:
 
 Native QA target:
 
+- `qa_Studio2DSeriesSink`
 - `qa_StudioPowerSpectrumSink`
 - `qa_StudioWaterfallSink`
 
@@ -46,9 +48,11 @@ Grounded candidate commands based on the checked-in CMake layout:
    - `cmake -S blocks -B build/blocks -DENABLE_TESTING=ON`
 2. Build the native spectrum QA target:
    - `cmake --build build/blocks --target qa_StudioPowerSpectrumSink`
-3. Build the native waterfall QA target:
+3. Build the native 2D series QA target:
+   - `cmake --build build/blocks --target qa_Studio2DSeriesSink`
+4. Build the native waterfall QA target:
    - `cmake --build build/blocks --target qa_StudioWaterfallSink`
-4. Run the tests through CTest:
-   - `ctest --test-dir build/blocks -R 'qa_Studio(PowerSpectrum|Waterfall)Sink' --output-on-failure`
+5. Run the tests through CTest:
+   - `ctest --test-dir build/blocks -R 'qa_Studio(2DSeries|PowerSpectrum|Waterfall)Sink' --output-on-failure`
 
 If your local build tree uses a different path or generator, keep the target name the same and adjust `build/blocks` accordingly.

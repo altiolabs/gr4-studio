@@ -1,5 +1,6 @@
 import type { BlockDetails, BlockParameterMeta } from '../../../lib/api/block-details';
 import { isAdvancedParameterName, isAdvancedUiHint } from '../../../lib/utils/parameter-groups';
+import { isDescriptorBindingHiddenParameter } from '../runtime/studio-managed-runtime-authoring';
 import type { EditorNodeParameterDrafts } from './types';
 
 const MAX_PARAMETER_LINES = 6;
@@ -64,12 +65,17 @@ function getCurrentValue(
 }
 
 function buildParameterLines(
+  blockTypeId: string,
   parameters: EditorNodeParameterDrafts,
   details?: BlockDetails,
 ): { lines: string[]; overflowCount: number } {
   if (!details) {
     const fallback = Object.entries(parameters)
-      .filter(([name]) => !isAdvancedParameterName(name))
+      .filter(
+        ([name]) =>
+          !isAdvancedParameterName(name) &&
+          !isDescriptorBindingHiddenParameter(blockTypeId, name),
+      )
       .map(([name, entry]) => `${name}=${truncateValue(entry.value)}`);
     const visible = fallback.slice(0, MAX_PARAMETER_LINES);
     return {
@@ -83,6 +89,7 @@ function buildParameterLines(
       (parameter: BlockParameterMeta) =>
         !isAdvancedParameterName(parameter.name) &&
         !isAdvancedUiHint(parameter.uiHint) &&
+        !isDescriptorBindingHiddenParameter(blockTypeId, parameter.name) &&
         !parameter.readOnly &&
         parameter.mutable,
     )
@@ -102,7 +109,7 @@ export function buildBlockCardSummary(
   node: { displayName: string; blockTypeId: string; parameters: EditorNodeParameterDrafts },
   details?: BlockDetails,
 ): BlockCardSummary {
-  const parameterSummary = buildParameterLines(node.parameters, details);
+  const parameterSummary = buildParameterLines(node.blockTypeId, node.parameters, details);
 
   return {
     shortDisplayName: toShortBlockName(node.displayName, node.blockTypeId),

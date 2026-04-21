@@ -2,9 +2,17 @@
 
 This note describes the pattern Studio uses for websocket-enabled sink blocks and the checks to follow when adding websocket transport to another sink family.
 
-Current websocket-enabled Studio sinks:
+Current websocket-enabled Studio sinks in Studio code:
 
 - `StudioSeriesSink`
+- `Studio2DSeriesSink`
+- `StudioPowerSpectrumSink`
+- `StudioWaterfallSink`
+
+Current descriptor-driven slice:
+
+- `StudioSeriesSink`
+- `Studio2DSeriesSink`
 - `StudioPowerSpectrumSink`
 - `StudioWaterfallSink`
 
@@ -35,7 +43,7 @@ Current websocket-enabled Studio sinks:
 - If the payload is naturally tabular numeric data, a binary websocket frame is usually the best fit.
 - If the existing payload is already canonical JSON and the update rate is moderate, a JSON websocket frame is acceptable.
 - Keep the frame contract sink-specific; do not generalize all websocket sinks into a single shared payload format.
-- If the sink exposes `update_ms`, wire it into the websocket send path in the same way as the existing Studio power spectrum and waterfall sinks.
+- If the sink exposes `update_ms`, wire it into the websocket send path in the same way as the existing Studio series and 2D series sinks.
 
 ## Frontend checklist
 
@@ -57,8 +65,8 @@ Current websocket-enabled Studio sinks:
 ## Current examples
 
 - Series uses JSON websocket frames for bounded 1D sample windows.
+- 2D series uses JSON websocket frames for `series2d-xy-json-v1` XY payloads.
 - Power spectrum uses binary websocket frames for dense numeric spectra.
-- Waterfall uses JSON websocket frames for bounded FFT-history snapshots.
-- All websocket-capable Studio sinks use `update_ms` as the live send cadence while preserving a first-frame-immediate startup path.
+- The current descriptor-driven slice uses `update_ms` as the live send cadence while preserving a first-frame-immediate startup path where applicable.
 
 Use those blocks as the reference implementations when adding websocket support to another sink family.

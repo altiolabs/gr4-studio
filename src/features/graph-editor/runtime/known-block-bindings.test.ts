@@ -44,6 +44,15 @@ describe('known Studio block bindings', () => {
         continue;
       }
 
+      if (binding.blockTypeId.startsWith('gr::studio::Studio2DSeriesSink<')) {
+        expect(binding.supportedTransports).toEqual([
+          'http_snapshot',
+          'http_poll',
+          'websocket',
+        ]);
+        continue;
+      }
+
       if (binding.blockTypeId.startsWith('gr::studio::StudioPowerSpectrumSink<')) {
         expect(binding.supportedTransports).toEqual([
           'http_poll',
@@ -53,10 +62,7 @@ describe('known Studio block bindings', () => {
       }
 
       if (binding.blockTypeId.startsWith('gr::studio::StudioWaterfallSink<')) {
-        expect(binding.supportedTransports).toEqual([
-          'http_poll',
-          'websocket',
-        ]);
+        expect(binding.supportedTransports).toEqual(['http_poll', 'websocket']);
         continue;
       }
 
@@ -153,13 +159,27 @@ describe('known Studio block bindings', () => {
     const series2DConfigured = buildStudioBindingView(known2DId, {
       transport: 'http_snapshot',
       endpoint: 'http://127.0.0.1:18081/snapshot',
-      poll_ms: '250',
+      update_ms: '250',
     });
     expect(series2DConfigured).toMatchObject({
       status: 'configured',
       family: 'series2d',
       transport: 'http_snapshot',
       endpoint: 'http://127.0.0.1:18081/snapshot',
+    });
+
+    const series2DWebsocketConfigured = buildStudioBindingView(known2DId, {
+      transport: 'websocket',
+      endpoint: 'http://127.0.0.1:18081/snapshot',
+      update_ms: '90',
+    });
+    expect(series2DWebsocketConfigured).toMatchObject({
+      status: 'configured',
+      family: 'series2d',
+      payloadFormat: 'series2d-xy-json-v1',
+      transport: 'websocket',
+      endpoint: 'http://127.0.0.1:18081/snapshot',
+      updateMs: 90,
     });
 
     const knownDataSetId = 'gr::studio::StudioDataSetSink<float32>';
@@ -196,7 +216,7 @@ describe('known Studio block bindings', () => {
     });
 
     const waterfallConfigured = buildStudioBindingView('gr::studio::StudioWaterfallSink<float32>', {
-      transport: 'websocket',
+      transport: 'http_poll',
       endpoint: 'http://127.0.0.1:18087/snapshot',
       update_ms: '200',
       sample_rate: '48000',
@@ -206,11 +226,26 @@ describe('known Studio block bindings', () => {
       status: 'configured',
       family: 'waterfall',
       payloadFormat: 'waterfall-spectrum-json-v1',
-      transport: 'websocket',
+      transport: 'http_poll',
       endpoint: 'http://127.0.0.1:18087/snapshot',
       updateMs: 200,
       sampleRate: 48000,
       topic: 'waterfall',
+    });
+
+    const waterfallWebsocketConfigured = buildStudioBindingView('gr::studio::StudioWaterfallSink<float32>', {
+      transport: 'websocket',
+      endpoint: 'http://127.0.0.1:18087/snapshot',
+      update_ms: '240',
+      sample_rate: '96000',
+    });
+    expect(waterfallWebsocketConfigured).toMatchObject({
+      status: 'configured',
+      family: 'waterfall',
+      transport: 'websocket',
+      endpoint: 'http://127.0.0.1:18087/snapshot',
+      updateMs: 240,
+      sampleRate: 96000,
     });
 
     const imageConfigured = buildStudioBindingView('gr::studio::StudioImageSink<uint8>', {
