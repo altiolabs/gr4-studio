@@ -36,7 +36,7 @@ void configureBlock(TBlock& block, float timeSpanSeconds = 1.0F) {
 
 void testDefaultTransportAndCadence() {
     gr::studio::StudioWaterfallSink<float> block{};
-    assert(block.transport.value == "websocket");
+    assert(block.transport.value == gr::studio::detail::WaterfallTransport::websocket);
     assert(block.update_ms == 10U);
 }
 
@@ -190,7 +190,9 @@ void testHttpTransportHelpers() {
     assert(parsed.path == "/custom/snapshot");
     assert(gr::studio::detail::isHttpTransport("http_poll"));
     assert(gr::studio::detail::isHttpTransport("http_snapshot"));
+    assert(gr::studio::detail::isHttpTransport(gr::studio::detail::WaterfallTransport::http_poll));
     assert(!gr::studio::detail::isHttpTransport("sse"));
+    assert(gr::studio::detail::isWebSocketTransport(gr::studio::detail::WaterfallTransport::websocket));
 }
 
 } // namespace

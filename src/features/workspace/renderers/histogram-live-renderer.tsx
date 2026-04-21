@@ -44,6 +44,7 @@ export function PhosphorSpectrumLiveRenderer({ liveContext }: HistogramLiveRende
     status: liveContext.binding.status,
     transport: liveContext.binding.transport,
     endpoint: liveContext.binding.endpoint,
+    showEndpointInUi: liveContext.binding.showEndpointInUi,
     updateMs: liveContext.binding.updateMs,
   };
 

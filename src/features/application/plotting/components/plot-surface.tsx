@@ -124,7 +124,7 @@ export function PlotSurface({ spec, frame, binding }: PlotSurfaceProps) {
   const isCompactPlaceholder = size.width < 300 || size.height < 180;
   const statusLabel = frame.meta?.state ?? 'no-data';
   const transportLabel = binding?.transport?.trim() || 'n/a';
-  const endpointLabel = shortenEndpoint(binding?.endpoint);
+  const endpointLabel = binding?.showEndpointInUi === false ? '' : shortenEndpoint(binding?.endpoint);
   const sequenceLabel = typeof frame.meta?.sequence === 'number' ? `#${frame.meta.sequence}` : null;
   const rateLabel = formatRateBadge({
     renderFps: useVisibleRefreshFps({
@@ -136,7 +136,7 @@ export function PlotSurface({ spec, frame, binding }: PlotSurfaceProps) {
   const statusText =
     frame.meta?.errorMessage ?? frame.meta?.statusMessage ?? (visibleState === 'loading' ? 'Connecting live source...' : null);
   const connectionBadge = formatConnectionBadge(frame);
-  const showDiagnostics = Boolean(binding?.transport || binding?.endpoint || frame.meta?.state);
+  const showDiagnostics = Boolean(binding?.transport || endpointLabel || frame.meta?.state);
 
   const titleByState: Record<Exclude<typeof visibleState, 'live'>, string> = {
     loading: 'Connecting',
@@ -150,7 +150,7 @@ export function PlotSurface({ spec, frame, binding }: PlotSurfaceProps) {
     visibleState === 'loading'
       ? 'Connecting to live source...'
       : visibleState === 'invalid-binding'
-        ? frame.meta?.errorMessage ?? 'Invalid plot binding. Check transport and endpoint.'
+        ? frame.meta?.errorMessage ?? 'Invalid plot binding. Check transport and runtime stream availability.'
         : visibleState === 'runtime-error'
         ? frame.meta?.errorMessage ?? 'Unable to load live data.'
         : visibleState === 'too-small'
@@ -225,9 +225,9 @@ export function PlotSurface({ spec, frame, binding }: PlotSurfaceProps) {
                 }
               >
                 <p>{message}</p>
-                {binding?.transport || binding?.endpoint ? (
+                {binding?.transport || endpointLabel ? (
                   <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
-                    {binding.transport ?? 'n/a'} · {binding.endpoint ?? 'n/a'}
+                    {endpointLabel ? `${binding?.transport ?? 'n/a'} · ${binding?.endpoint ?? 'n/a'}` : (binding?.transport ?? 'n/a')}
                   </p>
                 ) : null}
                 {frame.meta?.state ? (

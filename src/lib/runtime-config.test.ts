@@ -11,9 +11,9 @@ describe('runtime config resolution', () => {
     );
   });
 
-  it('falls back to localhost on invalid urls', () => {
+  it('falls back to the loopback default on invalid urls', () => {
     const normalized = normalizeControlPlaneBaseUrl('not a url');
-    expect(normalized.value).toBe('http://localhost:8080');
+    expect(normalized.value).toBe('http://127.0.0.1:8080');
     expect(normalized.issues[0]?.key).toBe('VITE_CONTROL_PLANE_BASE_URL');
   });
 

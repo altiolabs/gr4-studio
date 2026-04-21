@@ -7,6 +7,30 @@ Current implementation lives in:
 - `blocks/studio`
 - `src/features/graph-editor/runtime/known-block-bindings.ts`
 - `src/features/application/plotting/runtime/timeseries-live-runtime.ts`
+- `src/features/runtime-session/model/runtime-binding-resolution.ts`
+- `src/features/graph-editor/runtime/studio-managed-runtime-authoring.ts`
+
+## Current Implemented Scope
+
+The current descriptor-adapted stream slice is intentionally narrow.
+
+Generic `session.streams[]` descriptor resolution is used in Studio for any known Studio block that has an authored stream export.
+
+Current Studio behavior for descriptor-adapted bindings:
+
+- current-session runtime connectivity is descriptor-driven from `session.streams[]` when available
+- authored `transport` remains part of the Studio-side contract and must match the advertised stream transport
+- authored `endpoint` is not part of the supported descriptor-driven runtime contract
+- absent `streams[]` falls back to the legacy authored-endpoint path
+- present-but-unusable `streams[]` fails explicitly instead of falling back to authored endpoint data
+- authoring keeps `transport` visible
+- authoring hides `endpoint` for descriptor-adapted current-session bindings that use runtime routes
+
+Intentionally deferred:
+
+- additional managed sink families
+- schema removal of legacy `endpoint` fields
+- generic transport UX/framework cleanup
 
 ## Purpose
 
@@ -72,7 +96,7 @@ Rules:
 - do not assume all combinations are valid
 - validate parameters locally, not authoritatively
 
-Websocket transport currently exists for selected sinks only. When adding websocket support to a new sink, follow the implementation checklist in `docs/studio-websocket-integration.md`.
+Websocket transport currently exists for selected sinks only. Descriptor-adapted current-session bindings currently include `StudioSeriesSink`, `Studio2DSeriesSink`, `StudioPowerSpectrumSink`, and `StudioWaterfallSink`. When adding websocket support to a new sink, follow the implementation checklist in `docs/studio-websocket-integration.md`.
 For websocket-capable sinks, `update_ms` is the live cadence control used by the native send path.
 
 ## Standard parameters
@@ -95,9 +119,10 @@ The block owns its data plane interface.
 
 Implications:
 
-- transport endpoints are defined by block parameters
-- Studio binds directly to block-defined interfaces
-- control plane stays separate from streaming
+- for descriptor-adapted current-session bindings, browser-facing routes come from `session.streams[]` when present
+- legacy `endpoint` values may still persist in saved documents, but Studio does not use them for descriptor-driven runtime resolution
+- Studio binds directly to the runtime-advertised interface when present
+- control plane stays separate from payload semantics
 
 ## HTTP behavior
 
@@ -109,6 +134,7 @@ Studio binding resolves the block family and payload format.
 Rendering is handled separately:
 
 - `StudioSeriesSink` uses the live `series` renderer path for JSON snapshots and websocket frames
+- `Studio2DSeriesSink` uses the `series2d-xy-json-v1` path for XY/vector rendering over HTTP snapshots and websocket frames
 - `series2d-xy-json-v1` and `dataset-xy-json-v1` -> XY/vector plot path
 - `StudioPowerSpectrumSink` uses the `dataset-xy-json-v1` path for FFT-based spectrum rendering
 - `StudioPowerSpectrumSink` with `persistence=true` also uses the `dataset-xy-json-v1` path, but routes to the phosphor spectrum renderer with a persistent glow behind the live trace. The phosphor look is tuned via `phosphor_intensity` and `phosphor_decay_ms`.

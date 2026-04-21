@@ -15,6 +15,9 @@ describe('json websocket runtime', () => {
     expect(normalizeJsonWebSocketEndpoint('ws://127.0.0.1:18080/snapshot')).toBe(
       'ws://127.0.0.1:18080/snapshot',
     );
+    expect(normalizeJsonWebSocketEndpoint('/sessions/sess_1/streams/stream_1/ws')).toBe(
+      'ws://127.0.0.1:8080/sessions/sess_1/streams/stream_1/ws',
+    );
   });
 
   it('parses text websocket frames and reconnects after disconnect', () => {

@@ -6,6 +6,11 @@ import {
   getBlockParameterTypeLabel,
   isBooleanBlockParameter,
 } from './block-properties-modal';
+import {
+  getAuthoringParameterLabel,
+  getDescriptorBindingAuthoringMessage,
+  isDescriptorBindingHiddenParameter,
+} from '../graph-editor/runtime/studio-managed-runtime-authoring';
 
 describe('coerceBlockPropertyLiteralValue', () => {
   it('preserves float-like text as text', () => {
@@ -85,5 +90,23 @@ describe('coerceBlockPropertyLiteralValue', () => {
         readOnly: false,
       }),
     ).toBe('MyEnum');
+  });
+
+  it('hides endpoint from descriptor-based series, 2D series, spectrum, and waterfall authoring surfaces', () => {
+    expect(isDescriptorBindingHiddenParameter('gr::studio::StudioSeriesSink<float32>', 'endpoint')).toBe(true);
+    expect(isDescriptorBindingHiddenParameter('gr::studio::Studio2DSeriesSink<float32>', 'endpoint')).toBe(true);
+    expect(isDescriptorBindingHiddenParameter('gr::studio::StudioPowerSpectrumSink<float32>', 'endpoint')).toBe(true);
+    expect(isDescriptorBindingHiddenParameter('gr::studio::StudioWaterfallSink<float32>', 'endpoint')).toBe(true);
+    expect(getAuthoringParameterLabel('gr::studio::StudioSeriesSink<float32>', 'endpoint', 'Endpoint')).toBe('Endpoint');
+    expect(getDescriptorBindingAuthoringMessage('gr::studio::StudioSeriesSink<float32>')).toContain(
+      'Transport stays authored',
+    );
+  });
+
+  it('keeps unsupported families unchanged', () => {
+    expect(isDescriptorBindingHiddenParameter('gr::studio::StudioAudioMonitor<float32>', 'endpoint')).toBe(false);
+    expect(getAuthoringParameterLabel('gr::studio::StudioAudioMonitor<float32>', 'endpoint', 'Endpoint')).toBe(
+      'Endpoint',
+    );
   });
 });

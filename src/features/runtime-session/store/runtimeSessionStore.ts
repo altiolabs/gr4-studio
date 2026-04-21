@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import type { GraphDocument } from '../../graph-document/model/types';
-import { toGrctrlContentSubmission } from '../../runtime-submission/model/toGrctrlPayload';
 import type { BlockDetails } from '../../../lib/api/block-details';
 import { ApiClientError } from '../../../lib/api/client';
+import { buildCurrentSessionGraphSubmission } from '../../runtime-submission/model/current-graph-submission';
 import {
   createSession,
   deleteSession,
@@ -138,6 +138,12 @@ function isErrorState(state: string | undefined): boolean {
 
 function deriveExecutionState(context: TabExecutionContext): ExecutionState {
   const state = context.session?.state;
+
+  if (context.busy && context.lastActionStatus === 'running') {
+    if (context.lastAction === 'stop' || context.lastAction === 'delete') {
+      return 'stopped';
+    }
+  }
 
   if (isRunningState(state)) {
     return 'running';
@@ -464,12 +470,13 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
       const actionVersion = beginAction(tabId, 'start');
 
       try {
-        const submission = toGrctrlContentSubmission(document, options);
+        const submission = buildCurrentSessionGraphSubmission(document, options);
         const context = get().contextsByTabId[tabId] ?? createDefaultContext();
 
         const hasSubmissionDrift = context.lastSubmittedHash !== submission.contentHash;
-        const needsNewSession = !context.sessionId || hasSubmissionDrift;
-        const isReplacementRun = Boolean(context.sessionId) && hasSubmissionDrift;
+        const shouldReplaceErroredSession = Boolean(context.sessionId) && context.session?.state === 'error';
+        const needsNewSession = !context.sessionId || hasSubmissionDrift || shouldReplaceErroredSession;
+        const isReplacementRun = Boolean(context.sessionId) && (hasSubmissionDrift || shouldReplaceErroredSession);
 
         let activeSession: SessionRecord | null = context.session;
         let activeSessionId = context.sessionId;

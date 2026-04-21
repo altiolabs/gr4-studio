@@ -4,6 +4,7 @@ import type { GrcExport } from './types';
 import { resolveGraphVariables } from '../../variables/model/resolveGraphVariables';
 import type { JsonPrimitive } from '../../variables/model/types';
 import { createEdgeId } from '../../graph-editor/model/nodeFactory';
+import { lookupStudioKnownBlockBinding } from '../../graph-editor/runtime/known-block-bindings';
 
 function stableHash(input: string): string {
   let hash = 2166136261;
@@ -197,6 +198,17 @@ function serializeGraphDocumentToInlineGrc(
             kind: 'literal',
             value: parameter.defaultValue,
           });
+        });
+      }
+
+      const studioBinding = lookupStudioKnownBlockBinding(node.blockType);
+      if (studioBinding && !parameterEntries.has('payload_format')) {
+        // The control plane now requires authored stream metadata on Studio blocks.
+        // Export the compatibility payload format explicitly so legacy graphs and
+        // graph documents without block-details hydration still prepare cleanly.
+        parameterEntries.set('payload_format', {
+          kind: 'literal',
+          value: studioBinding.payloadFormat,
         });
       }
 

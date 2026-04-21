@@ -1,3 +1,5 @@
+import { config } from '../../../../lib/config';
+
 type WebSocketLike = {
   onopen: ((event: Event) => void) | null;
   onmessage: ((event: MessageEvent<unknown>) => void) | null;
@@ -38,12 +40,18 @@ export function normalizeJsonWebSocketEndpoint(endpoint: string): string {
     return `wss://${trimmed.slice('https://'.length)}`;
   }
   if (trimmed.startsWith('/')) {
-    const location = typeof window !== 'undefined' ? window.location : undefined;
-    if (!location) {
-      return trimmed;
+    try {
+      const controlPlaneUrl = new URL(config.controlPlaneBaseUrl);
+      const scheme = controlPlaneUrl.protocol === 'https:' ? 'wss' : 'ws';
+      return `${scheme}://${controlPlaneUrl.host}${trimmed}`;
+    } catch {
+      const location = typeof window !== 'undefined' ? window.location : undefined;
+      if (!location) {
+        return trimmed;
+      }
+      const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+      return `${scheme}://${location.host}${trimmed}`;
     }
-    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-    return `${scheme}://${location.host}${trimmed}`;
   }
   return `ws://${trimmed}`;
 }

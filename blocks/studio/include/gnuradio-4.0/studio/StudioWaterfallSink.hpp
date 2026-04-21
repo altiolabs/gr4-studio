@@ -38,6 +38,12 @@ namespace detail {
 template<typename T>
 concept SupportedWaterfallSample = std::same_as<T, float> || std::same_as<T, std::complex<float>>;
 
+enum class WaterfallTransport {
+    http_snapshot,
+    http_poll,
+    websocket,
+};
+
 inline std::string escapeJson(std::string_view text) {
     std::string out;
     out.reserve(text.size() + 8U);
@@ -447,9 +453,11 @@ inline std::string normalizeSnapshotPath(const std::string& rawPath) {
 
 inline ParsedHttpEndpoint parseHttpEndpoint(const std::string& endpoint) {
     std::string remaining = endpoint;
-    constexpr std::string_view prefix = "http://";
-    if (remaining.starts_with(prefix)) {
-        remaining.erase(0UZ, prefix.size());
+    for (const std::string_view prefix : {"http://", "https://", "ws://", "wss://"}) {
+        if (remaining.starts_with(prefix)) {
+            remaining.erase(0UZ, prefix.size());
+            break;
+        }
     }
 
     const std::size_t slash = remaining.find('/');
@@ -541,8 +549,16 @@ private:
     std::thread _serverThread;
 };
 
+inline bool isHttpTransport(const WaterfallTransport transport) {
+    return transport == WaterfallTransport::http_snapshot || transport == WaterfallTransport::http_poll;
+}
+
 inline bool isHttpTransport(const std::string& transport) {
     return transport == "http_snapshot" || transport == "http_poll";
+}
+
+inline bool isWebSocketTransport(const WaterfallTransport transport) {
+    return transport == WaterfallTransport::websocket;
 }
 
 inline bool isWebSocketTransport(const std::string& transport) {
@@ -559,7 +575,7 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
 
     PortIn<T> in;
 
-    Annotated<std::string, "transport", Doc<"Data-plane transport mode">, Visible> transport = "websocket";
+    Annotated<detail::WaterfallTransport, "transport", Doc<"Data-plane transport mode">, Visible> transport = detail::WaterfallTransport::websocket;
     Annotated<std::string, "endpoint", Doc<"Transport endpoint URL/path">, Visible> endpoint = "http://127.0.0.1:18085/snapshot";
     Annotated<std::uint32_t, "update_ms", Doc<"Suggested update interval in milliseconds for http_poll and websocket transports">, Visible> update_ms = 10U;
     Annotated<gr::Size_t, "fft_size", Doc<"FFT size used for each spectrum frame">, Visible> fft_size = 1024UZ;

@@ -232,8 +232,13 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
   const rotation = data.rotation;
   const isUpsideDown = rotation === 180;
   const isQuarterTurn = isQuarterTurnNodeRotation(rotation);
+  const nodeWidthPx = isQuarterTurn
+    ? requiredNodeHeightForPorts(Math.max(inputPorts.length, outputPorts.length))
+    : NODE_MIN_BODY_WIDTH_PX;
   const nodeStyle: CSSProperties = {
-    minWidth: `${isQuarterTurn ? requiredNodeHeightForPorts(Math.max(inputPorts.length, outputPorts.length)) : NODE_MIN_BODY_WIDTH_PX}px`,
+    width: `${nodeWidthPx}px`,
+    minWidth: `${nodeWidthPx}px`,
+    maxWidth: `${nodeWidthPx}px`,
     minHeight: `${isQuarterTurn ? NODE_MIN_BODY_WIDTH_PX : requiredNodeHeightForPorts(Math.max(inputPorts.length, outputPorts.length))}px`,
     transform: `rotate(${rotation}deg)`,
     transformOrigin: 'center center',
@@ -251,7 +256,7 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
 
   return (
     <div
-      className="relative min-w-56 isolate group"
+      className="relative isolate group"
       style={nodeStyle}
     >
       {inputPorts.map((port, index) =>
@@ -346,11 +351,11 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
             </div>
           )}
           {data.parameterLines.length > 0 ? (
-            <div className="mt-2 grid grid-cols-2 gap-1">
+            <div className="mt-2 grid grid-cols-2 gap-1 min-w-0">
               {data.parameterLines.map((line) => (
                 <div
                   key={line}
-                  className="rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-200 overflow-hidden text-ellipsis whitespace-nowrap"
+                  className="min-w-0 rounded border border-slate-700 bg-slate-800/60 px-1.5 py-0.5 text-[10px] text-slate-200 overflow-hidden text-ellipsis whitespace-nowrap"
                   title={line}
                 >
                   {line}
@@ -358,7 +363,7 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
               ))}
               {data.parameterOverflowCount > 0 && (
                 <div
-                  className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-400"
+                  className="min-w-0 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[10px] text-slate-400 overflow-hidden text-ellipsis whitespace-nowrap"
                   title={`${data.parameterOverflowCount} additional parameter value(s)`}
                 >
                   +{data.parameterOverflowCount} more

@@ -5,6 +5,7 @@ import {
   sessionListResponseSchema,
   sessionResponseSchema,
   type SessionDto,
+  type SessionStreamDto,
 } from '../dto/sessions';
 import { ApiClientError, jsonRequest } from './client';
 
@@ -17,6 +18,16 @@ export type SessionRecord = {
   createdAt: string;
   updatedAt: string;
   lastError: string | null;
+  streams?: SessionStreamRecord[];
+};
+
+export type SessionStreamRecord = {
+  id: string;
+  blockInstanceName: string;
+  transport: string;
+  payloadFormat: string;
+  path: string;
+  ready: boolean;
 };
 
 export type CreateSessionInput = {
@@ -50,6 +61,18 @@ function mapSession(dto: SessionDto): SessionRecord {
     createdAt: dto.created_at,
     updatedAt: dto.updated_at,
     lastError: dto.last_error ?? null,
+    streams: dto.streams?.map(mapSessionStream),
+  };
+}
+
+function mapSessionStream(dto: SessionStreamDto): SessionStreamRecord {
+  return {
+    id: dto.id,
+    blockInstanceName: dto.block_instance_name,
+    transport: dto.transport,
+    payloadFormat: dto.payload_format,
+    path: dto.path,
+    ready: dto.ready,
   };
 }
 

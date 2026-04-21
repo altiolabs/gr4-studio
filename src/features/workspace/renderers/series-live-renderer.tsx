@@ -9,6 +9,7 @@ import {
   normalizeJsonWebSocketEndpoint,
 } from '../../application/plotting/runtime/json-websocket-runtime';
 import type { WorkspaceLiveRendererContext } from './live-renderer-contract';
+import { fetchRuntimeJsonPayload } from '../../../lib/api/runtime-http-fetch';
 import {
   createSeriesPollSubscription,
   deriveSeriesLoadStateFromSnapshot,
@@ -38,36 +39,6 @@ function buildSeriesPolyline(values: number[], width: number, height: number, mi
     .join(' ');
 }
 
-async function fetchSnapshotPayload(endpointUrl: string): Promise<unknown> {
-  if (import.meta.env.DEV) {
-    const proxied = await fetch(
-      `/__gr4studio/runtime-http-proxy?target=${encodeURIComponent(endpointUrl)}`,
-      {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-        },
-      },
-    );
-    if (!proxied.ok) {
-      throw new Error(`Proxy HTTP ${proxied.status}`);
-    }
-
-    return proxied.json();
-  }
-
-  const directResponse = await fetch(endpointUrl, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-  if (!directResponse.ok) {
-    throw new Error(`HTTP ${directResponse.status}`);
-  }
-  return directResponse.json();
-}
-
 export function SeriesLiveRenderer({ liveContext }: SeriesLiveRendererProps) {
   const [state, setState] = useState<SeriesLiveLoadState>('loading');
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +66,7 @@ export function SeriesLiveRenderer({ liveContext }: SeriesLiveRendererProps) {
     setState('loading');
     setError(null);
     try {
-      const payload = await fetchSnapshotPayload(endpoint);
+      const payload = await fetchRuntimeJsonPayload(endpoint);
       const parsed = parseHttpTimeSeriesSnapshot(payload, complexViewMode);
       setSnapshot(parsed);
       setState(deriveSeriesLoadStateFromSnapshot(parsed));
@@ -186,8 +157,8 @@ export function SeriesLiveRenderer({ liveContext }: SeriesLiveRendererProps) {
         <p className="mt-2 text-[11px] text-slate-400">
           {liveContext.binding.status === 'configured'
             ? 'Series live renderer currently supports http_snapshot/http_poll/websocket.'
-            : 'Configure binding transport and endpoint to enable live series rendering.'}
-      </p>
+            : 'Configure binding transport to enable live series rendering.'}
+        </p>
       )}
 
       {supportsLivePath && state === 'loading' && (

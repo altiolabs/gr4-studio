@@ -1,4 +1,4 @@
-const DEFAULT_CONTROL_PLANE_BASE_URL = 'http://localhost:8080';
+const DEFAULT_CONTROL_PLANE_BASE_URL = 'http://127.0.0.1:8080';
 
 export type ConfigSource = 'default' | 'env' | 'desktop';
 export type BackendMode = 'local' | 'remote' | 'unknown';

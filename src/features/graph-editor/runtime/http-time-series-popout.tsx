@@ -4,6 +4,7 @@ import {
   buildHttpTimeSeriesSnapshotUrl,
   parseHttpTimeSeriesSnapshot,
 } from './http-time-series';
+import { fetchRuntimeJsonPayload } from '../../../lib/api/runtime-http-fetch';
 
 type HttpTimeSeriesPopoutProps = {
   instanceId: string;
@@ -30,36 +31,6 @@ function buildSeriesPolyline(values: number[], width: number, height: number, mi
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     })
     .join(' ');
-}
-
-async function fetchSnapshotPayload(endpointUrl: string): Promise<unknown> {
-  if (import.meta.env.DEV) {
-    const proxied = await fetch(
-      `/__gr4studio/runtime-http-proxy?target=${encodeURIComponent(endpointUrl)}`,
-      {
-        method: 'GET',
-        headers: {
-          Accept: 'application/json',
-        },
-      },
-    );
-    if (!proxied.ok) {
-      throw new Error(`Proxy HTTP ${proxied.status}`);
-    }
-
-    return proxied.json();
-  }
-
-  const directResponse = await fetch(endpointUrl, {
-    method: 'GET',
-    headers: {
-      Accept: 'application/json',
-    },
-  });
-  if (!directResponse.ok) {
-    throw new Error(`HTTP ${directResponse.status}`);
-  }
-  return directResponse.json();
 }
 
 export function HttpTimeSeriesPopout({
@@ -100,7 +71,7 @@ export function HttpTimeSeriesPopout({
     setError(null);
 
     try {
-      const payload = await fetchSnapshotPayload(endpointUrl);
+      const payload = await fetchRuntimeJsonPayload(endpointUrl);
       const parsed = parseHttpTimeSeriesSnapshot(payload, complexViewMode);
       setSnapshot(parsed);
       setState('success');

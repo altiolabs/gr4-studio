@@ -206,6 +206,61 @@ describe('runtimeSessionStore (sessions-only model)', () => {
     expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('session-1');
   });
 
+  it('rerun unchanged graph replaces a linked error session with a fresh session', async () => {
+    useRuntimeSessionStore.setState((state) => ({
+      contextsByTabId: {
+        ...state.contextsByTabId,
+        'tab-1': {
+          ...state.contextsByTabId['tab-1'],
+          sessionId: 'session-bad',
+          lastSubmittedHash: '667ef470',
+          graphSubmissionUpdatedAt: '2026-03-20T00:00:00.000Z',
+          session: {
+            id: 'session-bad',
+            name: 'demo',
+            state: 'error',
+            createdAt: '2026-03-20T00:00:00.000Z',
+            updatedAt: '2026-03-20T00:00:01.000Z',
+            lastError: 'Request failed: 400 Bad Request',
+          },
+        },
+      },
+    }));
+
+    vi.mocked(createSession).mockResolvedValue({
+      id: 'session-fresh',
+      name: 'demo',
+      state: 'stopped',
+      createdAt: '2026-03-20T00:00:02.000Z',
+      updatedAt: '2026-03-20T00:00:02.000Z',
+      lastError: null,
+    });
+    vi.mocked(startSession).mockResolvedValue({
+      id: 'session-fresh',
+      name: 'demo',
+      state: 'running',
+      createdAt: '2026-03-20T00:00:02.000Z',
+      updatedAt: '2026-03-20T00:00:03.000Z',
+      lastError: null,
+    });
+    vi.mocked(getSession).mockResolvedValue({
+      id: 'session-fresh',
+      name: 'demo',
+      state: 'running',
+      createdAt: '2026-03-20T00:00:02.000Z',
+      updatedAt: '2026-03-20T00:00:03.000Z',
+      lastError: null,
+    });
+
+    await useRuntimeSessionStore.getState().runTab('tab-1', graphDocument('same graph'));
+
+    const context = useRuntimeSessionStore.getState().contextsByTabId['tab-1'];
+    expect(vi.mocked(createSession)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(startSession)).toHaveBeenCalledWith('session-fresh');
+    expect(context.sessionId).toBe('session-fresh');
+    expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('session-bad');
+  });
+
   it('replacement run keeps old linked session if replacement start fails', async () => {
     vi.mocked(createSession).mockResolvedValue({
       id: 'session-2',
@@ -287,6 +342,59 @@ describe('runtimeSessionStore (sessions-only model)', () => {
     const context = useRuntimeSessionStore.getState().contextsByTabId['tab-1'];
     expect(context.session?.state).toBe('stopped');
     expect(context.busy).toBe(false);
+  });
+
+  it('reports stopped execution state while stop is in progress', () => {
+    useRuntimeSessionStore.setState((state) => ({
+      contextsByTabId: {
+        ...state.contextsByTabId,
+        'tab-1': {
+          ...state.contextsByTabId['tab-1'],
+          sessionId: 'session-1',
+          session: {
+            id: 'session-1',
+            name: 'demo',
+            state: 'running',
+            createdAt: '2026-03-20T00:00:00.000Z',
+            updatedAt: '2026-03-20T00:00:00.000Z',
+            lastError: null,
+          },
+          lastAction: 'stop',
+          lastActionStatus: 'running',
+          busy: true,
+        },
+      },
+    }));
+
+    const view = useRuntimeSessionStore.getState().getTabRuntimeView('tab-1');
+    expect(view.executionState).toBe('stopped');
+    expect(view.operationState).toBe('stopping-session');
+  });
+
+  it('reports stopped execution state while delete is in progress', () => {
+    useRuntimeSessionStore.setState((state) => ({
+      contextsByTabId: {
+        ...state.contextsByTabId,
+        'tab-1': {
+          ...state.contextsByTabId['tab-1'],
+          sessionId: 'session-1',
+          session: {
+            id: 'session-1',
+            name: 'demo',
+            state: 'running',
+            createdAt: '2026-03-20T00:00:00.000Z',
+            updatedAt: '2026-03-20T00:00:00.000Z',
+            lastError: null,
+          },
+          lastAction: 'delete',
+          lastActionStatus: 'running',
+          busy: true,
+        },
+      },
+    }));
+
+    const view = useRuntimeSessionStore.getState().getTabRuntimeView('tab-1');
+    expect(view.executionState).toBe('stopped');
   });
 
   it('stale async completion from older run action is ignored', async () => {

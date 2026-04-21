@@ -93,6 +93,9 @@ describe('power spectrum websocket runtime', () => {
     expect(normalizePowerSpectrumWebSocketEndpoint('ws://127.0.0.1:18080/spectrum')).toBe(
       'ws://127.0.0.1:18080/spectrum',
     );
+    expect(normalizePowerSpectrumWebSocketEndpoint('/sessions/sess_1/streams/stream_1/ws')).toBe(
+      'ws://127.0.0.1:8080/sessions/sess_1/streams/stream_1/ws',
+    );
   });
 
   it('rejects invalid magic, version, bins, length and span values', () => {

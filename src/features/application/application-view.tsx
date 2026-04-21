@@ -59,7 +59,9 @@ function ApplicationPanelShell({
       status: entry.bindingStatus ?? 'unsupported',
       transport: entry.bindingTransport,
       endpoint: entry.bindingEndpoint,
+      showEndpointInUi: entry.bindingShowEndpointInUi,
       updateMs: entry.bindingUpdateMs,
+      reason: entry.bindingReason,
     },
     dataState:
       entry.bindingStatus === 'invalid'
@@ -84,7 +86,9 @@ function ApplicationPanelShell({
               status: liveContext.binding.status,
               transport: liveContext.binding.transport,
               endpoint: liveContext.binding.endpoint,
+              showEndpointInUi: liveContext.binding.showEndpointInUi,
               updateMs: liveContext.binding.updateMs,
+              reason: liveContext.binding.reason,
             }}
             executionState={executionState}
           />
