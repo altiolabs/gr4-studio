@@ -15,8 +15,17 @@ describe('json websocket runtime', () => {
     expect(normalizeJsonWebSocketEndpoint('ws://127.0.0.1:18080/snapshot')).toBe(
       'ws://127.0.0.1:18080/snapshot',
     );
-    expect(normalizeJsonWebSocketEndpoint('/sessions/sess_1/streams/stream_1/ws')).toBe(
-      'ws://127.0.0.1:8080/sessions/sess_1/streams/stream_1/ws',
+    expect(
+      normalizeJsonWebSocketEndpoint('/api/sessions/sess_1/streams/stream_1/ws', {
+        protocol: 'http:',
+        host: '127.0.0.1:5173',
+      }),
+    ).toBe('ws://127.0.0.1:5173/api/sessions/sess_1/streams/stream_1/ws');
+  });
+
+  it('does not rewrite app-owned websocket routes to the backend origin outside a browser context', () => {
+    expect(normalizeJsonWebSocketEndpoint('/api/sessions/sess_1/streams/stream_1/ws')).toBe(
+      '/api/sessions/sess_1/streams/stream_1/ws',
     );
   });
 
@@ -85,5 +94,33 @@ describe('json websocket runtime', () => {
     sockets[1].onopen?.(new Event('open'));
 
     cleanup();
+  });
+
+  it('classifies websocket setup failures by routing kind', () => {
+    const states: Array<{ state: string; message?: string }> = [];
+
+    createJsonWebSocketSubscription({
+      endpoint: '/api/sessions/sess_1/streams/stream_1/ws',
+      websocketFactory: () => {
+        throw new Error('upgrade failed');
+      },
+      scheduler: {
+        setTimeout: (handler: () => void) => {
+          handler();
+          return 1;
+        },
+        clearTimeout: vi.fn(),
+      },
+      maxAttempts: 1,
+      onConnectionState: (state, message) => {
+        states.push({ state, message });
+      },
+      onMessage: vi.fn(),
+    });
+
+    expect(states[states.length - 1]).toMatchObject({
+      state: 'error',
+      message: 'app-api websocket setup failed: upgrade failed',
+    });
   });
 });

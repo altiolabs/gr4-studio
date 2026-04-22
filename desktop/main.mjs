@@ -2,15 +2,24 @@ import { app, BrowserWindow, Menu, dialog, ipcMain } from 'electron';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { probeBackendReady, startDesktopAppServer } from './app-server.mjs';
 
 const APP_NAME = 'gr4-studio';
 const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8080';
-const DEFAULT_DEV_SERVER_URL = 'http://127.0.0.1:5173';
 const RECENT_REMOTE_ENDPOINTS_FILE = 'recent-remote-endpoints.json';
 const APP_ICON_CANDIDATES = ['apple-touch-icon.png', 'favicon-32x32.png', 'favicon-16x16.png', 'favicon.ico'];
 let remotePickerResolve = null;
 let mainWindow = null;
 let remotePickerWindow = null;
+let desktopAppServer = null;
+let desktopBootStatus = {
+  phase: 'starting',
+  message: 'Preparing gr4-studio…',
+  controlPlaneBaseUrl: DEFAULT_BACKEND_URL,
+  backendMode: 'unknown',
+  source: 'default',
+  currentSessionRouting: 'app-api',
+};
 
 function normalizeBackendUrl(input) {
   if (!input) {
@@ -33,6 +42,11 @@ function parseLaunchArgs(argv) {
   const remoteIndex = args.findIndex((arg) => arg === '--remote' || arg.startsWith('--remote='));
   const localIndex = args.findIndex((arg) => arg === '--local');
   const envUrl = normalizeBackendUrl(process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL);
+  const backendMode = process.env.GR4_STUDIO_BACKEND_MODE;
+
+  if (backendMode === 'local') {
+    return { mode: 'local', remoteUrl: null, promptForRemote: false };
+  }
 
   if (envUrl) {
     return { mode: 'remote', remoteUrl: envUrl, promptForRemote: false };
@@ -264,7 +278,7 @@ function openRemotePicker(recentEndpoints) {
       title: `Connect to ${APP_NAME}`,
       backgroundColor: '#0f172a',
       webPreferences: {
-        preload: path.join(app.getAppPath(), 'desktop', 'remote-picker-preload.mjs'),
+        preload: path.join(app.getAppPath(), 'desktop', 'remote-picker-preload.cjs'),
         contextIsolation: true,
         nodeIntegration: false,
       },
@@ -315,11 +329,64 @@ function resolveStartUrl() {
   return process.env.GR4_STUDIO_DEV_SERVER_URL || null;
 }
 
-async function createWindow() {
+function logDesktop(message) {
+  console.info(`[gr4-studio] ${message}`);
+}
+
+function updateDesktopBootStatus(patch) {
+  desktopBootStatus = {
+    ...desktopBootStatus,
+    ...patch,
+  };
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('gr4-studio:boot-status', desktopBootStatus);
+  }
+}
+
+function resolveBackendRuntimeConfig() {
+  const backendMode = process.env.GR4_STUDIO_BACKEND_MODE || 'unknown';
+  const explicitUrl = normalizeBackendUrl(process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL || process.env.GR4_CONTROL_PLANE_URL);
+  if (explicitUrl) {
+    return {
+      backendMode,
+      controlPlaneBaseUrl: explicitUrl,
+      source: 'explicit',
+    };
+  }
+
+  return {
+    backendMode,
+    controlPlaneBaseUrl: DEFAULT_BACKEND_URL,
+    source: 'default',
+  };
+}
+
+ipcMain.handle('gr4-studio:boot-status:get', async () => desktopBootStatus);
+
+async function resolveWindowStartUrl(runtimeConfig) {
   const devServerUrl = resolveStartUrl();
-  // The launcher injects the resolved backend URL before the renderer loads.
-  process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL =
-    process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL || process.env.GR4_CONTROL_PLANE_URL || DEFAULT_BACKEND_URL;
+  if (devServerUrl) {
+    return devServerUrl;
+  }
+
+  if (!desktopAppServer) {
+    desktopAppServer = await startDesktopAppServer({
+      backendBaseUrl: runtimeConfig.controlPlaneBaseUrl,
+      staticRoot: app.getAppPath(),
+    });
+    logDesktop(`Desktop app server listening at ${desktopAppServer.origin}`);
+  }
+
+  updateDesktopBootStatus({
+    appServerOrigin: desktopAppServer.origin,
+  });
+
+  return `${desktopAppServer.origin}/`;
+}
+
+async function createWindow(startUrl, runtimeConfig) {
+  process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL = runtimeConfig.controlPlaneBaseUrl;
   const appIconPath = await resolveAppIconPath();
 
   mainWindow = new BrowserWindow({
@@ -329,7 +396,7 @@ async function createWindow() {
     title: APP_NAME,
     icon: appIconPath ?? undefined,
     webPreferences: {
-      preload: path.join(app.getAppPath(), 'desktop', 'preload.mjs'),
+      preload: path.join(app.getAppPath(), 'desktop', 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -339,17 +406,69 @@ async function createWindow() {
     mainWindow = null;
   });
 
-  if (devServerUrl) {
-    return mainWindow.loadURL(devServerUrl).then(() => mainWindow);
-  }
+  mainWindow.webContents.on('console-message', (_event, details) => {
+    const severity = ['debug', 'info', 'warn', 'error'][details.level] ?? 'log';
+    console.info(`[gr4-studio][renderer:${severity}] ${details.message} (${details.sourceId}:${details.line})`);
+  });
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl) => {
+    console.error(
+      `[gr4-studio] Renderer failed to load: code=${errorCode} description=${errorDescription} url=${validatedUrl}`,
+    );
+  });
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error(
+      `[gr4-studio] Renderer process exited: reason=${details.reason} exitCode=${details.exitCode}`,
+    );
+  });
 
-  const appIndex = pathToFileURL(path.join(app.getAppPath(), 'index.html')).toString();
-  return mainWindow.loadURL(appIndex).then(() => mainWindow);
+  return mainWindow.loadURL(startUrl).then(() => mainWindow);
+}
+
+async function beginBackendStartup(runtimeConfig) {
+  updateDesktopBootStatus({
+    phase: 'waiting-backend',
+    message:
+      runtimeConfig.backendMode === 'local'
+        ? 'Starting local backend…'
+        : 'Checking backend reachability…',
+    controlPlaneBaseUrl: runtimeConfig.controlPlaneBaseUrl,
+    backendMode: runtimeConfig.backendMode,
+    source: runtimeConfig.source,
+  });
+
+  logDesktop(
+    `Backend mode=${runtimeConfig.backendMode} url=${runtimeConfig.controlPlaneBaseUrl} source=${runtimeConfig.source}`,
+  );
+
+  try {
+    const readiness = await probeBackendReady(runtimeConfig.controlPlaneBaseUrl);
+    logDesktop(`Backend reachable via ${readiness.probePath} (status ${readiness.status})`);
+    updateDesktopBootStatus({
+      phase: 'ready',
+      message: `Backend reachable via ${readiness.probePath}`,
+      probePath: readiness.probePath,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[gr4-studio] Backend startup failed:', message);
+    updateDesktopBootStatus({
+      phase: 'error',
+      message,
+    });
+  }
 }
 
 async function bootstrap() {
   app.on('window-all-closed', () => {
     app.quit();
+  });
+  app.on('before-quit', () => {
+    if (desktopAppServer) {
+      void desktopAppServer.close().catch((error) => {
+        console.error('[gr4-studio] Failed to stop desktop app server:', error);
+      });
+      desktopAppServer = null;
+    }
   });
 
   app.setName(APP_NAME);
@@ -382,11 +501,23 @@ async function bootstrap() {
     process.env.GR4_STUDIO_BACKEND_MODE = 'local';
   }
 
-  await createWindow();
+  const runtimeConfig = resolveBackendRuntimeConfig();
+  updateDesktopBootStatus({
+    phase: 'starting',
+    message: runtimeConfig.backendMode === 'local' ? 'Starting local backend…' : 'Opening gr4-studio…',
+    controlPlaneBaseUrl: runtimeConfig.controlPlaneBaseUrl,
+    backendMode: runtimeConfig.backendMode,
+    source: runtimeConfig.source,
+  });
+  const startUrl = await resolveWindowStartUrl(runtimeConfig);
+  await createWindow(startUrl, runtimeConfig);
+  void beginBackendStartup(runtimeConfig);
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      void createWindow();
+      const nextRuntimeConfig = resolveBackendRuntimeConfig();
+      void resolveWindowStartUrl(nextRuntimeConfig).then((nextStartUrl) => createWindow(nextStartUrl, nextRuntimeConfig));
+      void beginBackendStartup(nextRuntimeConfig);
     }
   });
 }

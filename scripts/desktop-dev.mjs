@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const DEV_SERVER_URL = 'http://127.0.0.1:5173';
 const ELECTRON_FALLBACK = 'electron@35.6.0';
+const DEFAULT_BACKEND_URL = 'http://127.0.0.1:8080';
 
 function sleep(ms) {
   return new Promise((resolve) => {
@@ -42,36 +43,32 @@ function spawnDetached(command, args, extraEnv = {}) {
 async function main() {
   const projectRoot = process.cwd();
   await fs.access(path.join(projectRoot, 'package.json'));
+  const backendUrl =
+    process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL || process.env.GR4_CONTROL_PLANE_URL || DEFAULT_BACKEND_URL;
 
   const vite = spawnDetached('npm', ['run', 'dev', '--', '--host', '127.0.0.1', '--port', '5173']);
   await waitForUrl(DEV_SERVER_URL);
+  console.info(`[desktop:dev] Using backend ${backendUrl}`);
 
   const workspaceRoot = path.resolve(projectRoot, '..', '..');
   const sourceElectron = path.join(workspaceRoot, 'src', 'gr4-studio', 'node_modules', '.bin', 'electron');
   const electron = process.env.GR4_STUDIO_ELECTRON_BIN
     ? spawnDetached(process.env.GR4_STUDIO_ELECTRON_BIN, [projectRoot], {
         GR4_STUDIO_DEV_SERVER_URL: DEV_SERVER_URL,
-        GR4_STUDIO_CONTROL_PLANE_BASE_URL:
-          process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL || process.env.GR4_CONTROL_PLANE_URL || 'http://127.0.0.1:8080',
+        GR4_STUDIO_CONTROL_PLANE_BASE_URL: backendUrl,
       })
     : (await fs
         .stat(sourceElectron)
         .then(() =>
           spawnDetached(sourceElectron, [projectRoot], {
             GR4_STUDIO_DEV_SERVER_URL: DEV_SERVER_URL,
-            GR4_STUDIO_CONTROL_PLANE_BASE_URL:
-              process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL ||
-              process.env.GR4_CONTROL_PLANE_URL ||
-              'http://127.0.0.1:8080',
+            GR4_STUDIO_CONTROL_PLANE_BASE_URL: backendUrl,
           }),
         )
         .catch(() =>
           spawnDetached('npx', ['--yes', ELECTRON_FALLBACK, projectRoot], {
             GR4_STUDIO_DEV_SERVER_URL: DEV_SERVER_URL,
-            GR4_STUDIO_CONTROL_PLANE_BASE_URL:
-              process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL ||
-              process.env.GR4_CONTROL_PLANE_URL ||
-              'http://127.0.0.1:8080',
+            GR4_STUDIO_CONTROL_PLANE_BASE_URL: backendUrl,
           }),
         ));
 

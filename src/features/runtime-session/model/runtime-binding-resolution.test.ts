@@ -46,7 +46,7 @@ describe('descriptor-based runtime binding resolution', () => {
     ).toMatchObject({
       status: 'configured',
       transport: 'websocket',
-      endpoint: '/sessions/sess-1/streams/series0/ws',
+      endpoint: '/api/sessions/sess-1/streams/series0/ws',
       updateMs: 125,
       payloadFormat: 'series-window-json-v1',
     });
@@ -76,7 +76,7 @@ describe('descriptor-based runtime binding resolution', () => {
     ).toMatchObject({
       status: 'configured',
       transport: 'websocket',
-      endpoint: '/sessions/sess-1/streams/spectrum0/ws',
+      endpoint: '/api/sessions/sess-1/streams/spectrum0/ws',
       updateMs: 200,
       payloadFormat: 'dataset-xy-json-v1',
     });
@@ -107,7 +107,7 @@ describe('descriptor-based runtime binding resolution', () => {
     ).toMatchObject({
       status: 'configured',
       transport: 'websocket',
-      endpoint: '/sessions/sess-1/streams/waterfall0/ws',
+      endpoint: '/api/sessions/sess-1/streams/waterfall0/ws',
       updateMs: 210,
       sampleRate: 48000,
       payloadFormat: 'waterfall-spectrum-json-v1',
@@ -138,7 +138,7 @@ describe('descriptor-based runtime binding resolution', () => {
     ).toMatchObject({
       status: 'configured',
       transport: 'websocket',
-      endpoint: '/sessions/sess-1/streams/xy0/ws',
+      endpoint: '/api/sessions/sess-1/streams/xy0/ws',
       updateMs: 90,
       payloadFormat: 'series2d-xy-json-v1',
     });
@@ -168,7 +168,7 @@ describe('descriptor-based runtime binding resolution', () => {
     ).toMatchObject({
       status: 'configured',
       transport: 'http_poll',
-      endpoint: '/sessions/sess-1/streams/series0/http',
+      endpoint: '/api/sessions/sess-1/streams/series0/http',
       updateMs: 300,
     });
   });
@@ -198,7 +198,7 @@ describe('descriptor-based runtime binding resolution', () => {
     ).toMatchObject({
       status: 'configured',
       transport: 'http_poll',
-      endpoint: '/sessions/sess-1/streams/waterfall0/http',
+      endpoint: '/api/sessions/sess-1/streams/waterfall0/http',
       updateMs: 320,
       sampleRate: 48000,
       payloadFormat: 'waterfall-spectrum-json-v1',
@@ -308,7 +308,7 @@ describe('descriptor-based runtime binding resolution', () => {
     ).toMatchObject({
       status: 'configured',
       transport: 'http_poll',
-      endpoint: '/sessions/sess-1/streams/audio-stream/http',
+      endpoint: '/api/sessions/sess-1/streams/audio-stream/http',
       sampleRate: 48000,
       channels: 2,
       payloadFormat: 'audio-window-json-v1',

@@ -11,6 +11,7 @@ if (resolved.issues.length > 0) {
 
 if (import.meta.env.DEV) {
   console.info(`[config] Control plane base URL: ${resolved.controlPlaneBaseUrl} (${resolved.source})`);
+  console.info('[config] Current-session renderer routing uses app-owned /api paths; backend URL remains for diagnostics and legacy direct-endpoint fallback.');
 }
 
 export const config: AppConfig = {
