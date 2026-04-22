@@ -22,6 +22,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include <boost/beast/core/detail/base64.hpp>
 #include <httplib.h>
 #include <openssl/sha.h>
 
@@ -52,6 +53,13 @@ inline std::string trimAscii(std::string_view text) {
     return std::string(text.substr(first, last - first + 1UZ));
 }
 
+inline std::string encodeBase64(std::string_view bytes) {
+    std::string encoded(boost::beast::detail::base64::encoded_size(bytes.size()), '\0');
+    const auto written = boost::beast::detail::base64::encode(encoded.data(), bytes.data(), bytes.size());
+    encoded.resize(written);
+    return encoded;
+}
+
 inline std::string computeWebSocketAcceptKey(std::string_view clientKey) {
     constexpr std::string_view wsGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     const std::string input{clientKey.begin(), clientKey.end()};
@@ -60,7 +68,7 @@ inline std::string computeWebSocketAcceptKey(std::string_view clientKey) {
     std::array<unsigned char, SHA_DIGEST_LENGTH> digest{};
     SHA1(reinterpret_cast<const unsigned char*>(handshakeKey.data()), handshakeKey.size(), digest.data());
     const std::string digestBytes{reinterpret_cast<const char*>(digest.data()), digest.size()};
-    return httplib::detail::base64_encode(digestBytes);
+    return encodeBase64(digestBytes);
 }
 
 inline void appendWebSocketLength(std::string& frame, std::size_t payloadSize) {
