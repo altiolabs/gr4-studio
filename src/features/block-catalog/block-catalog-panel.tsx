@@ -242,7 +242,7 @@ export function BlockCatalogPanel() {
               <p className="mt-2 text-xs text-rose-300 break-words">{error.details}</p>
             )}
             <p className="mt-2 text-xs text-rose-300/90">
-              Check `VITE_CONTROL_PLANE_BASE_URL` and backend CORS settings if this persists.
+              Catalog loads use the app-owned `app-api` route surface. Check backend reachability and the `/api` proxy path if this persists.
             </p>
           </div>
         )}

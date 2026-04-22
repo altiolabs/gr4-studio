@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+const { contextBridge, ipcRenderer } = require('electron');
 
 const controlPlaneBaseUrl =
   process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL || process.env.GR4_CONTROL_PLANE_URL || 'http://127.0.0.1:8080';
@@ -11,6 +11,19 @@ contextBridge.exposeInMainWorld('gr4StudioRuntime', {
 });
 
 contextBridge.exposeInMainWorld('gr4StudioShell', {
+  getBootStatus() {
+    return ipcRenderer.invoke('gr4-studio:boot-status:get');
+  },
+  onBootStatus(callback) {
+    const listener = (_event, status) => {
+      callback(status);
+    };
+
+    ipcRenderer.on('gr4-studio:boot-status', listener);
+    return () => {
+      ipcRenderer.removeListener('gr4-studio:boot-status', listener);
+    };
+  },
   onMenuCommand(callback) {
     const listener = (_event, command) => {
       callback(command);

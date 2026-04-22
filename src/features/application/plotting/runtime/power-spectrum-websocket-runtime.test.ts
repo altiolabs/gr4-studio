@@ -93,8 +93,17 @@ describe('power spectrum websocket runtime', () => {
     expect(normalizePowerSpectrumWebSocketEndpoint('ws://127.0.0.1:18080/spectrum')).toBe(
       'ws://127.0.0.1:18080/spectrum',
     );
-    expect(normalizePowerSpectrumWebSocketEndpoint('/sessions/sess_1/streams/stream_1/ws')).toBe(
-      'ws://127.0.0.1:8080/sessions/sess_1/streams/stream_1/ws',
+    expect(
+      normalizePowerSpectrumWebSocketEndpoint('/api/sessions/sess_1/streams/stream_1/ws', {
+        protocol: 'http:',
+        host: '127.0.0.1:5173',
+      }),
+    ).toBe('ws://127.0.0.1:5173/api/sessions/sess_1/streams/stream_1/ws');
+  });
+
+  it('does not rewrite app-owned websocket routes to the backend origin outside a browser context', () => {
+    expect(normalizePowerSpectrumWebSocketEndpoint('/api/sessions/sess_1/streams/stream_1/ws')).toBe(
+      '/api/sessions/sess_1/streams/stream_1/ws',
     );
   });
 
@@ -251,5 +260,33 @@ describe('power spectrum websocket runtime', () => {
         endpoint: 'ws://127.0.0.1:18080/spectrum',
       }),
     ).toBe('unsupported');
+  });
+
+  it('classifies legacy-direct websocket setup failures by routing kind', () => {
+    const states: Array<{ state: string; message?: string }> = [];
+
+    createPowerSpectrumWebSocketSubscription({
+      endpoint: 'ws://127.0.0.1:18080/spectrum',
+      websocketFactory: () => {
+        throw new Error('connection refused');
+      },
+      scheduler: {
+        setTimeout: (handler: () => void) => {
+          handler();
+          return 1;
+        },
+        clearTimeout: vi.fn(),
+      },
+      maxAttempts: 1,
+      onConnectionState: (state, message) => {
+        states.push({ state, message });
+      },
+      onFrame: vi.fn(),
+    });
+
+    expect(states[states.length - 1]).toMatchObject({
+      state: 'error',
+      message: 'legacy-direct websocket setup failed: connection refused',
+    });
   });
 });

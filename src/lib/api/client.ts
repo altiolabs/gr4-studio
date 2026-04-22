@@ -1,6 +1,10 @@
-import { config } from '../config';
+import {
+  classifyRuntimeEndpointRouting,
+  describeRuntimeEndpointRouting,
+} from './endpoint-routing';
 
 export type ApiErrorCode = 'NETWORK' | 'HTTP' | 'PARSE';
+export const APP_API_BASE_PATH = '/api';
 
 export class ApiClientError extends Error {
   constructor(
@@ -19,18 +23,21 @@ type JsonRequestOptions = RequestInit & {
   path: string;
 };
 
+export function toAppApiPath(path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (normalizedPath === APP_API_BASE_PATH || normalizedPath.startsWith(`${APP_API_BASE_PATH}/`)) {
+    return normalizedPath;
+  }
+
+  return `${APP_API_BASE_PATH}${normalizedPath}`;
+}
+
 export function buildApiUrl(path: string): string {
   if (/^https?:\/\//i.test(path)) {
     return path;
   }
 
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-
-  if (import.meta.env.DEV) {
-    return normalizedPath;
-  }
-
-  return `${config.controlPlaneBaseUrl}${normalizedPath}`;
+  return toAppApiPath(path);
 }
 
 type ParsedErrorEnvelope = {
@@ -66,6 +73,8 @@ function parseErrorEnvelope(bodyText: string): ParsedErrorEnvelope {
 export async function jsonRequest<T>({ path, ...init }: JsonRequestOptions): Promise<T> {
   let response: Response;
   const url = buildApiUrl(path);
+  const routingKind = classifyRuntimeEndpointRouting(path);
+  const routingLabel = describeRuntimeEndpointRouting(routingKind);
 
   try {
     response = await fetch(url, {
@@ -80,10 +89,12 @@ export async function jsonRequest<T>({ path, ...init }: JsonRequestOptions): Pro
     });
   } catch (error) {
     throw new ApiClientError(
-      `Failed to reach backend for ${path}`,
+      `${routingLabel} request failed for ${path}`,
       'NETWORK',
       undefined,
-      error instanceof Error ? `${error.message} (url: ${url})` : `Unknown network error (url: ${url})`,
+      error instanceof Error
+        ? `route=${routingLabel} url=${url} cause=${error.message}`
+        : `route=${routingLabel} url=${url} cause=unknown network error`,
     );
   }
 
@@ -96,14 +107,19 @@ export async function jsonRequest<T>({ path, ...init }: JsonRequestOptions): Pro
     }
 
     const parsed = parseErrorEnvelope(details);
-    const message =
-      parsed.canonicalMessage ?? parsed.legacyMessage ?? `Request failed: ${response.status} ${response.statusText}`;
+    const message = parsed.canonicalMessage
+      ? `${routingLabel} request failed: ${parsed.canonicalMessage}`
+      : parsed.legacyMessage
+        ? `${routingLabel} request failed: ${parsed.legacyMessage}`
+        : `${routingLabel} request failed: ${response.status} ${response.statusText}`;
 
     throw new ApiClientError(
       message,
       'HTTP',
       response.status,
-      details || response.statusText,
+      details
+        ? `route=${routingLabel} url=${url} upstream=${details}`
+        : `route=${routingLabel} url=${url} upstream=${response.statusText}`,
       parsed.canonicalCode ?? parsed.legacyCode,
     );
   }

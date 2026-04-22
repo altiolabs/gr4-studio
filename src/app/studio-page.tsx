@@ -595,10 +595,13 @@ export function StudioPage() {
     [activeDocument, capabilities],
   );
   const saveAsTooltip = useMemo(() => buildSaveAsTooltip(capabilities), [capabilities]);
-  const backendEndpointLabel = useMemo(
-    () => config.controlPlaneBaseUrl.replace(/^https?:\/\//, ''),
-    [config.controlPlaneBaseUrl],
-  );
+  const backendEndpointLabel = config.controlPlaneBaseUrl.replace(/^https?:\/\//, '');
+  const transportDiagnosticsTitle = [
+    `Backend mode: ${config.backendMode}`,
+    `Backend URL: ${config.controlPlaneBaseUrl}`,
+    `Current-session routes: app-api (/api/*) via ${typeof window !== 'undefined' ? window.location.origin : 'app origin'}`,
+    'Legacy authored absolute endpoints: direct compatibility fallback only',
+  ].join('\n');
 
   useEffect(() => {
     if (!initializedTabs) {
@@ -1150,7 +1153,7 @@ export function StudioPage() {
           </button>
           <span
             className="rounded-full border border-slate-600 bg-slate-800 px-2.5 py-1 text-[11px] font-medium text-slate-200"
-            title={config.controlPlaneBaseUrl}
+            title={transportDiagnosticsTitle}
           >
             {backendEndpointLabel}
           </span>

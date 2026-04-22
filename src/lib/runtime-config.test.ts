@@ -21,13 +21,14 @@ describe('runtime config resolution', () => {
     vi.stubGlobal('window', {
       gr4StudioRuntime: {
         controlPlaneBaseUrl: 'http://127.0.0.1:9000',
+        backendMode: 'remote',
       },
     });
 
-    expect(resolveAppConfig('http://127.0.0.1:8080').controlPlaneBaseUrl).toBe(
-      'http://127.0.0.1:9000',
-    );
-    expect(resolveAppConfig('http://127.0.0.1:8080').backendMode).toBe('unknown');
+    expect(resolveAppConfig('http://127.0.0.1:8080')).toMatchObject({
+      controlPlaneBaseUrl: 'http://127.0.0.1:9000',
+      backendMode: 'remote',
+    });
 
     vi.unstubAllGlobals();
   });

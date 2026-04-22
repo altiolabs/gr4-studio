@@ -1,9 +1,12 @@
+import { toAppApiPath } from './client';
+import { classifyRuntimeEndpointRouting, describeRuntimeEndpointRouting } from './endpoint-routing';
+
 export function resolveRuntimeHttpFetchUrl(endpointUrl: string, isDev: boolean): string {
-  if (!isDev) {
-    return endpointUrl;
+  if (classifyRuntimeEndpointRouting(endpointUrl) === 'app-api') {
+    return toAppApiPath(endpointUrl);
   }
 
-  if (endpointUrl.startsWith('/')) {
+  if (!isDev) {
     return endpointUrl;
   }
 
@@ -12,6 +15,8 @@ export function resolveRuntimeHttpFetchUrl(endpointUrl: string, isDev: boolean):
 
 export async function fetchRuntimeJsonPayload(endpointUrl: string, isDev = import.meta.env.DEV): Promise<unknown> {
   const resolvedUrl = resolveRuntimeHttpFetchUrl(endpointUrl, isDev);
+  const routingKind = classifyRuntimeEndpointRouting(endpointUrl);
+  const routingLabel = describeRuntimeEndpointRouting(routingKind);
   const response = await fetch(resolvedUrl, {
     method: 'GET',
     headers: {
@@ -20,8 +25,13 @@ export async function fetchRuntimeJsonPayload(endpointUrl: string, isDev = impor
   });
 
   if (!response.ok) {
-    const prefix = resolvedUrl === endpointUrl ? 'HTTP' : 'Proxy HTTP';
-    throw new Error(`${prefix} ${response.status}`);
+    const prefix =
+      routingKind === 'app-api'
+        ? 'App API HTTP'
+        : resolvedUrl === endpointUrl
+          ? 'Legacy HTTP'
+          : 'Legacy Proxy HTTP';
+    throw new Error(`${prefix} ${response.status} (route=${routingLabel})`);
   }
 
   return response.json();

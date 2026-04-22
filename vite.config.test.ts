@@ -1,32 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { buildProxyRequestHeaders } from './vite.config';
+import { stripAppApiPrefix } from './vite.config';
 
-describe('buildProxyRequestHeaders', () => {
-  it('sets content length for buffered json post bodies', () => {
-    const body = Buffer.from('{"name":"demo","grc":"graph"}', 'utf8');
-
-    expect(
-      buildProxyRequestHeaders(
-        {
-          accept: 'application/json',
-          'content-type': 'application/json',
-        },
-        body,
-      ),
-    ).toEqual({
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-      'Content-Length': String(body.length),
-    });
+describe('stripAppApiPrefix', () => {
+  it('rewrites app-owned api routes to upstream control-plane routes', () => {
+    expect(stripAppApiPrefix('/api/blocks')).toBe('/blocks');
+    expect(stripAppApiPrefix('/api/sessions/sess_1/start')).toBe('/sessions/sess_1/start');
+    expect(stripAppApiPrefix('/api/sessions/sess_1/streams/stream_1/ws')).toBe(
+      '/sessions/sess_1/streams/stream_1/ws',
+    );
   });
 
-  it('omits content length when there is no request body', () => {
-    expect(
-      buildProxyRequestHeaders({
-        accept: 'application/json',
-      }),
-    ).toEqual({
-      Accept: 'application/json',
-    });
+  it('leaves non-api routes unchanged', () => {
+    expect(stripAppApiPrefix('/__gr4studio/runtime-http-proxy')).toBe('/__gr4studio/runtime-http-proxy');
+    expect(stripAppApiPrefix('/assets/index.js')).toBe('/assets/index.js');
   });
 });

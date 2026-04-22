@@ -1,4 +1,8 @@
-import { config } from '../../../../lib/config';
+import {
+  describeWebSocketTransport,
+  resolveWebSocketUrl,
+  type BrowserLocationLike,
+} from '../../../../lib/api/websocket-url';
 import type { PlotSeriesFrame } from '../model/types';
 
 // Binary wire format:
@@ -56,35 +60,11 @@ function toArrayBuffer(input: ArrayBuffer | ArrayBufferView): ArrayBuffer {
   return input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
 }
 
-export function normalizePowerSpectrumWebSocketEndpoint(endpoint: string): string {
-  const trimmed = endpoint.trim();
-  if (!trimmed) {
-    return trimmed;
-  }
-  if (trimmed.startsWith('ws://') || trimmed.startsWith('wss://')) {
-    return trimmed;
-  }
-  if (trimmed.startsWith('http://')) {
-    return `ws://${trimmed.slice('http://'.length)}`;
-  }
-  if (trimmed.startsWith('https://')) {
-    return `wss://${trimmed.slice('https://'.length)}`;
-  }
-  if (trimmed.startsWith('/')) {
-    try {
-      const controlPlaneUrl = new URL(config.controlPlaneBaseUrl);
-      const scheme = controlPlaneUrl.protocol === 'https:' ? 'wss' : 'ws';
-      return `${scheme}://${controlPlaneUrl.host}${trimmed}`;
-    } catch {
-      const location = typeof window !== 'undefined' ? window.location : undefined;
-      if (!location) {
-        return trimmed;
-      }
-      const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
-      return `${scheme}://${location.host}${trimmed}`;
-    }
-  }
-  return `ws://${trimmed}`;
+export function normalizePowerSpectrumWebSocketEndpoint(
+  endpoint: string,
+  browserLocation?: BrowserLocationLike,
+): string {
+  return resolveWebSocketUrl(endpoint, { browserLocation });
 }
 
 export function parsePowerSpectrumWebSocketFrame(payload: ArrayBuffer | ArrayBufferView): PowerSpectrumWebSocketFrame {
@@ -184,6 +164,7 @@ export function createPowerSpectrumWebSocketSubscription(params: {
   };
   const websocketFactory: WebSocketFactory =
     params.websocketFactory ?? ((endpoint: string) => new WebSocket(endpoint) as WebSocketLike);
+  const transport = describeWebSocketTransport(params.endpoint);
   const maxAttempts = clampToPositiveInteger(params.maxAttempts ?? POWER_SPECTRUM_WS_MAX_ATTEMPTS);
   const baseRetryMs = clampToPositiveInteger(params.baseRetryMs ?? POWER_SPECTRUM_WS_DEFAULT_RETRY_MS);
   const maxRetryMs = clampToPositiveInteger(params.maxRetryMs ?? POWER_SPECTRUM_WS_MAX_RETRY_MS);
@@ -247,7 +228,11 @@ export function createPowerSpectrumWebSocketSubscription(params: {
     try {
       nextSocket = websocketFactory(connectionEndpoint);
     } catch (error) {
-      scheduleReconnect(error instanceof Error ? error.message : 'Failed to create WebSocket connection.');
+      scheduleReconnect(
+        error instanceof Error
+          ? `${transport.routingLabel} websocket setup failed: ${error.message}`
+          : `${transport.routingLabel} websocket setup failed.`,
+      );
       return;
     }
 
@@ -271,13 +256,18 @@ export function createPowerSpectrumWebSocketSubscription(params: {
       if (closed || fatalError) {
         return;
       }
-      // Wait for onclose to decide whether the transport can be retried.
+      params.onConnectionState?.('reconnecting', `${transport.routingLabel} websocket error.`);
     };
-    socket.onclose = () => {
+    socket.onclose = (event) => {
       if (closed || fatalError) {
         return;
       }
-      scheduleReconnect('Power spectrum websocket disconnected.');
+      const reason = event.reason?.trim() ?? '';
+      const message =
+        reason.length > 0
+          ? `${transport.routingLabel} websocket disconnected (${event.code}${event.wasClean ? ', clean' : ''}): ${reason}`
+          : `${transport.routingLabel} websocket disconnected (code ${event.code}${event.wasClean ? ', clean' : ''}).`;
+      scheduleReconnect(message);
     };
   };
 

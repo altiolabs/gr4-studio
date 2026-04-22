@@ -6,13 +6,13 @@ describe('api client url building', () => {
     vi.restoreAllMocks();
   });
 
-  it('uses relative proxy paths in dev for control-plane requests', () => {
-    expect(buildApiUrl('/sessions')).toBe('/sessions');
+  it('uses app-owned /api paths for control-plane requests', () => {
+    expect(buildApiUrl('/sessions')).toBe('/api/sessions');
     expect(buildApiUrl('blocks/gr::testing::NullSink%3Cfloat32%3E')).toBe(
-      '/blocks/gr::testing::NullSink%3Cfloat32%3E',
+      '/api/blocks/gr::testing::NullSink%3Cfloat32%3E',
     );
     expect(buildApiUrl('/sessions/sess_1/blocks/sig0/settings')).toBe(
-      '/sessions/sess_1/blocks/sig0/settings',
+      '/api/sessions/sess_1/blocks/sig0/settings',
     );
   });
 
@@ -33,7 +33,7 @@ describe('api client url building', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/blocks',
+      '/api/blocks',
       expect.objectContaining({
         cache: 'no-store',
         headers: expect.objectContaining({
@@ -60,7 +60,26 @@ describe('api client url building', () => {
         message: 'Response body was empty for /blocks',
         code: 'PARSE',
         status: 200,
-        details: 'status=200 url=/blocks',
+        details: 'status=200 url=/api/blocks',
+      }),
+    );
+  });
+
+  it('classifies app-api and legacy-direct request failures distinctly', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('connection refused'));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(jsonRequest({ path: '/blocks', method: 'GET' })).rejects.toMatchObject(
+      expect.objectContaining({
+        message: 'app-api request failed for /blocks',
+        details: 'route=app-api url=/api/blocks cause=connection refused',
+      }),
+    );
+
+    await expect(jsonRequest({ path: 'http://127.0.0.1:8080/blocks', method: 'GET' })).rejects.toMatchObject(
+      expect.objectContaining({
+        message: 'legacy-direct request failed for http://127.0.0.1:8080/blocks',
+        details: 'route=legacy-direct url=http://127.0.0.1:8080/blocks cause=connection refused',
       }),
     );
   });
