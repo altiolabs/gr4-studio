@@ -31,6 +31,7 @@
 #include <utility>
 #include <vector>
 
+#include <boost/beast/core/detail/base64.hpp>
 #include <openssl/sha.h>
 
 #if !defined(_WIN32)
@@ -92,6 +93,13 @@ inline std::string trimAscii(std::string_view text) {
     return std::string(text.substr(first, last - first + 1UZ));
 }
 
+inline std::string encodeBase64(std::string_view bytes) {
+    std::string encoded(boost::beast::detail::base64::encoded_size(bytes.size()), '\0');
+    const auto written = boost::beast::detail::base64::encode(encoded.data(), bytes.data(), bytes.size());
+    encoded.resize(written);
+    return encoded;
+}
+
 template<typename T>
 void appendLittleEndian(std::string& out, T value) {
     static_assert(std::is_integral_v<T> || std::is_floating_point_v<T>);
@@ -120,7 +128,7 @@ inline std::string computeWebSocketAcceptKey(std::string_view clientKey) {
     std::array<unsigned char, SHA_DIGEST_LENGTH> digest{};
     SHA1(reinterpret_cast<const unsigned char*>(handshakeKey.data()), handshakeKey.size(), digest.data());
     const std::string digestBytes{reinterpret_cast<const char*>(digest.data()), digest.size()};
-    return httplib::detail::base64_encode(digestBytes);
+    return encodeBase64(digestBytes);
 }
 
 inline void appendWebSocketLength(std::string& frame, std::size_t payloadSize) {
