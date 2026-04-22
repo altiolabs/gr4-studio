@@ -89,7 +89,7 @@ function formatConnectionBadge(frame: PlotDataFrame): string | null {
 export function PlotSurface({ spec, frame, binding }: PlotSurfaceProps) {
   const hostRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [diagnosticsCollapsed, setDiagnosticsCollapsed] = useState(false);
+  const [diagnosticsCollapsed, setDiagnosticsCollapsed] = useState(true);
 
   useEffect(() => {
     const host = hostRef.current;

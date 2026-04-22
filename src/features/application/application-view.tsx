@@ -9,6 +9,7 @@ import type { WorkspaceLiveRendererContext } from '../workspace/renderers/live-r
 import type { WorkspacePanelViewModel } from '../workspace/workspace-view';
 import { ControlPanelView } from '../control-panels/control-panel-view';
 import type { ExpressionBinding } from '../variables/model/types';
+import { readExplicitPlotPanelTitle } from './application-view-model';
 
 type ApplicationViewProps = {
   panelEntries: readonly WorkspacePanelViewModel[];
@@ -46,8 +47,10 @@ function ApplicationPanelShell({
     );
   }
 
+  const explicitPlotTitle = readExplicitPlotPanelTitle(entry.nodeParameters);
   const shellTitle =
-    plotSpec?.view.title ?? entry.nodePanelTitle ?? panel.title ?? entry.nodeDisplayName ?? panel.nodeId;
+    explicitPlotTitle ?? plotSpec?.view.title ?? entry.nodePanelTitle ?? panel.title ?? entry.nodeDisplayName ?? panel.nodeId;
+  const showShellHeader = !plotSpec || explicitPlotTitle !== undefined;
   const liveContext: WorkspaceLiveRendererContext = {
     panel: {
       panelId: panel.id,
@@ -73,12 +76,14 @@ function ApplicationPanelShell({
   };
   return (
     <article className="h-full rounded-lg bg-slate-950/35 overflow-hidden flex flex-col min-h-0">
-      <header className="px-3 py-2 border-b border-slate-800/80 bg-slate-900/55">
-        <h3 className="text-sm font-semibold text-slate-100 truncate" title={shellTitle}>
-          {shellTitle}
-        </h3>
-      </header>
-      <div className="p-2 flex-1 min-h-0">
+      {showShellHeader ? (
+        <header className="px-3 py-2 border-b border-slate-800/80 bg-slate-900/55">
+          <h3 className="text-sm font-semibold text-slate-100 truncate" title={shellTitle}>
+            {shellTitle}
+          </h3>
+        </header>
+      ) : null}
+      <div className={`${showShellHeader ? 'p-2' : ''} flex-1 min-h-0`}>
         {plotSpec ? (
           <PlotPanel
             spec={plotSpec}
