@@ -51,6 +51,7 @@ describe('api client url building', () => {
       vi.fn().mockResolvedValue({
         ok: true,
         status: 200,
+        headers: new Headers(),
         text: async () => '',
       }),
     );
@@ -60,7 +61,35 @@ describe('api client url building', () => {
         message: 'Response body was empty for /blocks',
         code: 'PARSE',
         status: 200,
-        details: 'status=200 url=/api/blocks',
+        details: 'status=200 url=/api/blocks content-length=unknown content-type=unknown cache-control=unknown',
+      }),
+    );
+  });
+
+  it('reports response metadata when body reading fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({
+          'cache-control': 'no-store',
+          'content-length': '127293',
+          'content-type': 'application/json',
+        }),
+        text: async () => {
+          throw new Error('stream failed');
+        },
+      }),
+    );
+
+    await expect(jsonRequest({ path: '/blocks', method: 'GET' })).rejects.toMatchObject(
+      expect.objectContaining({
+        message: 'Failed to read response body for /blocks',
+        code: 'PARSE',
+        status: 200,
+        details:
+          'status=200 url=/api/blocks content-length=127293 content-type=application/json cache-control=no-store cause=stream failed',
       }),
     );
   });

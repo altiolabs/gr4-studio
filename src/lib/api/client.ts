@@ -70,6 +70,14 @@ function parseErrorEnvelope(bodyText: string): ParsedErrorEnvelope {
   }
 }
 
+function describeResponse(response: Response, url: string): string {
+  const contentLength = response.headers.get('content-length') ?? 'unknown';
+  const contentType = response.headers.get('content-type') ?? 'unknown';
+  const cacheControl = response.headers.get('cache-control') ?? 'unknown';
+
+  return `status=${response.status} url=${url} content-length=${contentLength} content-type=${contentType} cache-control=${cacheControl}`;
+}
+
 export async function jsonRequest<T>({ path, ...init }: JsonRequestOptions): Promise<T> {
   let response: Response;
   const url = buildApiUrl(path);
@@ -131,8 +139,15 @@ export async function jsonRequest<T>({ path, ...init }: JsonRequestOptions): Pro
   let body = '';
   try {
     body = await response.text();
-  } catch {
-    body = '';
+  } catch (error) {
+    throw new ApiClientError(
+      `Failed to read response body for ${path}`,
+      'PARSE',
+      response.status,
+      error instanceof Error
+        ? `${describeResponse(response, url)} cause=${error.message}`
+        : `${describeResponse(response, url)} cause=unknown body read error`,
+    );
   }
 
   if (!body.trim()) {
@@ -140,7 +155,7 @@ export async function jsonRequest<T>({ path, ...init }: JsonRequestOptions): Pro
       `Response body was empty for ${path}`,
       'PARSE',
       response.status,
-      `status=${response.status} url=${url}`,
+      describeResponse(response, url),
     );
   }
 
