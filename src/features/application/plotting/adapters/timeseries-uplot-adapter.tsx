@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
-import type { PlotAdapterProps, PlotSeriesFrame } from '../model/types';
+import type { PlotAdapterProps, PlotSeriesFrame, PlotViewSpec } from '../model/types';
 import { STUDIO_BUILTIN_PLOT_PALETTES } from '../model/plot-style';
 
 const AXIS_STROKE = '#94a3b8';
@@ -132,6 +132,21 @@ export function buildEmptyAlignedData(seriesCount: number): uPlot.AlignedData {
   return Array.from({ length: seriesCount + 1 }, () => []) as unknown as uPlot.AlignedData;
 }
 
+function applyExplicitScales(chart: uPlot, ranges: Pick<PlotViewSpec, 'xRange' | 'yRange'>): void {
+  if (ranges.xRange?.auto === false) {
+    chart.setScale('x', {
+      min: ranges.xRange.min ?? 0,
+      max: ranges.xRange.max ?? 1,
+    });
+  }
+  if (ranges.yRange?.auto === false) {
+    chart.setScale('y', {
+      min: ranges.yRange.min ?? 0,
+      max: ranges.yRange.max ?? 1,
+    });
+  }
+}
+
 export function TimeseriesUplotAdapter({ spec, frame, width, height }: PlotAdapterProps) {
   const minWidth = 180;
   const minHeight = 120;
@@ -245,6 +260,7 @@ export function TimeseriesUplotAdapter({ spec, frame, width, height }: PlotAdapt
       buildEmptyAlignedData(seriesOptions.length - 1),
       host,
     );
+    applyExplicitScales(chart, { xRange: spec.xRange, yRange: spec.yRange });
     chartRef.current = chart;
     lastDataSignatureRef.current = '';
 
@@ -285,11 +301,13 @@ export function TimeseriesUplotAdapter({ spec, frame, width, height }: PlotAdapt
     const firstPoints = alignedData[0]?.length ?? 0;
     const signature = `${sequence}:${firstPoints}:${frame.meta?.state ?? 'na'}`;
     if (signature === lastDataSignatureRef.current) {
+      applyExplicitScales(chartRef.current, { xRange: spec.xRange, yRange: spec.yRange });
       return;
     }
     lastDataSignatureRef.current = signature;
     chartRef.current.setData(alignedData);
-  }, [alignedData, frame.meta?.sequence, frame.meta?.state]);
+    applyExplicitScales(chartRef.current, { xRange: spec.xRange, yRange: spec.yRange });
+  }, [alignedData, frame.meta?.sequence, frame.meta?.state, spec.xRange, spec.yRange]);
 
   return <div ref={plotHostRef} className="h-full min-h-0 w-full overflow-hidden rounded border border-slate-800 bg-slate-950" />;
 }

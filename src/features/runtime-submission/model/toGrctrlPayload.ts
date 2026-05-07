@@ -148,6 +148,14 @@ function shouldOmitParameter(name: string, rawValue: JsonPrimitive | undefined):
   return false;
 }
 
+function shouldOmitParameterForBlock(blockTypeId: string, name: string, rawValue: JsonPrimitive | undefined): boolean {
+  if (blockTypeId.startsWith('gr::studio::StudioSeriesSink<') && (name === 'x_min' || name === 'x_max')) {
+    return true;
+  }
+
+  return shouldOmitParameter(name, rawValue);
+}
+
 function indent(lines: string[], spaces = 2): string[] {
   const prefix = ' '.repeat(spaces);
   return lines.map((line) => `${prefix}${line}`);
@@ -222,7 +230,7 @@ function serializeGraphDocumentToInlineGrc(
           const resolvedParameter = resolved.parametersByNodeId[node.id]?.[name];
           const fallbackValue = parameter.kind === 'literal' ? parameter.value : undefined;
           const parameterValue = resolvedParameter?.state === 'resolved' ? resolvedParameter.value : fallbackValue;
-          if (shouldOmitParameter(name, parameterValue)) {
+          if (shouldOmitParameterForBlock(node.blockType, name, parameterValue)) {
             return;
           }
           lines.push(...indent([`    ${name}: ${renderParameterValue(name, parameterValue)}`]));

@@ -145,12 +145,19 @@ describe('runtime-settings-model', () => {
     ).toBe('Timed out while waiting for the runtime settings reply.');
   });
 
-  it('applies cadence and phosphor settings immediately', () => {
+  it('applies live visualization settings immediately', () => {
+    expect(shouldApplyRuntimeSettingImmediately('autoscale')).toBe(true);
     expect(shouldApplyRuntimeSettingImmediately('update_ms')).toBe(true);
     expect(shouldApplyRuntimeSettingImmediately('poll_ms')).toBe(true);
     expect(shouldApplyRuntimeSettingImmediately('persistence')).toBe(true);
     expect(shouldApplyRuntimeSettingImmediately('phosphor_intensity')).toBe(true);
     expect(shouldApplyRuntimeSettingImmediately('phosphor_decay_ms')).toBe(true);
+    expect(shouldApplyRuntimeSettingImmediately('x_min')).toBe(true);
+    expect(shouldApplyRuntimeSettingImmediately('x_max')).toBe(true);
+    expect(shouldApplyRuntimeSettingImmediately('y_min')).toBe(true);
+    expect(shouldApplyRuntimeSettingImmediately('y_max')).toBe(true);
+    expect(shouldApplyRuntimeSettingImmediately('z_min')).toBe(true);
+    expect(shouldApplyRuntimeSettingImmediately('z_max')).toBe(true);
     expect(shouldApplyRuntimeSettingImmediately('sample_rate')).toBe(false);
     expect(shouldApplyRuntimeSettingImmediately('endpoint')).toBe(false);
   });

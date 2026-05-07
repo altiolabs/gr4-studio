@@ -4,6 +4,8 @@ import type { PhosphorSpectrumTuning, PlotPanelSpec } from './types';
 import { resolveStudioPlotStyle } from './plot-style';
 
 const plotSpecCache = new Map<string, PlotPanelSpec>();
+const X_RANGE_PARAMETER_KEYS = ['x_min', 'xmin', 'xMin', 'x_max', 'xmax', 'xMax'] as const;
+const Y_RANGE_PARAMETER_KEYS = ['y_min', 'ymin', 'yMin', 'y_max', 'ymax', 'yMax'] as const;
 
 // Scalar timeseries metadata remains graph/block-owned.
 // Accepted optional keys from node parameters:
@@ -146,7 +148,7 @@ function serializeParameters(parameters: Readonly<Record<string, string>> | unde
   );
 }
 
-function buildPlotSpecCacheKey(entry: WorkspacePanelViewModel, isWaterfall: boolean): string {
+function buildPlotSpecCacheKey(entry: WorkspacePanelViewModel, excludedParameterKeys: readonly string[] = []): string {
   return JSON.stringify({
     panel: {
       id: entry.panel.id,
@@ -160,7 +162,7 @@ function buildPlotSpecCacheKey(entry: WorkspacePanelViewModel, isWaterfall: bool
     node: {
       displayName: entry.nodeDisplayName ?? '',
       blockTypeId: entry.nodeBlockTypeId ?? '',
-      parameters: serializeParameters(entry.nodeParameters, isWaterfall ? ['x_min', 'x_max', 'y_min', 'y_max'] : []),
+      parameters: serializeParameters(entry.nodeParameters, excludedParameterKeys),
       palettes: entry.studioPlotPalettes ?? null,
     },
   });
@@ -207,10 +209,10 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
   const windowSize = parseWindowSize(entry.nodeParameters) ?? 1024;
   const autoscale =
     parseBooleanValue(readParameterValue(entry.nodeParameters, ['autoscale', 'auto_scale'])) ?? true;
-  const xMin = parseOptionalNumber(entry.nodeParameters, ['x_min']);
-  const xMax = parseOptionalNumber(entry.nodeParameters, ['x_max']);
-  const yMin = parseOptionalNumber(entry.nodeParameters, ['y_min']);
-  const yMax = parseOptionalNumber(entry.nodeParameters, ['y_max']);
+  const xMin = parseOptionalNumber(entry.nodeParameters, ['x_min', 'xmin', 'xMin']);
+  const xMax = parseOptionalNumber(entry.nodeParameters, ['x_max', 'xmax', 'xMax']);
+  const yMin = parseOptionalNumber(entry.nodeParameters, ['y_min', 'ymin', 'yMin']);
+  const yMax = parseOptionalNumber(entry.nodeParameters, ['y_max', 'ymax', 'yMax']);
   const hasManualXRange = hasValidManualRange(xMin, xMax);
   const hasManualYRange = hasValidManualRange(yMin, yMax);
   const resolvedPayloadFormat =
@@ -232,7 +234,12 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
     studioPalettes: entry.studioPlotPalettes,
   });
   const phosphorTuning = isHistogram ? resolvePhosphorSpectrumTuning(entry.nodeParameters) : undefined;
-  const cacheKey = buildPlotSpecCacheKey(entry, isWaterfall);
+  const ignoredRangeKeys = isWaterfall
+    ? [...X_RANGE_PARAMETER_KEYS, ...Y_RANGE_PARAMETER_KEYS]
+    : isSeries2D || isHistogram
+      ? []
+      : X_RANGE_PARAMETER_KEYS;
+  const cacheKey = buildPlotSpecCacheKey(entry, ignoredRangeKeys);
   const cached = plotSpecCache.get(cacheKey);
   if (cached) {
     return cached;
@@ -241,14 +248,19 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
   const rangeSpec = isWaterfall
     ? {}
     : {
-        xRange:
-          !autoscale && hasManualXRange
+        xRange: isSeries2D || isHistogram
+          ? !autoscale && hasManualXRange
             ? {
                 auto: false,
                 min: xMin,
                 max: xMax,
               }
-            : { auto: true },
+            : { auto: true }
+          : {
+              auto: false,
+              min: 0,
+              max: Math.max(0, windowSize - 1),
+            },
         yRange: {
           auto: !(!autoscale && hasManualYRange),
           min: !autoscale && hasManualYRange ? yMin : undefined,

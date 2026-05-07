@@ -64,6 +64,19 @@ function SectionCard({ children }: { children: ReactNode }) {
   return <div className="rounded-md border border-slate-700 bg-slate-900/60 p-3 space-y-2">{children}</div>;
 }
 
+const LOCAL_PLOT_SETTING_NAMES = new Set([
+  'autoscale',
+  'persistence',
+  'phosphor_intensity',
+  'phosphor_decay_ms',
+  'x_min',
+  'x_max',
+  'y_min',
+  'y_max',
+  'z_min',
+  'z_max',
+]);
+
 function EmptyState({ children }: { children: ReactNode }) {
   return (
     <div className="rounded-md border border-dashed border-slate-700 p-3 text-sm text-slate-400">
@@ -119,6 +132,7 @@ function RuntimeSettingsCard({
   blockDetails?: BlockDetails;
 }) {
   const updateNodeParameters = useEditorStore((state) => state.updateNodeParameters);
+  const updateNodeParameterBindings = useEditorStore((state) => state.updateNodeParameterBindings);
   const selectedNodeRuntimeName = selectedBlock?.instanceId;
   const availability = resolveRuntimeSettingsAvailability({
     session: runtimeContext?.session,
@@ -165,6 +179,18 @@ function RuntimeSettingsCard({
         },
         mode: shouldApplyRuntimeSettingImmediately(name) ? 'immediate' : 'staged',
       });
+      if (
+        selectedBlock &&
+        LOCAL_PLOT_SETTING_NAMES.has(name.trim().toLowerCase()) &&
+        (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null)
+      ) {
+        updateNodeParameterBindings(selectedBlock.instanceId, {
+          [name]: {
+            kind: 'literal',
+            value,
+          },
+        });
+      }
     } catch (error) {
       setSaveError(toRuntimeSettingsErrorMessage(error));
       throw error;

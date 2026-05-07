@@ -45,7 +45,20 @@ export function resolveRuntimeSettingsAvailability(params: {
   };
 }
 
-const LIVE_UPDATABLE_SETTING_NAMES = new Set(['poll_ms', 'update_ms', 'persistence', 'phosphor_intensity', 'phosphor_decay_ms']);
+const LIVE_UPDATABLE_SETTING_NAMES = new Set([
+  'autoscale',
+  'poll_ms',
+  'update_ms',
+  'persistence',
+  'phosphor_intensity',
+  'phosphor_decay_ms',
+  'x_min',
+  'x_max',
+  'y_min',
+  'y_max',
+  'z_min',
+  'z_max',
+]);
 
 export function shouldApplyRuntimeSettingImmediately(name: string): boolean {
   return LIVE_UPDATABLE_SETTING_NAMES.has(name.trim().toLowerCase());

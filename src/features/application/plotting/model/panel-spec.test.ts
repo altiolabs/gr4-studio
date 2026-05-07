@@ -276,9 +276,62 @@ describe('derivePlotPanelSpec', () => {
     expect(spec?.view.yRange).toBeUndefined();
   });
 
-  it('derives fixed axis ranges when autoscale is disabled', () => {
+  it('keeps the scalar series x range fixed to window_size when autoscale is disabled', () => {
     const spec = derivePlotPanelSpec(
       makeSeriesEntry({
+        nodeParameters: {
+          autoscale: 'false',
+          window_size: '64',
+          x_min: '-2',
+          x_max: '2',
+          y_min: '-1.5',
+          y_max: '1.5',
+        },
+      }),
+    );
+
+    expect(spec?.view.xRange).toEqual({
+      auto: false,
+      min: 0,
+      max: 63,
+    });
+    expect(spec?.view.yRange).toEqual({
+      auto: false,
+      min: -1.5,
+      max: 1.5,
+    });
+  });
+
+  it('accepts compact ymin and ymax aliases for scalar series manual y ranges', () => {
+    const spec = derivePlotPanelSpec(
+      makeSeriesEntry({
+        nodeParameters: {
+          autoscale: 'false',
+          ymin: '-1',
+          ymax: '10',
+        },
+      }),
+    );
+
+    expect(spec?.view.yRange).toEqual({
+      auto: false,
+      min: -1,
+      max: 10,
+    });
+  });
+
+  it('keeps manual x ranges available for xy series sinks', () => {
+    const spec = derivePlotPanelSpec(
+      makeSeriesEntry({
+        panel: {
+          id: 'studio-panel:node-2d',
+          nodeId: 'node-2d',
+          kind: 'series2d',
+          title: '2D Sink',
+          visible: true,
+          previewOnCanvas: false,
+        },
+        nodeBlockTypeId: 'gr::studio::Studio2DSeriesSink<float32>',
         nodeParameters: {
           autoscale: 'false',
           x_min: '-2',
@@ -301,7 +354,7 @@ describe('derivePlotPanelSpec', () => {
     });
   });
 
-  it('falls back to auto axis scaling when manual range is invalid', () => {
+  it('falls back to auto y scaling when the manual y range is invalid', () => {
     const spec = derivePlotPanelSpec(
       makeSeriesEntry({
         nodeParameters: {
@@ -314,7 +367,11 @@ describe('derivePlotPanelSpec', () => {
       }),
     );
 
-    expect(spec?.view.xRange).toEqual({ auto: true });
+    expect(spec?.view.xRange).toEqual({
+      auto: false,
+      min: 0,
+      max: 1023,
+    });
     expect(spec?.view.yRange).toEqual({
       auto: true,
       min: undefined,

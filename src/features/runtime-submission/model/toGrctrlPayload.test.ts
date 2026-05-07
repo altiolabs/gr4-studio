@@ -197,6 +197,39 @@ describe('toGrctrlContentSubmission', () => {
     expect(submission.content).toContain('update_ms: 250');
   });
 
+  it('omits legacy scalar StudioSeriesSink x-axis bounds from runtime export', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: { name: 'studio-series-sink' },
+      graph: {
+        nodes: [
+          {
+            id: 'sink_1',
+            blockType: 'gr::studio::StudioSeriesSink<float32>',
+            title: 'StudioSeriesSink<float32>',
+            position: { x: 0, y: 0 },
+            parameters: {
+              name: { kind: 'expression', expr: 'sink_1' },
+              x_min: { kind: 'literal', value: '-2' },
+              x_max: { kind: 'literal', value: '2' },
+              y_min: { kind: 'literal', value: '-1' },
+              y_max: { kind: 'literal', value: '1' },
+            },
+          },
+        ],
+        edges: [],
+      },
+    };
+
+    const submission = toGrctrlContentSubmission(document);
+
+    expect(submission.content).not.toContain('x_min:');
+    expect(submission.content).not.toContain('x_max:');
+    expect(submission.content).toContain('y_min: -1');
+    expect(submission.content).toContain('y_max: 1');
+  });
+
   it('exports payload_format for known Studio stream blocks even without block details hydration', () => {
     const document: GraphDocument = {
       format: 'gr4-studio.graph',
