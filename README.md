@@ -206,6 +206,8 @@ This project is licensed under the GNU General Public License v3.0 or later (GPL
 
 Unless otherwise noted: SPDX-License-Identifier: GPL-3.0-or-later
 
+The `blocks/` directory is licensed separately under the MIT License. See `blocks/LICENSE`.
+
 Copyright (C) Josh Morman, Altio Labs, LLC
 
-See the LICENSE file for the full license text.
+See `LICENSE` for the GPL-3.0-or-later license text and `blocks/LICENSE` for the MIT license text that applies to `blocks/`.

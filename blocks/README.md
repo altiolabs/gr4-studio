@@ -1,5 +1,7 @@
 # Studio-Compatible GR4 Blocks
 
+SPDX-License-Identifier: MIT
+
 This directory contains the first-party Studio-compatible GR4 runtime blocks that ship with `gr4-studio`.
 
 Current families in `blocks/studio`:
@@ -14,6 +16,10 @@ Current transport support for these included blocks is limited to:
 
 - `http_snapshot`
 - `http_poll`
+
+## License
+
+The contents of this `blocks/` directory are licensed under the MIT License. See `LICENSE`.
 
 Binding and payload conventions are documented in:
 

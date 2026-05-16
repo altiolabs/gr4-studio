@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 #include <array>
 #include <cassert>
 #include <complex>

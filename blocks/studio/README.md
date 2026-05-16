@@ -1,5 +1,7 @@
 # Studio Blocks Module
 
+SPDX-License-Identifier: MIT
+
 This folder hosts the Studio-specific GR4 block implementations.
 
 Current constraints:
