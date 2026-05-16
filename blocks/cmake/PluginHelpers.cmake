@@ -1,3 +1,5 @@
+#[[ SPDX-License-Identifier: MIT ]]
+
 include_guard(GLOBAL)
 
 function(gr4_studio_merge_files_into merge_output_file)

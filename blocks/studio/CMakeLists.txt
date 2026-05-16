@@ -1,3 +1,5 @@
+#[[ SPDX-License-Identifier: MIT ]]
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GR4_STUDIO_GNURADIO4 REQUIRED IMPORTED_TARGET gnuradio4)
 find_package(httplib CONFIG QUIET)
