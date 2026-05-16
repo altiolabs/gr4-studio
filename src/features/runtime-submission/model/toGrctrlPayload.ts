@@ -1,5 +1,5 @@
 import type { GraphDocument, GraphDocumentEdge, GraphDocumentNode, GraphParameterValue } from '../../graph-document/model/types';
-import type { BlockDetails } from '../../../lib/api/block-details';
+import type { BlockDetails, BlockParameterMeta } from '../../../lib/api/block-details';
 import type { GrcExport } from './types';
 import { resolveGraphVariables } from '../../variables/model/resolveGraphVariables';
 import type { JsonPrimitive } from '../../variables/model/types';
@@ -34,7 +34,91 @@ function sanitizeScalar(value: JsonPrimitive): string {
   return trimmed;
 }
 
-function renderParameterValue(name: string, rawValue: JsonPrimitive | undefined): string {
+function yamlTagForParameter(parameterMeta: BlockParameterMeta | undefined): string | undefined {
+  const normalized = parameterMeta?.valueType?.trim().toLowerCase() ?? '';
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (
+    normalized === 'float64_vector' ||
+    normalized === 'double_vector' ||
+    normalized === 'vector<double>' ||
+    normalized === 'std::vector<double>'
+  ) {
+    return '!!float64';
+  }
+
+  if (
+    normalized === 'float32_vector' ||
+    normalized === 'vector<float>' ||
+    normalized === 'std::vector<float>'
+  ) {
+    return '!!float32';
+  }
+
+  if (
+    normalized === 'complex_float64_vector' ||
+    normalized === 'complex64_vector' ||
+    normalized === 'vector<complex<float64>>' ||
+    normalized === 'std::vector<std::complex<double>>'
+  ) {
+    return '!!complex64';
+  }
+
+  if (
+    normalized === 'complex_float32_vector' ||
+    normalized === 'complex32_vector' ||
+    normalized === 'vector<complex<float32>>' ||
+    normalized === 'std::vector<std::complex<float>>'
+  ) {
+    return '!!complex32';
+  }
+
+  if (normalized === 'int_vector') {
+    return '!!int64';
+  }
+
+  if (normalized === 'bool_vector') {
+    return '!!bool';
+  }
+
+  if (normalized === 'string_vector') {
+    return '!!str';
+  }
+
+  if (normalized === 'float_vector') {
+    // Older control-plane versions collapse float32 and float64 vectors to
+    // "float_vector". Keep this compatibility path narrow so unrelated
+    // std::vector<float> settings, such as FIR taps, are not retagged as
+    // float64.
+    const knownDoubleVectorParameters = new Set([
+      'frequency',
+      'rx_bandwidths',
+      'rx_gains',
+      'tx_bandwidths',
+      'tx_gains',
+      'dc_offset',
+      'iq_balance',
+    ]);
+    return parameterMeta && knownDoubleVectorParameters.has(parameterMeta.name) ? '!!float64' : undefined;
+  }
+
+  return undefined;
+}
+
+function shouldApplySequenceTag(trimmed: string): boolean {
+  if (!trimmed || trimmed.startsWith('!!')) {
+    return false;
+  }
+  return trimmed.startsWith('[') || trimmed.startsWith('- ');
+}
+
+function renderParameterValue(
+  name: string,
+  rawValue: JsonPrimitive | undefined,
+  parameterMeta?: BlockParameterMeta,
+): string {
   const trimmed = typeof rawValue === 'string' ? rawValue.trim() : String(rawValue ?? '').trim();
   if (name === 'ui_constraints') {
     if (!trimmed) {
@@ -51,6 +135,11 @@ function renderParameterValue(name: string, rawValue: JsonPrimitive | undefined)
         return inner;
       }
     }
+  }
+
+  const yamlTag = yamlTagForParameter(parameterMeta);
+  if (yamlTag && shouldApplySequenceTag(trimmed)) {
+    return `${yamlTag} ${trimmed}`;
   }
 
   return sanitizeScalar(trimmed);
@@ -233,7 +322,8 @@ function serializeGraphDocumentToInlineGrc(
           if (shouldOmitParameterForBlock(node.blockType, name, parameterValue)) {
             return;
           }
-          lines.push(...indent([`    ${name}: ${renderParameterValue(name, parameterValue)}`]));
+          const parameterMeta = blockDetails?.parameters.find((candidate) => candidate.name === name);
+          lines.push(...indent([`    ${name}: ${renderParameterValue(name, parameterValue, parameterMeta)}`]));
         });
       }
     });

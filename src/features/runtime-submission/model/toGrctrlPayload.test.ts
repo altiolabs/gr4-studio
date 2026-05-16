@@ -93,6 +93,45 @@ function makeStudioSeriesSinkDetails(): BlockDetails {
   };
 }
 
+function makeSoapySourceDetails(): BlockDetails {
+  return {
+    blockTypeId: 'gr::blocks::sdr::SoapySource<complex<float32>>',
+    displayName: 'SoapySource<complex<float32>>',
+    description: 'SoapySDR source',
+    parameters: [
+      {
+        name: 'frequency',
+        label: 'frequency',
+        mutable: true,
+        readOnly: false,
+        valueType: 'float64_vector',
+        valueKind: 'scalar',
+        isCollectionLike: true,
+      },
+      {
+        name: 'rx_bandwidths',
+        label: 'rx_bandwidths',
+        mutable: true,
+        readOnly: false,
+        valueType: 'float64_vector',
+        valueKind: 'scalar',
+        isCollectionLike: true,
+      },
+      {
+        name: 'float_taps',
+        label: 'float_taps',
+        mutable: true,
+        readOnly: false,
+        valueType: 'float32_vector',
+        valueKind: 'scalar',
+        isCollectionLike: true,
+      },
+    ],
+    inputPorts: [],
+    outputPorts: [],
+  };
+}
+
 describe('toGrctrlContentSubmission', () => {
   it('emits runtime importer block shape with block type in id and instance name in parameters.name', () => {
     const document: GraphDocument = {
@@ -165,6 +204,67 @@ describe('toGrctrlContentSubmission', () => {
 
     expect(submission.content).not.toContain('taps:');
     expect(submission.content).toContain('gain: 1');
+  });
+
+  it('adds YAML sequence type tags for typed vector parameters from block metadata', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: { name: 'soapy-source' },
+      graph: {
+        nodes: [
+          {
+            id: 'soapy_1',
+            blockType: 'gr::blocks::sdr::SoapySource<complex<float32>>',
+            title: 'SoapySource<complex<float32>>',
+            position: { x: 0, y: 0 },
+            parameters: {
+              frequency: { kind: 'literal', value: '[991000000.0]' },
+              rx_bandwidths: { kind: 'literal', value: '[200000.0]' },
+              float_taps: { kind: 'literal', value: '[1.0, 2.0]' },
+            },
+          },
+        ],
+        edges: [],
+      },
+    };
+
+    const submission = toGrctrlContentSubmission(document, {
+      blockDetailsByType: new Map([['gr::blocks::sdr::SoapySource<complex<float32>>', makeSoapySourceDetails()]]),
+    });
+
+    expect(submission.content).toContain('frequency: !!float64 [991000000.0]');
+    expect(submission.content).toContain('rx_bandwidths: !!float64 [200000.0]');
+    expect(submission.content).toContain('float_taps: !!float32 [1.0, 2.0]');
+  });
+
+  it('does not duplicate an explicit YAML type tag on vector parameters', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: { name: 'soapy-source' },
+      graph: {
+        nodes: [
+          {
+            id: 'soapy_1',
+            blockType: 'gr::blocks::sdr::SoapySource<complex<float32>>',
+            title: 'SoapySource<complex<float32>>',
+            position: { x: 0, y: 0 },
+            parameters: {
+              frequency: { kind: 'literal', value: '!!float64 [991000000.0]' },
+            },
+          },
+        ],
+        edges: [],
+      },
+    };
+
+    const submission = toGrctrlContentSubmission(document, {
+      blockDetailsByType: new Map([['gr::blocks::sdr::SoapySource<complex<float32>>', makeSoapySourceDetails()]]),
+    });
+
+    expect(submission.content).toContain('frequency: !!float64 [991000000.0]');
+    expect(submission.content).not.toContain('frequency: !!float64 !!float64');
   });
 
   it('fills missing parameters from block details defaults when available', () => {
