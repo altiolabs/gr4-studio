@@ -970,13 +970,26 @@ export function StudioPage() {
     performCloseTab(targetTabId);
   };
 
-  const runActiveTab = () => {
-    if (!activeTabId) {
+  const runActiveTab = async () => {
+    if (!activeTabId || !activeTab) {
       return;
     }
 
-    const document = graphDocumentFromEditor(currentSnapshot);
-    void runTab(activeTabId, document, { blockDetailsByType });
+    const persistedHash = activeTab.document.lastPersistedContentHash;
+    const nextDirty = persistedHash ? serializedSnapshot.contentHash !== persistedHash : activeTab.document.isDirty;
+    updateActiveSnapshot(currentSnapshot, { dirty: nextDirty });
+
+    const shouldSaveBeforeRun = nextDirty || activeTab.document.isUntitled || !activeTab.document.hasWritableBacking;
+    if (shouldSaveBeforeRun) {
+      const saveResult = await saveTab(activeTabId, 'save');
+      if (saveResult.kind !== 'success') {
+        return;
+      }
+    }
+
+    const latestTab = useGraphTabsStore.getState().tabs.find((tab) => tab.id === activeTabId);
+    const document = graphDocumentFromEditor(latestTab?.snapshot ?? currentSnapshot);
+    await runTab(activeTabId, document, { blockDetailsByType });
   };
 
   const applyLayoutEditorSplitDrop = (
@@ -1258,8 +1271,8 @@ export function StudioPage() {
                   <StatusPill status={runtimeView.executionState} />
                   <button
                     type="button"
-                    onClick={runActiveTab}
-                    disabled={Boolean(activeRuntimeContext?.busy) || runtimeView.executionState === 'running'}
+                    onClick={() => void runActiveTab()}
+                    disabled={busy || Boolean(activeRuntimeContext?.busy) || runtimeView.executionState === 'running'}
                     title={runButtonTitle(runtimeView.runIntent)}
                     className="h-6 w-6 rounded border border-emerald-700/70 bg-emerald-900/35 text-emerald-200 hover:bg-emerald-800/45 disabled:opacity-50"
                   >

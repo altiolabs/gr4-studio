@@ -175,6 +175,7 @@ public:
         std::size_t fft_size,
         std::size_t num_averages,
         float sample_rate,
+        float center_freq,
         std::uint32_t update_ms,
         std::string window,
         bool output_in_db,
@@ -190,6 +191,7 @@ public:
         _fftSize = std::max<std::size_t>(1UZ, fft_size);
         _numAverages = std::max<std::size_t>(1UZ, num_averages);
         _sampleRate = sample_rate > 0.0F ? sample_rate : 1.0F;
+        _centerFreq = center_freq;
         _updateMs = update_ms;
         _windowName = std::move(window);
         _outputInDb = output_in_db;
@@ -302,6 +304,8 @@ public:
         std::vector<value_type> spectrum;
         std::size_t fftSize = 0UZ;
         std::size_t numAverages = 0UZ;
+        value_type sampleRate = static_cast<value_type>(1.0F);
+        value_type centerFreq = static_cast<value_type>(0.0F);
         std::uint32_t updateMs = 0U;
         std::string window;
         bool outputInDb = false;
@@ -320,6 +324,8 @@ public:
             spectrum = _displaySpectrumLocked();
             fftSize = _fftSize;
             numAverages = _numAverages;
+            sampleRate = _sampleRate;
+            centerFreq = _centerFreq;
             updateMs = _updateMs;
             window = _windowName;
             outputInDb = _outputInDb;
@@ -345,6 +351,8 @@ public:
             os << "\"signal_unit\":\"" << (outputInDb ? "dB" : "power") << "\",";
             os << "\"fft_size\":" << fftSize << ",";
             os << "\"num_averages\":" << numAverages << ",";
+            os << "\"sample_rate\":" << sampleRate << ",";
+            os << "\"center_freq\":" << centerFreq << ",";
             os << "\"update_ms\":" << updateMs << ",";
             os << "\"window\":\"" << escapeJson(window) << "\",";
             os << "\"output_in_db\":" << (outputInDb ? "true" : "false") << ",";
@@ -373,6 +381,8 @@ public:
         os << "\"signal_unit\":\"" << (outputInDb ? "dB" : "power") << "\",";
         os << "\"fft_size\":" << fftSize << ",";
         os << "\"num_averages\":" << numAverages << ",";
+        os << "\"sample_rate\":" << sampleRate << ",";
+        os << "\"center_freq\":" << centerFreq << ",";
         os << "\"update_ms\":" << updateMs << ",";
         os << "\"window\":\"" << escapeJson(window) << "\",";
         os << "\"output_in_db\":" << (outputInDb ? "true" : "false") << ",";
@@ -461,6 +471,12 @@ private:
                 return next;
             });
         }
+
+        if (_centerFreq != static_cast<value_type>(0.0F)) {
+            std::ranges::transform(_frequencies, _frequencies.begin(), [this](const value_type frequency) {
+                return frequency + _centerFreq;
+            });
+        }
     }
 
     [[nodiscard]] std::vector<value_type> _displaySpectrumLocked() const {
@@ -485,6 +501,7 @@ private:
     std::size_t _fftSize = 1024UZ;
     std::size_t _numAverages = 8UZ;
     float _sampleRate = 1.0F;
+    value_type _centerFreq = static_cast<value_type>(0.0F);
     std::uint32_t _updateMs = 250U;
     std::string _windowName = std::string(magic_enum::enum_name(gr::algorithm::window::Type::BlackmanHarris));
     bool _outputInDb = true;
@@ -987,6 +1004,7 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
     Annotated<gr::Size_t, "num_averages", Doc<"Number of FFT frames averaged into the displayed spectrum">, Visible> num_averages = 8UZ;
     Annotated<std::string, "window", Doc<gr::algorithm::window::TypeNames>, Visible> window = std::string(magic_enum::enum_name(gr::algorithm::window::Type::BlackmanHarris));
     Annotated<float, "sample_rate", Doc<"Input sample rate in Hz">, Visible> sample_rate = 1.0F;
+    Annotated<float, "center_freq", Doc<"Optional RF center frequency in Hz added to the displayed frequency axis">, Visible> center_freq = 0.0F;
     Annotated<bool, "output_in_db", Doc<"Render the averaged power spectrum in dB">, Visible> output_in_db = true;
     Annotated<bool, "persistence", Doc<"Enable phosphor persistence rendering in Studio Application">, Visible> persistence = false;
     Annotated<float, "phosphor_intensity", Doc<"Phosphor intensity multiplier when persistence is enabled">, Visible> phosphor_intensity = 1.1F;
@@ -1012,6 +1030,7 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
         num_averages,
         window,
         sample_rate,
+        center_freq,
         output_in_db,
         persistence,
         phosphor_intensity,
@@ -1034,6 +1053,7 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
             static_cast<std::size_t>(fft_size),
             static_cast<std::size_t>(num_averages),
             sample_rate,
+            center_freq,
             update_ms,
             window.value,
             output_in_db,
@@ -1060,6 +1080,7 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
             new_settings.contains("num_averages") ||
             new_settings.contains("window") ||
             new_settings.contains("sample_rate") ||
+            new_settings.contains("center_freq") ||
             new_settings.contains("output_in_db") ||
             new_settings.contains("persistence") ||
             new_settings.contains("phosphor_intensity") ||
@@ -1070,11 +1091,12 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
             new_settings.contains("y_min") ||
             new_settings.contains("y_max")) {
             _window.configure(
-            static_cast<std::size_t>(fft_size),
-            static_cast<std::size_t>(num_averages),
-            sample_rate,
-            update_ms,
-            window.value,
+                static_cast<std::size_t>(fft_size),
+                static_cast<std::size_t>(num_averages),
+                sample_rate,
+                center_freq,
+                update_ms,
+                window.value,
                 output_in_db,
                 persistence,
                 phosphor_intensity,

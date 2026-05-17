@@ -89,12 +89,15 @@ Expected payload fields:
 - `signal_unit` optional, string
 - `axis_name` optional, string
 - `axis_unit` optional, string
+- `sample_rate` optional, positive number in Hz when emitted by spectrum-producing sinks
+- `center_freq` optional, number in Hz added to relative FFT bin frequencies when emitted by `StudioPowerSpectrumSink`
 
 Semantics:
 
 - DataSet semantics remain sink/runtime-side.
 - Payload normalizes to one XY trace for plotting.
 - `StudioPowerSpectrumSink` uses this contract to publish FFT frequency bins against averaged power values.
+- `StudioPowerSpectrumSink` uses `sample_rate` to space FFT bins and `center_freq` to offset those bins onto an absolute RF frequency axis. With `center_freq=0`, the x axis remains relative baseband frequency.
 - `StudioPowerSpectrumSink` with `persistence=true` uses the same contract to publish FFT frequency bins for the live phosphor spectrum renderer. Its phosphor look is controlled by `phosphor_intensity` and `phosphor_decay_ms`.
 
 Frontend routing:
