@@ -8,6 +8,7 @@ type EditorSnapshot = {
   metadata: {
     name: string;
     description?: string;
+    schedulerId?: string;
     studioPanels?: StudioPanelSpec[];
     studioVariables?: StudioVariable[];
     studioLayout?: StudioLayoutSpec;
@@ -51,6 +52,7 @@ export function graphDocumentFromEditor(snapshot: EditorSnapshot): GraphDocument
     metadata: {
       name: snapshot.metadata.name,
       description: snapshot.metadata.description,
+      schedulerId: snapshot.metadata.schedulerId,
       application: snapshot.metadata.application,
       studio: studioPanels || studioVariables || studioLayout || studioPlotPalettes
         ? {

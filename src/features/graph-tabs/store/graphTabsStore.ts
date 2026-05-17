@@ -9,6 +9,7 @@ export type EditorSnapshot = {
   metadata: {
     name: string;
     description?: string;
+    schedulerId?: string;
     studioPanels?: StudioPanelSpec[];
     studioVariables?: StudioVariable[];
     studioLayout?: StudioLayoutSpec;

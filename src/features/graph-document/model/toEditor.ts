@@ -6,6 +6,7 @@ type EditorGraphReplacement = {
     metadata: {
       name: string;
       description?: string;
+      schedulerId?: string;
       studioPanels?: StudioPanelSpec[];
       studioVariables?: StudioVariable[];
       studioLayout?: StudioLayoutSpec;
@@ -21,6 +22,7 @@ export function editorGraphFromDocument(document: GraphDocument): EditorGraphRep
     metadata: {
       name: document.metadata.name,
       description: document.metadata.description,
+      schedulerId: document.metadata.schedulerId,
       studioPanels: document.metadata.studio?.panels,
       studioVariables: document.metadata.studio?.variables,
       studioLayout: document.metadata.studio?.layout,

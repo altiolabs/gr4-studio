@@ -55,7 +55,7 @@ type RuntimeSessionState = {
   activeTabId: string | null;
   contextsByTabId: Record<string, TabExecutionContext>;
   sessions: SessionRecord[];
-  getTabRuntimeView: (tabId: string, currentSubmissionContent?: string | null) => TabRuntimeView;
+  getTabRuntimeView: (tabId: string, currentSubmissionContent?: string | null, schedulerId?: string | null) => TabRuntimeView;
   ensureTabContext: (tabId: string) => void;
   removeTabContext: (tabId: string) => void;
   setActiveTab: (tabId: string | null) => void;
@@ -106,6 +106,10 @@ function hashContent(input: string): string {
     hash = Math.imul(hash, 16777619);
   }
   return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+function hashSubmissionSignature(content: string, schedulerId?: string | null): string {
+  return hashContent(`${content}\n__scheduler__:${schedulerId ?? ''}`);
 }
 
 function toErrorMessage(error: unknown): string {
@@ -181,28 +185,34 @@ function deriveOperationState(context: TabExecutionContext): OperationState {
   return 'running-graph';
 }
 
-function deriveGraphDriftState(context: TabExecutionContext, currentSubmissionContent?: string | null): GraphDriftState {
+function deriveGraphDriftState(
+  context: TabExecutionContext,
+  currentSubmissionContent?: string | null,
+  schedulerId?: string | null,
+): GraphDriftState {
   if (!context.sessionId || !context.lastSubmittedHash || !currentSubmissionContent) {
     return 'in-sync';
   }
 
-  return context.lastSubmittedHash === hashContent(currentSubmissionContent) ? 'in-sync' : 'out-of-sync';
+  return context.lastSubmittedHash === hashSubmissionSignature(currentSubmissionContent, schedulerId) ? 'in-sync' : 'out-of-sync';
 }
 
 function deriveGraphSubmissionState(
   context: TabExecutionContext,
   currentSubmissionContent?: string | null,
+  schedulerId?: string | null,
 ): GraphSubmissionState {
   if (!context.sessionId || !context.lastSubmittedHash || !currentSubmissionContent) {
     return 'none';
   }
 
-  return context.lastSubmittedHash === hashContent(currentSubmissionContent) ? 'current' : 'stale';
+  return context.lastSubmittedHash === hashSubmissionSignature(currentSubmissionContent, schedulerId) ? 'current' : 'stale';
 }
 
 function deriveRunIntent(
   context: TabExecutionContext,
   currentSubmissionContent?: string | null,
+  schedulerId?: string | null,
   executionState?: ExecutionState,
 ): RunIntent {
   if (executionState === 'running') {
@@ -213,7 +223,7 @@ function deriveRunIntent(
     return 'create-session';
   }
 
-  const drift = deriveGraphDriftState(context, currentSubmissionContent);
+  const drift = deriveGraphDriftState(context, currentSubmissionContent, schedulerId);
   if (drift === 'out-of-sync') {
     return 'replace-session-from-edits';
   }
@@ -425,16 +435,16 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
     contextsByTabId: {},
     sessions: [],
 
-    getTabRuntimeView: (tabId, currentSubmissionContent) => {
+    getTabRuntimeView: (tabId, currentSubmissionContent, schedulerId) => {
       const context = get().contextsByTabId[tabId] ?? createDefaultContext();
       const executionState = deriveExecutionState(context);
       return {
         executionState,
         operationState: deriveOperationState(context),
-        graphDriftState: deriveGraphDriftState(context, currentSubmissionContent),
-        graphSubmissionState: deriveGraphSubmissionState(context, currentSubmissionContent),
+        graphDriftState: deriveGraphDriftState(context, currentSubmissionContent, schedulerId),
+        graphSubmissionState: deriveGraphSubmissionState(context, currentSubmissionContent, schedulerId),
         graphSubmissionUpdatedAt: context.graphSubmissionUpdatedAt,
-        runIntent: deriveRunIntent(context, currentSubmissionContent, executionState),
+        runIntent: deriveRunIntent(context, currentSubmissionContent, schedulerId, executionState),
       };
     },
 
@@ -471,9 +481,11 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
 
       try {
         const submission = buildCurrentSessionGraphSubmission(document, options);
+        const schedulerId = document.metadata.schedulerId;
+        const submissionHash = hashSubmissionSignature(submission.content, schedulerId);
         const context = get().contextsByTabId[tabId] ?? createDefaultContext();
 
-        const hasSubmissionDrift = context.lastSubmittedHash !== submission.contentHash;
+        const hasSubmissionDrift = context.lastSubmittedHash !== submissionHash;
         const shouldReplaceErroredSession = Boolean(context.sessionId) && context.session?.state === 'error';
         const needsNewSession = !context.sessionId || hasSubmissionDrift || shouldReplaceErroredSession;
         const isReplacementRun = Boolean(context.sessionId) && (hasSubmissionDrift || shouldReplaceErroredSession);
@@ -486,6 +498,7 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
           const createdSession = await createSession({
             name: submission.graphName || 'demo',
             grc: submission.content,
+            scheduler_id: schedulerId,
           });
           activeSession = createdSession;
           activeSessionId = createdSession.id;
@@ -496,7 +509,7 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
                 ...current,
                 sessionId: createdSession.id,
                 session: createdSession,
-                lastSubmittedHash: submission.contentHash,
+                lastSubmittedHash: submissionHash,
                 graphSubmissionUpdatedAt: nowIsoString(),
                 sessionRefreshedAt: nowIsoString(),
                 lastUpdatedAt: nowIsoString(),
@@ -567,7 +580,7 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
               ...current,
               sessionId: converged.id,
               session: converged,
-              lastSubmittedHash: submission.contentHash,
+              lastSubmittedHash: submissionHash,
               graphSubmissionUpdatedAt: nowIsoString(),
               sessionRefreshedAt: nowIsoString(),
               lastUpdatedAt: nowIsoString(),

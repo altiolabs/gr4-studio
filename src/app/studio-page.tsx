@@ -130,6 +130,7 @@ function buildNewUntitledSnapshot(): EditorSnapshot {
     metadata: {
       name: STUDIO_UNTITLED_NAME,
       description: undefined,
+      schedulerId: undefined,
       studioPanels: [],
       studioVariables: [],
       studioLayout: undefined,
@@ -166,6 +167,7 @@ export function StudioPage() {
 
   const documentName = useEditorStore((state) => state.documentName);
   const documentDescription = useEditorStore((state) => state.documentDescription);
+  const schedulerId = useEditorStore((state) => state.schedulerId);
   const studioPanels = useEditorStore((state) => state.studioPanels);
   const studioVariables = useEditorStore((state) => state.studioVariables);
   const studioLayout = useEditorStore((state) => state.studioLayout);
@@ -225,6 +227,7 @@ export function StudioPage() {
       metadata: {
         name: documentName,
         description: documentDescription,
+        schedulerId,
         studioPanels,
         studioVariables,
         studioLayout,
@@ -234,7 +237,7 @@ export function StudioPage() {
       nodes,
       edges,
     }),
-    [application, documentDescription, documentName, edges, nodes, studioLayout, studioPanels, studioPlotPalettes, studioVariables],
+    [application, documentDescription, documentName, edges, nodes, schedulerId, studioLayout, studioPanels, studioPlotPalettes, studioVariables],
   );
   const serializedSnapshot = useMemo(() => serializeEditorSnapshot(currentSnapshot), [currentSnapshot]);
   const activeTabSerializedSnapshot = useMemo(
@@ -374,7 +377,7 @@ export function StudioPage() {
     [studioPlotPalettes],
   );
   const activeCenterView: CenterViewMode = activeTabId ? centerViewByTabId[activeTabId] ?? 'graph' : 'graph';
-  const runtimeView = activeTabId ? getTabRuntimeView(activeTabId, currentSubmissionContent) : null;
+  const runtimeView = activeTabId ? getTabRuntimeView(activeTabId, currentSubmissionContent, schedulerId) : null;
   const activeRuntimeContext = activeTabId ? runtimeContextsByTabId[activeTabId] : null;
   const controlWidgetRuntime =
     activeRuntimeContext && runtimeView

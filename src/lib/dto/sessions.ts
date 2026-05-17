@@ -19,6 +19,7 @@ export const sessionDtoSchema = z
     created_at: z.string(),
     updated_at: z.string(),
     last_error: z.string().nullable(),
+    scheduler_id: z.string().optional(),
     streams: z.array(sessionStreamDtoSchema).optional(),
   })
   .passthrough();

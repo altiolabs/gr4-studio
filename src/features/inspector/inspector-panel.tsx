@@ -8,6 +8,7 @@ import { resolveRenderedPorts } from '../ports/model/resolveRenderedPorts';
 import type { SchemaPort } from '../ports/model/types';
 import { useBlockDetailsQuery } from './hooks/use-block-details-query';
 import { useRuntimeBlockSettings } from './hooks/use-runtime-block-settings';
+import { useSchedulersQuery } from './hooks/use-schedulers-query';
 import {
   resolveRuntimeSettingsAvailability,
   shouldApplyRuntimeSettingImmediately,
@@ -699,6 +700,8 @@ export function InspectorPanel() {
 
   const documentName = useEditorStore((state) => state.documentName);
   const documentDescription = useEditorStore((state) => state.documentDescription);
+  const schedulerId = useEditorStore((state) => state.schedulerId);
+  const setDocumentSchedulerId = useEditorStore((state) => state.setDocumentSchedulerId);
   const studioPanels = useEditorStore((state) => state.studioPanels);
   const studioVariables = useEditorStore((state) => state.studioVariables);
   const studioLayout = useEditorStore((state) => state.studioLayout);
@@ -725,12 +728,18 @@ export function InspectorPanel() {
     });
     return map;
   }, [blockDetailQueries, uniqueBlockTypes]);
+  const schedulersQuery = useSchedulersQuery(activeTab === 'graph' || activeTab === 'session');
+  const schedulerOptions = useMemo(
+    () => (schedulersQuery.data ?? []).map((scheduler) => scheduler.id),
+    [schedulersQuery.data],
+  );
 
   const currentSnapshot: EditorSnapshot = useMemo(
     () => ({
       metadata: {
         name: documentName,
         description: documentDescription,
+        schedulerId,
         studioPanels,
         studioVariables,
         studioLayout,
@@ -746,6 +755,7 @@ export function InspectorPanel() {
       documentName,
       edges,
       nodes,
+      schedulerId,
       studioLayout,
       studioPanels,
       studioPlotPalettes,
@@ -758,7 +768,7 @@ export function InspectorPanel() {
     [blockDetailsByType, currentSnapshot],
   );
 
-  const runtimeView = activeGraphTabId ? getTabRuntimeView(activeGraphTabId, currentSubmissionContent) : null;
+  const runtimeView = activeGraphTabId ? getTabRuntimeView(activeGraphTabId, currentSubmissionContent, schedulerId) : null;
   const canExportCurrentGraph = canDownloadCurrentGraph(activeGraphTab);
 
   const handleDownloadGrc = () => {
@@ -833,6 +843,23 @@ export function InspectorPanel() {
                   <SummaryValue>{documentDescription || 'N/A'}</SummaryValue>
                 </div>
                 <div>
+                  <SummaryLabel>Scheduler</SummaryLabel>
+                  <select
+                    value={schedulerId ?? ''}
+                    onChange={(event) => setDocumentSchedulerId(event.target.value || undefined)}
+                    disabled={schedulersQuery.isPending || schedulersQuery.isError}
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <option value="">Default scheduler</option>
+                    {schedulerOptions.map((id) => (
+                      <option key={id} value={id}>
+                        {id}
+                      </option>
+                    ))}
+                  </select>
+                  {schedulersQuery.isError && <SummaryValue>Failed to load schedulers.</SummaryValue>}
+                </div>
+                <div>
                   <SummaryLabel>Blocks</SummaryLabel>
                   <SummaryValue>{String(nodes.length)}</SummaryValue>
                 </div>
@@ -885,6 +912,10 @@ export function InspectorPanel() {
                 <div>
                   <SummaryLabel>Session Name</SummaryLabel>
                   <SummaryValue>{runtimeContext?.session?.name ?? 'N/A'}</SummaryValue>
+                </div>
+                <div>
+                  <SummaryLabel>Scheduler</SummaryLabel>
+                  <SummaryValue>{runtimeContext?.session?.schedulerId ?? 'default'}</SummaryValue>
                 </div>
                 <div>
                   <SummaryLabel>Session Created</SummaryLabel>

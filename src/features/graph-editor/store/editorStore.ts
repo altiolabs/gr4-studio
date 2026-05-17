@@ -35,6 +35,7 @@ type EditorState = {
   edges: EditorGraphEdge[];
   documentName: string;
   documentDescription?: string;
+  schedulerId?: string;
   studioPanels?: StudioPanelSpec[];
   studioVariables?: StudioVariable[];
   studioLayout?: StudioLayoutSpec;
@@ -51,6 +52,7 @@ type EditorState = {
     metadata: {
       name: string;
       description?: string;
+      schedulerId?: string;
       studioPanels?: StudioPanelSpec[];
       studioVariables?: StudioVariable[];
       studioLayout?: StudioLayoutSpec;
@@ -61,6 +63,7 @@ type EditorState = {
   setDocumentMetadata: (metadata: {
     name: string;
     description?: string;
+    schedulerId?: string;
     studioPanels?: StudioPanelSpec[];
     studioVariables?: StudioVariable[];
     studioLayout?: StudioLayoutSpec;
@@ -68,6 +71,7 @@ type EditorState = {
     application?: ApplicationSpec;
   }) => void;
   setStudioPanels: (panels: StudioPanelSpec[]) => void;
+  setDocumentSchedulerId: (schedulerId?: string) => void;
   setStudioVariables: (variables: StudioVariable[]) => void;
   setStudioPlotPalettes: (palettes: StudioPlotPaletteSpec[]) => void;
   setStudioLayout: (layout: StudioLayoutSpec) => void;
@@ -78,6 +82,7 @@ type EditorState = {
     metadata: {
       name: string;
       description?: string;
+      schedulerId?: string;
       studioPanels?: StudioPanelSpec[];
       studioVariables?: StudioVariable[];
       studioLayout?: StudioLayoutSpec;
@@ -112,6 +117,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   edges: [],
   documentName: 'Untitled Graph',
   documentDescription: undefined,
+  schedulerId: undefined,
   studioPanels: undefined,
   studioVariables: undefined,
   studioLayout: undefined,
@@ -132,6 +138,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       metadata: {
         name: state.documentName,
         description: state.documentDescription,
+        schedulerId: state.schedulerId,
         studioPanels: state.studioPanels,
         studioVariables: state.studioVariables,
         studioLayout: state.studioLayout,
@@ -140,10 +147,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       },
     };
   },
-  setDocumentMetadata: ({ name, description, studioPanels, studioVariables, studioLayout, studioPlotPalettes, application }) => {
+  setDocumentMetadata: ({ name, description, schedulerId, studioPanels, studioVariables, studioLayout, studioPlotPalettes, application }) => {
     set((state) => ({
       documentName: name,
       documentDescription: description,
+      schedulerId: schedulerId ?? state.schedulerId,
       studioPanels: studioPanels ?? state.studioPanels,
       studioVariables: studioVariables ?? state.studioVariables,
       studioLayout: studioLayout ?? state.studioLayout,
@@ -154,6 +162,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setStudioPanels: (panels) => {
     set({
       studioPanels: panels,
+    });
+  },
+  setDocumentSchedulerId: (schedulerId) => {
+    set({
+      schedulerId,
     });
   },
   setStudioVariables: (variables) => {
@@ -180,6 +193,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       studioLayout: undefined,
       studioPlotPalettes: undefined,
       application: undefined,
+      schedulerId: undefined,
       selectedNodeId: null,
       nextNodeSequence: 1,
     });
@@ -200,6 +214,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       edges,
       documentName: metadata.name,
       documentDescription: metadata.description,
+      schedulerId: metadata.schedulerId,
       studioPanels: metadata.studioPanels,
       studioVariables: metadata.studioVariables,
       studioLayout: metadata.studioLayout,

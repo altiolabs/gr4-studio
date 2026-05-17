@@ -18,6 +18,7 @@ export type SessionRecord = {
   createdAt: string;
   updatedAt: string;
   lastError: string | null;
+  schedulerId?: string;
   streams?: SessionStreamRecord[];
 };
 
@@ -33,6 +34,7 @@ export type SessionStreamRecord = {
 export type CreateSessionInput = {
   name: string;
   grc: string;
+  scheduler_id?: string;
 };
 
 function parseOrThrow<T>(schema: z.ZodSchema<T>, payload: unknown, context: string): T {
@@ -61,6 +63,7 @@ function mapSession(dto: SessionDto): SessionRecord {
     createdAt: dto.created_at,
     updatedAt: dto.updated_at,
     lastError: dto.last_error ?? null,
+    schedulerId: dto.scheduler_id,
     streams: dto.streams?.map(mapSessionStream),
   };
 }

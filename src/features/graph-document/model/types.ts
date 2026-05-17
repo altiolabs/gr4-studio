@@ -37,6 +37,7 @@ export type GraphDocumentEdge = {
 export type GraphDocumentMetadata = {
   name: string;
   description?: string;
+  schedulerId?: string;
   studio?: StudioWorkspaceMetadata;
   application?: ApplicationSpec;
 };
