@@ -34,6 +34,37 @@ function sanitizeScalar(value: JsonPrimitive): string {
   return trimmed;
 }
 
+const NUMERIC_SCALAR_PATTERN = /^-?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:[eE][+-]?\d+)?$/;
+
+function shouldRenderAsFloatScalar(parameterMeta: BlockParameterMeta | undefined): boolean {
+  const normalized = parameterMeta?.valueType?.trim().toLowerCase() ?? '';
+  if (!normalized || normalized.includes('vector') || normalized.includes('tensor')) {
+    return false;
+  }
+
+  return normalized === 'float' || normalized === 'double' || normalized === 'float32' || normalized === 'float64';
+}
+
+function renderFloatScalar(rawValue: JsonPrimitive | undefined): string | undefined {
+  if (typeof rawValue === 'number') {
+    if (!Number.isFinite(rawValue)) {
+      return undefined;
+    }
+    return Number.isInteger(rawValue) ? `${rawValue}.0` : String(rawValue);
+  }
+
+  if (typeof rawValue !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = rawValue.trim();
+  if (!NUMERIC_SCALAR_PATTERN.test(trimmed)) {
+    return undefined;
+  }
+
+  return /[.eE]/.test(trimmed) ? trimmed : `${trimmed}.0`;
+}
+
 function yamlTagForParameter(parameterMeta: BlockParameterMeta | undefined): string | undefined {
   const normalized = parameterMeta?.valueType?.trim().toLowerCase() ?? '';
   if (!normalized) {
@@ -140,6 +171,10 @@ function renderParameterValue(
   const yamlTag = yamlTagForParameter(parameterMeta);
   if (yamlTag && shouldApplySequenceTag(trimmed)) {
     return `${yamlTag} ${trimmed}`;
+  }
+
+  if (shouldRenderAsFloatScalar(parameterMeta)) {
+    return renderFloatScalar(rawValue) ?? sanitizeScalar(trimmed);
   }
 
   return sanitizeScalar(trimmed);

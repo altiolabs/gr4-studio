@@ -132,6 +132,41 @@ function makeSoapySourceDetails(): BlockDetails {
   };
 }
 
+function makeFloatScalarDetails(): BlockDetails {
+  return {
+    blockTypeId: 'gr::testing::FloatBlock',
+    displayName: 'FloatBlock',
+    parameters: [
+      {
+        name: 'sample_rate',
+        label: 'sample_rate',
+        mutable: true,
+        readOnly: false,
+        valueType: 'float',
+        valueKind: 'scalar',
+      },
+      {
+        name: 'gain',
+        label: 'gain',
+        mutable: true,
+        readOnly: false,
+        valueType: 'float32',
+        valueKind: 'scalar',
+      },
+      {
+        name: 'count',
+        label: 'count',
+        mutable: true,
+        readOnly: false,
+        valueType: 'int',
+        valueKind: 'scalar',
+      },
+    ],
+    inputPorts: [],
+    outputPorts: [],
+  };
+}
+
 describe('toGrctrlContentSubmission', () => {
   it('emits runtime importer block shape with block type in id and instance name in parameters.name', () => {
     const document: GraphDocument = {
@@ -204,6 +239,55 @@ describe('toGrctrlContentSubmission', () => {
 
     expect(submission.content).not.toContain('taps:');
     expect(submission.content).toContain('gain: 1');
+  });
+
+  it('keeps integer-looking variable results typed as floats for float scalar parameters', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: {
+        name: 'float-scalars',
+        studio: {
+          panels: [],
+          variables: [
+            {
+              id: 'var-rate',
+              name: 'rf_sample_rate',
+              binding: { kind: 'literal', value: 400e3 },
+            },
+            {
+              id: 'var-gain',
+              name: 'quad_gain',
+              binding: { kind: 'expression', expr: '400e3 / (2 * 3.141592653589793 * 75e3)' },
+            },
+          ],
+        },
+      },
+      graph: {
+        nodes: [
+          {
+            id: 'float_1',
+            blockType: 'gr::testing::FloatBlock',
+            title: 'FloatBlock',
+            position: { x: 0, y: 0 },
+            parameters: {
+              sample_rate: { kind: 'expression', expr: 'rf_sample_rate' },
+              gain: { kind: 'expression', expr: 'quad_gain' },
+              count: { kind: 'literal', value: 400000 },
+            },
+          },
+        ],
+        edges: [],
+      },
+    };
+
+    const submission = toGrctrlContentSubmission(document, {
+      blockDetailsByType: new Map([['gr::testing::FloatBlock', makeFloatScalarDetails()]]),
+    });
+
+    expect(submission.content).toContain('sample_rate: 400000.0');
+    expect(submission.content).toContain('gain: 0.8488263631567752');
+    expect(submission.content).toContain('count: 400000');
   });
 
   it('adds YAML sequence type tags for typed vector parameters from block metadata', () => {

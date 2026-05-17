@@ -42,7 +42,7 @@ function coerceNumber(value: JsonPrimitive): number | undefined {
 
   if (typeof value === 'string') {
     const trimmed = value.trim();
-    if (trimmed !== '' && /^-?(?:\d+\.?\d*|\.\d+)$/.test(trimmed)) {
+    if (trimmed !== '' && /^-?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:[eE][+-]?\d+)?$/.test(trimmed)) {
       const parsed = Number(trimmed);
       return Number.isFinite(parsed) ? parsed : undefined;
     }
