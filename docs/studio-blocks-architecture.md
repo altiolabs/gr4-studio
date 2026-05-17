@@ -137,6 +137,7 @@ Rendering is handled separately:
 - `Studio2DSeriesSink` uses the `series2d-xy-json-v1` path for XY/vector rendering over HTTP snapshots and websocket frames
 - `series2d-xy-json-v1` and `dataset-xy-json-v1` -> XY/vector plot path
 - `StudioPowerSpectrumSink` uses the `dataset-xy-json-v1` path for FFT-based spectrum rendering
+- `StudioPowerSpectrumSink` uses `sample_rate` for FFT-bin spacing and optional `center_freq` to offset the x axis from relative baseband Hz to absolute RF Hz
 - `StudioPowerSpectrumSink` with `persistence=true` also uses the `dataset-xy-json-v1` path, but routes to the phosphor spectrum renderer with a persistent glow behind the live trace. The phosphor look is tuned via `phosphor_intensity` and `phosphor_decay_ms`.
 - `StudioWaterfallSink` uses the `waterfall-spectrum-json-v1` path for bounded FFT-history waterfall rendering
 - `StudioWaterfallSink` uses `time_span` and `sample_rate` as the fixed waterfall depth controls and quantizes the resulting duration to the FFT size

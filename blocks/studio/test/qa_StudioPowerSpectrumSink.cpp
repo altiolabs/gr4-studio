@@ -29,6 +29,7 @@ void configureBlock(TBlock& block) {
     block.num_averages = 2UZ;
     block.window = std::string("Rectangular");
     block.sample_rate = 8.0F;
+    block.center_freq = 100.0F;
     block.update_ms = 125U;
     block.output_in_db = false;
     block.persistence = true;
@@ -45,6 +46,7 @@ void configureBlock(TBlock& block) {
                                  {"num_averages", 2UZ},
                                  {"window", std::string("Rectangular")},
                                  {"sample_rate", 8.0F},
+                                 {"center_freq", 100.0F},
                                  {"update_ms", 125U},
                                  {"output_in_db", false},
                                  {"persistence", true},
@@ -119,6 +121,8 @@ void testFloatSpectrum() {
     const std::string json = block.snapshotJson();
     assert(json.find("\"payload_format\":\"dataset-xy-json-v1\"") != std::string::npos);
     assert(json.find("\"points\":2") != std::string::npos);
+    assert(json.find("\"sample_rate\":8") != std::string::npos);
+    assert(json.find("\"center_freq\":100") != std::string::npos);
     assert(json.find("\"update_ms\":125") != std::string::npos);
     assert(json.find("\"persistence\":true") != std::string::npos);
     assert(json.find("\"phosphor_intensity\":1.25") != std::string::npos);
@@ -128,8 +132,8 @@ void testFloatSpectrum() {
     assert(json.find("\"x_max\":2") != std::string::npos);
     assert(json.find("\"y_min\":-1.5") != std::string::npos);
     assert(json.find("\"y_max\":1.5") != std::string::npos);
-    assert(json.find("[0,0.125]") != std::string::npos);
-    assert(json.find("[2,0.125]") != std::string::npos);
+    assert(json.find("[100,0.125]") != std::string::npos);
+    assert(json.find("[102,0.125]") != std::string::npos);
 }
 
 void testDbFloorIsFinite() {
@@ -165,8 +169,8 @@ void testComplexSpectrum() {
     const std::string json = block.snapshotJson();
     assert(json.find("\"payload_format\":\"dataset-xy-json-v1\"") != std::string::npos);
     assert(json.find("\"points\":4") != std::string::npos);
-    assert(json.find("[-4,0.25]") != std::string::npos);
-    assert(json.find("[2,0.25]") != std::string::npos);
+    assert(json.find("[96,0.25]") != std::string::npos);
+    assert(json.find("[102,0.25]") != std::string::npos);
 }
 
 } // namespace
