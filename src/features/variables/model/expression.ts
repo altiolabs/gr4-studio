@@ -118,8 +118,26 @@ function tokenize(input: string): ExpressionToken[] | { error: string } {
         end += 1;
       }
 
+      if (input[end] === 'e' || input[end] === 'E') {
+        let exponentEnd = end + 1;
+        if (input[exponentEnd] === '+' || input[exponentEnd] === '-') {
+          exponentEnd += 1;
+        }
+
+        const exponentDigitsStart = exponentEnd;
+        while (exponentEnd < input.length && /[0-9]/.test(input[exponentEnd])) {
+          exponentEnd += 1;
+        }
+
+        if (exponentEnd === exponentDigitsStart) {
+          return { error: `Invalid number literal near "${input.slice(index, exponentEnd)}".` };
+        }
+
+        end = exponentEnd;
+      }
+
       const raw = input.slice(index, end);
-      if (raw === '.' || raw === '+.' || raw === '-.') {
+      if (raw === '.') {
         return { error: `Invalid number literal near "${raw}".` };
       }
 

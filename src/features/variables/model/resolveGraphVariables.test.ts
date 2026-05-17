@@ -61,6 +61,49 @@ describe('resolveGraphVariables', () => {
     expect(resolved.parametersByNodeId['node-1']?.freq.value).toBe(75);
   });
 
+  it('resolves exponent notation in variables and parameter expressions', () => {
+    const document = makeDocument();
+    document.metadata.studio!.variables = [
+      {
+        id: 'var-rate',
+        name: 'rf_sample_rate',
+        binding: {
+          kind: 'literal',
+          value: '400e3',
+        },
+      },
+      {
+        id: 'var-dev',
+        name: 'fm_max_deviation',
+        binding: {
+          kind: 'literal',
+          value: 75e3,
+        },
+      },
+      {
+        id: 'var-gain',
+        name: 'quadrature_gain',
+        binding: {
+          kind: 'expression',
+          expr: 'rf_sample_rate / (2 * 3.141592653589793 * fm_max_deviation)',
+        },
+      },
+    ];
+    document.graph.nodes[0]!.parameters = {
+      tau: {
+        kind: 'expression',
+        expr: '75e-6',
+      },
+    };
+
+    const resolved = resolveGraphVariables(document);
+
+    expect(resolved.variablesByName.quadrature_gain.state).toBe('resolved');
+    expect(resolved.variablesByName.quadrature_gain.value).toBe(0.8488263631567752);
+    expect(resolved.parametersByNodeId['node-1']?.tau.state).toBe('resolved');
+    expect(resolved.parametersByNodeId['node-1']?.tau.value).toBe(0.000075);
+  });
+
   it('reports unknown variables and cycles', () => {
     const document: GraphDocument = {
       format: 'gr4-studio.graph',

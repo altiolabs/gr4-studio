@@ -7,6 +7,34 @@ describe('variable binding helpers', () => {
       kind: 'literal',
       value: 100,
     });
+    expect(bindingTextToExpressionBinding('0')).toEqual({
+      kind: 'literal',
+      value: 0,
+    });
+    expect(bindingTextToExpressionBinding('1.')).toEqual({
+      kind: 'expression',
+      expr: '1.',
+    });
+    expect(bindingTextToExpressionBinding('1.0')).toEqual({
+      kind: 'expression',
+      expr: '1.0',
+    });
+    expect(bindingTextToExpressionBinding('0.08')).toEqual({
+      kind: 'expression',
+      expr: '0.08',
+    });
+    expect(bindingTextToExpressionBinding('.08')).toEqual({
+      kind: 'expression',
+      expr: '.08',
+    });
+    expect(bindingTextToExpressionBinding('75e-6')).toEqual({
+      kind: 'expression',
+      expr: '75e-6',
+    });
+    expect(bindingTextToExpressionBinding('400e3')).toEqual({
+      kind: 'expression',
+      expr: '400e3',
+    });
     expect(bindingTextToExpressionBinding('true')).toEqual({
       kind: 'literal',
       value: true,
@@ -26,6 +54,7 @@ describe('variable binding helpers', () => {
   });
 
   it('formats literal strings with quotes and numbers plainly', () => {
+    expect(expressionBindingToText({ kind: 'literal', value: '' })).toBe('');
     expect(expressionBindingToText({ kind: 'literal', value: 'hello' })).toBe('"hello"');
     expect(expressionBindingToText({ kind: 'literal', value: 10 })).toBe('10');
     expect(expressionBindingToText({ kind: 'expression', expr: 'a + 1' })).toBe('a + 1');

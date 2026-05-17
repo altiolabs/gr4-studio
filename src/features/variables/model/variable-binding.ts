@@ -1,6 +1,7 @@
 import type { ExpressionBinding } from './types';
 
-const NUMERIC_LITERAL_PATTERN = /^-?(?:\d+\.?\d*|\.\d+)$/;
+const NUMERIC_LITERAL_PATTERN = /^-?(?:(?:\d+\.?\d*)|(?:\.\d+))(?:[eE][+-]?\d+)?$/;
+const FORMATTED_NUMERIC_PATTERN = /^-?(?:(?:\d+\.\d*)|(?:\.\d+)|(?:\d+(?:[eE][+-]?\d+)))$/;
 
 function parseQuotedString(text: string): string | undefined {
   if (text.length < 2) {
@@ -33,6 +34,10 @@ export function bindingTextToExpressionBinding(text: string): ExpressionBinding 
     return { kind: 'literal', value: null };
   }
   if (NUMERIC_LITERAL_PATTERN.test(trimmed)) {
+    if (FORMATTED_NUMERIC_PATTERN.test(trimmed)) {
+      return { kind: 'expression', expr: text };
+    }
+
     const parsed = Number(trimmed);
     if (Number.isFinite(parsed)) {
       return { kind: 'literal', value: parsed };
@@ -53,6 +58,10 @@ export function expressionBindingToText(binding: ExpressionBinding): string {
   }
 
   if (typeof binding.value === 'string') {
+    if (binding.value === '') {
+      return '';
+    }
+
     return JSON.stringify(binding.value);
   }
 
