@@ -4,6 +4,9 @@
 #include <atomic>
 #include <cassert>
 #include <chrono>
+#include <cmath>
+#include <complex>
+#include <limits>
 #include <string>
 #include <thread>
 
@@ -43,6 +46,42 @@ void testWebSocketTransportLifecycle() {
     assert(json.find("\"payload_format\":\"series-window-json-v1\"") != std::string::npos);
     assert(json.find("\"sample_type\":\"float32\"") != std::string::npos);
     block.stop();
+}
+
+void testSnapshotJsonSanitizesNonFiniteFloatSamples() {
+    gr::studio::detail::SeriesWindow<float> window{1UZ, 4UZ};
+    const float negativeNan = -std::numeric_limits<float>::quiet_NaN();
+    const float samples[] = {
+        1.0F,
+        std::numeric_limits<float>::infinity(),
+        -std::numeric_limits<float>::infinity(),
+        negativeNan,
+    };
+
+    window.pushInterleaved(samples);
+
+    const std::string json = window.snapshotJson();
+    assert(json.find("nan") == std::string::npos);
+    assert(json.find("inf") == std::string::npos);
+    assert(json.find("-nan") == std::string::npos);
+    assert(json.find("-inf") == std::string::npos);
+    assert(json.find("\"data\":[[1,0,0,0]]") != std::string::npos);
+}
+
+void testSnapshotJsonSanitizesNonFiniteComplexSamples() {
+    gr::studio::detail::SeriesWindow<std::complex<float>> window{1UZ, 2UZ};
+    const std::complex<float> samples[] = {
+        {1.0F, std::numeric_limits<float>::quiet_NaN()},
+        {-std::numeric_limits<float>::infinity(), 2.0F},
+    };
+
+    window.pushInterleaved(samples);
+
+    const std::string json = window.snapshotJson();
+    assert(json.find("nan") == std::string::npos);
+    assert(json.find("inf") == std::string::npos);
+    assert(json.find("-inf") == std::string::npos);
+    assert(json.find("\"data\":[[1,0,0,2]]") != std::string::npos);
 }
 
 void testHttpTransportHelpers() {
@@ -100,6 +139,8 @@ int main() {
     testSeriesRegistered();
     testDefaultTransportAndCadence();
     testWebSocketTransportLifecycle();
+    testSnapshotJsonSanitizesNonFiniteFloatSamples();
+    testSnapshotJsonSanitizesNonFiniteComplexSamples();
     testHttpTransportHelpers();
 #if !defined(_WIN32)
     testWebSocketStopUnblocksIncompleteHandshake();

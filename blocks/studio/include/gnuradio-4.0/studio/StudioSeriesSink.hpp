@@ -13,6 +13,7 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -121,7 +122,7 @@ public:
                     if (index > 0UZ) {
                         os << ',';
                     }
-                    os << perChannel[channel][index];
+                    writeJsonNumber(os, perChannel[channel][index]);
                 }
                 os << ']';
             }
@@ -141,7 +142,9 @@ public:
                     if (index > 0UZ) {
                         os << ',';
                     }
-                    os << perChannel[channel][index].real() << ',' << perChannel[channel][index].imag();
+                    writeJsonNumber(os, perChannel[channel][index].real());
+                    os << ',';
+                    writeJsonNumber(os, perChannel[channel][index].imag());
                 }
                 os << ']';
             }
@@ -159,6 +162,14 @@ private:
     std::vector<T>     _pending;
     std::size_t        _writeIndex = 0UZ;
     std::size_t        _filled     = 0UZ;
+
+    static void writeJsonNumber(std::ostream& os, float value) {
+        if (std::isfinite(value)) {
+            os << value;
+            return;
+        }
+        os << '0';
+    }
 };
 
 struct ParsedHttpEndpoint {
