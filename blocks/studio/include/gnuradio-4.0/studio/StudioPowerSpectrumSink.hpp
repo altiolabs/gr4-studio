@@ -289,6 +289,13 @@ public:
         ++_sequence;
     }
 
+    void clearAverageHistory() {
+        std::lock_guard lock(_mutex);
+        _history.clear();
+        std::ranges::fill(_spectrumSum, value_type{});
+        std::ranges::fill(_averagedSpectrum, value_type{});
+    }
+
     [[nodiscard]] std::vector<value_type> frequencyAxis() const {
         std::lock_guard lock(_mutex);
         return _frequencies;
@@ -1065,6 +1072,8 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
             x_max,
             y_min,
             y_max);
+        _lastFrameProcessAt = {};
+        _sampleCache.clear();
         syncInputPortConstraints();
         startTransport();
     }
@@ -1106,6 +1115,8 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
                 x_max,
                 y_min,
                 y_max);
+            _lastFrameProcessAt = {};
+            _sampleCache.clear();
             syncInputPortConstraints();
         }
 
@@ -1115,26 +1126,15 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
     }
 
     void processSamples(std::span<const T> input) {
-        if (input.size() < static_cast<std::size_t>(fft_size)) {
-            return;
-        }
-
-        _window.processFrame(input.first(static_cast<std::size_t>(fft_size)));
-        publishWebSocketFrame();
+        appendSamples(input);
+        processCachedFrames();
     }
 
     [[nodiscard]] work::Status processBulk(InputSpanLike auto& input) noexcept {
         if (!input.empty()) {
             const std::size_t available = input.size();
-            const std::size_t frameSize  = static_cast<std::size_t>(fft_size);
-            const std::size_t frames     = available / frameSize;
-
-            for (std::size_t frame = 0UZ; frame < frames; ++frame) {
-                const std::size_t offset = frame * frameSize;
-                _window.processFrame(std::span<const T>(input.data() + offset, frameSize));
-                publishWebSocketFrame();
-            }
-
+            appendSamples(std::span<const T>(input.data(), available));
+            processCachedFrames();
             std::ignore = input.consume(available);
         }
 
@@ -1171,6 +1171,64 @@ private:
     detail::SnapshotHttpService _http{};
     detail::SnapshotWebSocketService _websocket{};
     std::chrono::steady_clock::time_point _lastWebSocketPublishAt{};
+    std::chrono::steady_clock::time_point _lastFrameProcessAt{};
+    std::vector<T> _sampleCache{};
+
+    void appendSamples(std::span<const T> input) {
+        if (input.empty()) {
+            return;
+        }
+
+        const auto frameSize = static_cast<std::size_t>(fft_size);
+        const auto framesToCache = std::max<std::size_t>(1UZ, static_cast<std::size_t>(num_averages));
+        const auto maxSamples = frameSize * framesToCache;
+        if (maxSamples == 0UZ) {
+            return;
+        }
+
+        if (input.size() >= maxSamples) {
+            _sampleCache.assign(input.end() - static_cast<std::ptrdiff_t>(maxSamples), input.end());
+            return;
+        }
+
+        _sampleCache.insert(_sampleCache.end(), input.begin(), input.end());
+        if (_sampleCache.size() > maxSamples) {
+            const auto excess = _sampleCache.size() - maxSamples;
+            _sampleCache.erase(_sampleCache.begin(), _sampleCache.begin() + static_cast<std::ptrdiff_t>(excess));
+        }
+    }
+
+    void processCachedFrames() {
+        const auto frameSize = static_cast<std::size_t>(fft_size);
+        if (frameSize == 0UZ || _sampleCache.size() < frameSize) {
+            return;
+        }
+        if (!shouldProcessFrame()) {
+            return;
+        }
+
+        const auto availableFrames = _sampleCache.size() / frameSize;
+        const auto framesToProcess = std::min<std::size_t>(std::max<std::size_t>(1UZ, static_cast<std::size_t>(num_averages)), availableFrames);
+        const auto startOffset = _sampleCache.size() - framesToProcess * frameSize;
+
+        _window.clearAverageHistory();
+        for (std::size_t frame = 0UZ; frame < framesToProcess; ++frame) {
+            const auto offset = startOffset + frame * frameSize;
+            _window.processFrame(std::span<const T>(_sampleCache.data() + offset, frameSize));
+        }
+        publishWebSocketFrame();
+    }
+
+    bool shouldProcessFrame() {
+        const auto now = std::chrono::steady_clock::now();
+        const auto interval = std::chrono::milliseconds(std::max<std::uint32_t>(1U, update_ms));
+        if (_lastFrameProcessAt != std::chrono::steady_clock::time_point{} &&
+            now - _lastFrameProcessAt < interval) {
+            return false;
+        }
+        _lastFrameProcessAt = now;
+        return true;
+    }
 
     void publishWebSocketFrame() {
         if (!_websocket.isRunning()) {

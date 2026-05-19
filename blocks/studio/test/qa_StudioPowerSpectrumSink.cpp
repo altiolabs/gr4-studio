@@ -132,8 +132,37 @@ void testFloatSpectrum() {
     assert(json.find("\"x_max\":2") != std::string::npos);
     assert(json.find("\"y_min\":-1.5") != std::string::npos);
     assert(json.find("\"y_max\":1.5") != std::string::npos);
+    assert(json.find("[100,0.25]") != std::string::npos);
+    assert(json.find("[102,0.25]") != std::string::npos);
+}
+
+void testPowerSpectrumComputationIsThrottledByUpdateMs() {
+    gr::studio::StudioPowerSpectrumSink<float> block{};
+    configureBlock(block);
+
+    const std::array<float, 4UZ> impulse{1.0F, 0.0F, 0.0F, 0.0F};
+    const std::array<float, 4UZ> zeros{0.0F, 0.0F, 0.0F, 0.0F};
+    block.processSamples(std::span<const float>(impulse));
+    block.processSamples(std::span<const float>(zeros));
+
+    std::string json = block.snapshotJson();
+    assert(json.find("[100,0.25]") != std::string::npos);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(150));
+    const std::array<float, 8UZ> consecutiveFrames{
+        1.0F,
+        0.0F,
+        0.0F,
+        0.0F,
+        0.0F,
+        0.0F,
+        0.0F,
+        0.0F,
+    };
+    block.processSamples(std::span<const float>(consecutiveFrames));
+
+    json = block.snapshotJson();
     assert(json.find("[100,0.125]") != std::string::npos);
-    assert(json.find("[102,0.125]") != std::string::npos);
 }
 
 void testDbFloorIsFinite() {
@@ -182,6 +211,7 @@ int main() {
     testWebSocketStopUnblocksIncompleteHandshake();
 #endif
     testFloatSpectrum();
+    testPowerSpectrumComputationIsThrottledByUpdateMs();
     testDbFloorIsFinite();
     testComplexSpectrum();
     return 0;
