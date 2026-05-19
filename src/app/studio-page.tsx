@@ -52,7 +52,7 @@ import { shouldApplyRuntimeSettingImmediately } from '../features/inspector/runt
 import { WorkspaceView, type WorkspacePanelViewModel } from '../features/workspace/workspace-view';
 import { resolveGraphVariables } from '../features/variables/model/resolveGraphVariables';
 import { deriveDefaultStudioPanelsFromNodes } from '../features/workspace/model/panel-derivation';
-import { buildEffectiveStudioLayout } from '../features/workspace/model/layout';
+import { buildEffectiveRenderedStudioLayout, shouldShowPanelInRenderedLayout } from '../features/workspace/model/layout';
 import { mergeSavedAndDerivedStudioPanels } from '../features/workspace/model/panel-merge';
 import { buildDisambiguatedPanelTitles } from '../features/workspace/model/panel-titles';
 import {
@@ -589,9 +589,16 @@ export function StudioPage() {
     serializedSnapshot.contentHash,
   ]);
 
+  const renderedWorkspacePanelEntries = useMemo(
+    () =>
+      workspacePanelEntries.filter(
+        (entry) => shouldShowPanelInRenderedLayout(entry.panel),
+      ),
+    [workspacePanelEntries],
+  );
   const workspaceLayout = useMemo(
-    () => buildEffectiveStudioLayout(studioLayout, mergedWorkspacePanels),
-    [mergedWorkspacePanels, studioLayout],
+    () => buildEffectiveRenderedStudioLayout(studioLayout, renderedWorkspacePanelEntries.map((entry) => entry.panel)),
+    [renderedWorkspacePanelEntries, studioLayout],
   );
 
   const activePlotStyleEditorEntry = useMemo(
@@ -1031,7 +1038,7 @@ export function StudioPage() {
       draggedPanelId,
       targetPanelId,
       position,
-      mergedWorkspacePanels.map((panel) => panel.id),
+      renderedWorkspacePanelEntries.map((entry) => entry.panel.id),
     );
     setStudioLayout(nextLayout);
   };
@@ -1041,7 +1048,7 @@ export function StudioPage() {
       workspaceLayout,
       splitPath,
       sizes,
-      mergedWorkspacePanels.map((panel) => panel.id),
+      renderedWorkspacePanelEntries.map((entry) => entry.panel.id),
     );
     setStudioLayout(nextLayout);
   };
@@ -1049,10 +1056,7 @@ export function StudioPage() {
   const createEmptyControlPanel = () => {
     const result = addEmptyControlPanelToPanels(mergedWorkspacePanels);
     setStudioPanels(result.panels);
-    setStudioLayout({
-      ...buildEffectiveStudioLayout(studioLayout, result.panels),
-      activePanelId: result.panelId,
-    });
+    setStudioLayout(buildEffectiveRenderedStudioLayout(studioLayout, result.panels));
   };
 
   const renameControlPanel = (panelId: string, title: string) => {
@@ -1345,7 +1349,7 @@ export function StudioPage() {
               />
             ) : activeCenterView === 'workspace' ? (
               <WorkspaceView
-                panelEntries={workspacePanelEntries}
+                panelEntries={renderedWorkspacePanelEntries}
                 layout={workspaceLayout}
                 onSplitDrop={applyLayoutEditorSplitDrop}
                 onSplitSizesChange={applyLayoutEditorSplitSizes}
@@ -1371,7 +1375,7 @@ export function StudioPage() {
             />
             ) : (
               <ApplicationView
-                panelEntries={workspacePanelEntries}
+                panelEntries={renderedWorkspacePanelEntries}
                 layout={workspaceLayout}
                 executionState={runtimeView?.executionState}
                 onUpdateVariableValue={(variableName, binding) => {

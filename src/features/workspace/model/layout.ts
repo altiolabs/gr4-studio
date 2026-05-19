@@ -25,6 +25,17 @@ export function buildEffectiveStudioLayout(
   return normalizeStudioLayoutSpec(savedLayout, panelIds);
 }
 
+export function shouldShowPanelInRenderedLayout(panel: StudioPanelSpec): boolean {
+  return panel.kind !== 'control' || panel.widgets.length > 0;
+}
+
+export function buildEffectiveRenderedStudioLayout(
+  savedLayout: StudioLayoutSpec | undefined,
+  panels: readonly StudioPanelSpec[],
+): StudioLayoutSpec {
+  return buildEffectiveStudioLayout(savedLayout, panels.filter(shouldShowPanelInRenderedLayout));
+}
+
 export function layoutContainsPanel(layout: StudioLayoutSpec, panelId: string): boolean {
   return collectLayoutPaneIds(layout.root).includes(panelId);
 }

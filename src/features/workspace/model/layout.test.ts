@@ -6,7 +6,12 @@ import {
   collectLayoutPaneIds,
   normalizeStudioLayoutSpec,
 } from '../../graph-document/model/studio-layout';
-import { buildDefaultStudioLayout, buildEffectiveStudioLayout, orderPanelEntriesForLayout } from './layout';
+import {
+  buildDefaultStudioLayout,
+  buildEffectiveRenderedStudioLayout,
+  buildEffectiveStudioLayout,
+  orderPanelEntriesForLayout,
+} from './layout';
 
 describe('workspace layout model (split tree)', () => {
   it('builds a deterministic default split-tree layout from panel IDs', () => {
@@ -172,6 +177,58 @@ describe('workspace layout model (split tree)', () => {
       root: { kind: 'pane', panelId: 'panel-z' },
       activePanelId: 'panel-z',
     });
+  });
+
+  it('excludes empty control panels from rendered layouts', () => {
+    const layout = buildEffectiveRenderedStudioLayout(
+      {
+        version: 2,
+        root: {
+          kind: 'split',
+          direction: 'column',
+          children: [
+            { kind: 'pane', panelId: 'panel-a' },
+            { kind: 'pane', panelId: 'controls-empty' },
+            { kind: 'pane', panelId: 'controls-assigned' },
+          ],
+        },
+        activePanelId: 'controls-empty',
+      },
+      [
+        {
+          id: 'panel-a',
+          nodeId: 'node-a',
+          kind: 'series',
+          visible: true,
+          previewOnCanvas: false,
+        },
+        {
+          id: 'controls-empty',
+          kind: 'control',
+          title: 'Controls',
+          visible: true,
+          widgets: [],
+        },
+        {
+          id: 'controls-assigned',
+          kind: 'control',
+          title: 'Assigned Controls',
+          visible: true,
+          widgets: [
+            {
+              id: 'widget-a',
+              kind: 'parameter',
+              label: 'Gain',
+              binding: { kind: 'variable', variableName: 'gain' },
+              inputKind: 'number',
+            },
+          ],
+        },
+      ],
+    );
+
+    expect(collectLayoutPaneIds(layout.root)).toEqual(['panel-a', 'controls-assigned']);
+    expect(layout.activePanelId).toBe('panel-a');
   });
 
   it('applies left/right split drop around a target pane deterministically', () => {
