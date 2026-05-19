@@ -25,7 +25,7 @@ describe('known Studio block bindings', () => {
     }, {});
 
     expect(counts).toEqual({
-      audio: 2,
+      audio: 4,
       image: 3,
       series: 4,
       series2d: 12,
@@ -63,6 +63,11 @@ describe('known Studio block bindings', () => {
 
       if (binding.blockTypeId.startsWith('gr::studio::StudioWaterfallSink<')) {
         expect(binding.supportedTransports).toEqual(['http_poll', 'websocket']);
+        continue;
+      }
+
+      if (binding.blockTypeId.startsWith('gr::studio::StudioAudioSink<')) {
+        expect(binding.supportedTransports).toEqual(['websocket']);
         continue;
       }
 
@@ -277,6 +282,22 @@ describe('known Studio block bindings', () => {
       sampleRate: 48000,
       channels: 2,
       updateMs: 120,
+    });
+
+    const audioSinkConfigured = buildStudioBindingView('gr::studio::StudioAudioSink<float32>', {
+      transport: 'websocket',
+      endpoint: 'ws://127.0.0.1:18084/audio',
+      sample_rate: '48000',
+      channels: '1',
+    });
+    expect(audioSinkConfigured).toMatchObject({
+      status: 'configured',
+      family: 'audio',
+      payloadFormat: 'audio-float32-binary-v1',
+      transport: 'websocket',
+      endpoint: 'ws://127.0.0.1:18084/audio',
+      sampleRate: 48000,
+      channels: 1,
     });
   });
 });

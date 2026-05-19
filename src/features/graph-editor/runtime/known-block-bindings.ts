@@ -76,6 +76,7 @@ const STUDIO_SERIES_SUPPORTED_TRANSPORTS = ['http_snapshot', 'http_poll', 'webso
 const STUDIO_2D_SERIES_SUPPORTED_TRANSPORTS = ['http_snapshot', 'http_poll', 'websocket'] as const;
 const STUDIO_POWER_SPECTRUM_SUPPORTED_TRANSPORTS = ['http_poll', 'websocket'] as const;
 const STUDIO_WATERFALL_SUPPORTED_TRANSPORTS = ['http_poll', 'websocket'] as const;
+const STUDIO_AUDIO_PLAYBACK_SUPPORTED_TRANSPORTS = ['websocket'] as const;
 export const STUDIO_KNOWN_BLOCK_BINDINGS: readonly StudioKnownBlockBinding[] = [
   {
     blockTypeId: 'gr::studio::StudioSeriesSink<float32>',
@@ -380,6 +381,34 @@ export const STUDIO_KNOWN_BLOCK_BINDINGS: readonly StudioKnownBlockBinding[] = [
     },
     payloadFormat: 'audio-window-json-v1',
     notes: 'Phase 1 supports only http_snapshot/http_poll. Unsupported for now: zmq_sub, websocket. Future zmq_sub likely needs browser-safe bridge.',
+  },
+  {
+    blockTypeId: 'gr::studio::StudioAudioSink<float32>',
+    family: 'audio',
+    supportedTransports: STUDIO_AUDIO_PLAYBACK_SUPPORTED_TRANSPORTS,
+    parameters: {
+      transport: 'transport',
+      endpoint: 'endpoint',
+      sampleRate: 'sample_rate',
+      channels: 'channels',
+      topic: 'topic',
+    },
+    payloadFormat: 'audio-float32-binary-v1',
+    notes: 'WebSocket binary float32 audio frames for browser AudioWorklet playback.',
+  },
+  {
+    blockTypeId: 'gr::studio::StudioAudioSink<float>',
+    family: 'audio',
+    supportedTransports: STUDIO_AUDIO_PLAYBACK_SUPPORTED_TRANSPORTS,
+    parameters: {
+      transport: 'transport',
+      endpoint: 'endpoint',
+      sampleRate: 'sample_rate',
+      channels: 'channels',
+      topic: 'topic',
+    },
+    payloadFormat: 'audio-float32-binary-v1',
+    notes: 'WebSocket binary float32 audio frames for browser AudioWorklet playback.',
   },
   {
     blockTypeId: 'gr::studio::StudioImageSink<uint8>',

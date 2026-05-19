@@ -469,6 +469,8 @@ export function StudioPage() {
         bindingEndpoint: bindingView.endpoint,
         bindingShowEndpointInUi: !isDescriptorBasedBindingFamily(sourceNode.blockTypeId),
         bindingUpdateMs: bindingView.updateMs,
+        bindingSampleRate: bindingView.sampleRate,
+        bindingChannels: bindingView.channels,
         bindingReason: bindingView.reason,
       };
     });

@@ -4,6 +4,10 @@ add_executable(qa_StudioPowerSpectrumSink qa_StudioPowerSpectrumSink.cpp)
 target_link_libraries(qa_StudioPowerSpectrumSink PRIVATE gr4_studio::blocks_studio_headers)
 add_test(NAME qa_StudioPowerSpectrumSink COMMAND qa_StudioPowerSpectrumSink)
 
+add_executable(qa_StudioAudioSink qa_StudioAudioSink.cpp)
+target_link_libraries(qa_StudioAudioSink PRIVATE gr4_studio::blocks_studio_headers)
+add_test(NAME qa_StudioAudioSink COMMAND qa_StudioAudioSink)
+
 add_executable(qa_Studio2DSeriesSink qa_Studio2DSeriesSink.cpp)
 target_link_libraries(qa_Studio2DSeriesSink PRIVATE gr4_studio::blocks_studio_headers)
 add_test(NAME qa_Studio2DSeriesSink COMMAND qa_Studio2DSeriesSink)

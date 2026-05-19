@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react';
 import type { StudioPanelKind } from '../../graph-document/model/studio-workspace';
 import type { WorkspaceLiveRendererContext } from './live-renderer-contract';
+import { AudioLiveRenderer } from './audio-live-renderer';
 import { PhosphorSpectrumLiveRenderer } from './histogram-live-renderer';
 import { SeriesLiveRenderer } from './series-live-renderer';
 import { WaterfallLiveRenderer } from './waterfall-live-renderer';
@@ -51,23 +52,13 @@ function ImagePlaceholderRenderer({ liveContext }: { liveContext: WorkspaceLiveR
   );
 }
 
-function AudioPlaceholderRenderer({ liveContext }: { liveContext: WorkspaceLiveRendererContext }) {
-  return (
-    <RendererFrame
-      title="Audio Placeholder"
-      subtitle={`Waveform/spectrum renderer hook point. state=${liveContext.dataState.kind}`}
-      accentClassName="bg-emerald-400"
-    />
-  );
-}
-
 const RENDERER_BY_KIND = {
   series: SeriesLiveRenderer,
   series2d: Series2DPlaceholderRenderer,
   histogram: PhosphorSpectrumLiveRenderer,
   waterfall: WaterfallLiveRenderer,
   image: ImagePlaceholderRenderer,
-  audio: AudioPlaceholderRenderer,
+  audio: AudioLiveRenderer,
 } as Record<StudioPanelKind, (props: { liveContext: WorkspaceLiveRendererContext }) => ReactElement>;
 
 export function WorkspacePanelRenderer({ kind, liveContext }: WorkspacePanelRendererProps) {

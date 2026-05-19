@@ -64,6 +64,8 @@ function ApplicationPanelShell({
       endpoint: entry.bindingEndpoint,
       showEndpointInUi: entry.bindingShowEndpointInUi,
       updateMs: entry.bindingUpdateMs,
+      sampleRate: entry.bindingSampleRate,
+      channels: entry.bindingChannels,
       reason: entry.bindingReason,
     },
     dataState:

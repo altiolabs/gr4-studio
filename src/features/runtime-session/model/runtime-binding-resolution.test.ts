@@ -315,6 +315,39 @@ describe('descriptor-based runtime binding resolution', () => {
     });
   });
 
+  it('resolves a StudioAudioSink websocket descriptor from the linked session route', () => {
+    expect(
+      resolveCurrentSessionStudioBindingView({
+        blockTypeId: 'gr::studio::StudioAudioSink<float32>',
+        nodeInstanceId: 'audio_sink0',
+        parameterValues: {
+          transport: 'websocket',
+          endpoint: 'ws://legacy-host:18084/legacy-audio',
+          channels: '1',
+          sample_rate: '48000',
+        },
+        session: runningSession([
+          {
+            id: 'audio-playback',
+            blockInstanceName: 'audio_sink0',
+            transport: 'websocket',
+            payloadFormat: 'audio-float32-binary-v1',
+            path: '/sessions/sess-1/streams/audio-playback/ws',
+            ready: true,
+          },
+        ]),
+      }),
+    ).toMatchObject({
+      status: 'configured',
+      family: 'audio',
+      transport: 'websocket',
+      endpoint: '/api/sessions/sess-1/streams/audio-playback/ws',
+      sampleRate: 48000,
+      channels: 1,
+      payloadFormat: 'audio-float32-binary-v1',
+    });
+  });
+
   it('does not silently fall back when streams are present but unusable', () => {
     expect(
       resolveCurrentSessionStudioBindingView({

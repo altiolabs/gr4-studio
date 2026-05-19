@@ -129,6 +129,35 @@ describe('descriptor-based authoring helpers', () => {
     });
   });
 
+  it('keeps StudioAudioSink transport-authored while ignoring authored endpoint in the descriptor view', () => {
+    expect(isDescriptorBasedBindingFamily('gr::studio::StudioAudioSink<float32>')).toBe(true);
+    expect(isDescriptorBindingHiddenParameter('gr::studio::StudioAudioSink<float32>', 'endpoint')).toBe(true);
+
+    expect(
+      buildStudioAuthoringBindingView('gr::studio::StudioAudioSink<float32>', {
+        transport: 'websocket',
+        endpoint: 'ws://legacy-host:18084/legacy-audio',
+        sample_rate: '48000',
+        channels: '1',
+      }),
+    ).toMatchObject({
+      status: 'configured',
+      family: 'audio',
+      payloadFormat: 'audio-float32-binary-v1',
+      transport: 'websocket',
+      sampleRate: 48000,
+      channels: 1,
+      reason:
+        'Descriptor-based session routes come from the linked session. Transport stays authored. Endpoint is persisted only for older documents and is not used by Studio runtime.',
+    });
+    expect(
+      buildStudioAuthoringBindingView('gr::studio::StudioAudioSink<float32>', {
+        transport: 'websocket',
+        endpoint: 'ws://legacy-host:18084/legacy-audio',
+      }).endpoint,
+    ).toBeUndefined();
+  });
+
   it('extracts descriptor-based transport settings for known Studio blocks outside the hidden-endpoint list', () => {
     expect(
       buildStudioDescriptorAuthoringView('gr::studio::StudioAudioMonitor<float32>', {

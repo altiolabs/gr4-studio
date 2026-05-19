@@ -36,6 +36,8 @@ export type WorkspacePanelViewModel = {
   bindingEndpoint?: string;
   bindingShowEndpointInUi?: boolean;
   bindingUpdateMs?: number;
+  bindingSampleRate?: number;
+  bindingChannels?: number;
   bindingReason?: string;
 };
 
