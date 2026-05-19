@@ -28,5 +28,6 @@ export type WorkspaceLiveRendererContext = {
   panel: WorkspaceLivePanelIdentity;
   binding: WorkspaceLiveBindingInfo;
   dataState: WorkspaceLiveDataState;
+  sessionId?: string;
   executionState?: 'idle' | 'ready' | 'running' | 'stopped' | 'error';
 };

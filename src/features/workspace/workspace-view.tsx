@@ -38,6 +38,7 @@ export type WorkspacePanelViewModel = {
   bindingUpdateMs?: number;
   bindingSampleRate?: number;
   bindingChannels?: number;
+  bindingSessionId?: string;
   bindingReason?: string;
 };
 

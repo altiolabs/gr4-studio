@@ -74,6 +74,7 @@ function ApplicationPanelShell({
         : entry.bindingStatus === 'configured'
           ? { kind: 'no-data', reason: 'Live data is not available yet.' }
           : { kind: 'no-data', reason: 'Configure binding to enable runtime rendering.' },
+    sessionId: entry.bindingSessionId,
     executionState,
   };
   return (

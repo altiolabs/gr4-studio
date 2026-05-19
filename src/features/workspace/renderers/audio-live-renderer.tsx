@@ -1,137 +1,64 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { StudioAudioPlaybackController, type AudioPlaybackStats } from '../../application/audio/audio-playback-controller';
-import {
-  createAudioWebSocketSubscription,
-  normalizeAudioWebSocketEndpoint,
-  type AudioConnectionState,
-} from '../../application/audio/runtime/audio-websocket-runtime';
-import type { AudioFrame } from '../../application/audio/runtime/audio-frame';
+import { useEffect, useMemo } from 'react';
+import { useAudioSessionStore } from '../../application/audio/audio-session-store';
 import type { WorkspaceLiveRendererContext } from './live-renderer-contract';
 
 type AudioLiveRendererProps = {
   liveContext: WorkspaceLiveRendererContext;
 };
 
-type AudioDeviceInfo = {
-  deviceId: string;
-  label: string;
-};
-
-async function listAudioOutputDevices(): Promise<AudioDeviceInfo[]> {
-  if (!navigator.mediaDevices?.enumerateDevices) {
-    return [{ deviceId: 'default', label: 'Default output' }];
-  }
-
-  let devices = await navigator.mediaDevices.enumerateDevices();
-  if (devices.every((device) => !device.label) && navigator.mediaDevices.getUserMedia) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => track.stop());
-      devices = await navigator.mediaDevices.enumerateDevices();
-    } catch {
-      // Permission is optional. Playback can continue with the default device.
-    }
-  }
-
-  const outputs = devices
-    .filter((device) => device.kind === 'audiooutput')
-    .map((device, index) => ({
-      deviceId: device.deviceId || 'default',
-      label: device.label || (index === 0 ? 'Default output' : `Output ${index + 1}`),
-    }));
-
-  return outputs.length > 0 ? outputs : [{ deviceId: 'default', label: 'Default output' }];
-}
-
 export function AudioLiveRenderer({ liveContext }: AudioLiveRendererProps) {
   const endpoint = liveContext.binding.endpoint?.trim() ?? '';
   const runtimeActive = liveContext.executionState === 'running';
+  const sessionKey = useMemo(() => {
+    if (!liveContext.sessionId || !liveContext.panel.nodeId) {
+      return null;
+    }
+    return `${liveContext.sessionId}:${liveContext.panel.nodeId}`;
+  }, [liveContext.panel.nodeId, liveContext.sessionId]);
   const supportsLivePath =
     runtimeActive &&
     liveContext.binding.status === 'configured' &&
     liveContext.binding.transport === 'websocket' &&
-    endpoint.length > 0;
+    endpoint.length > 0 &&
+    Boolean(sessionKey);
   const channels = liveContext.binding.channels ?? 1;
   const sampleRate = liveContext.binding.sampleRate ?? 48000;
-  const normalizedEndpoint = useMemo(() => normalizeAudioWebSocketEndpoint(endpoint), [endpoint]);
 
-  const controllerRef = useRef<StudioAudioPlaybackController | null>(null);
-  const expectedSequenceRef = useRef<bigint | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [connectionState, setConnectionState] = useState<AudioConnectionState>('closed');
-  const [message, setMessage] = useState<string | null>(null);
-  const [volume, setVolume] = useState(0.8);
-  const [stats, setStats] = useState<AudioPlaybackStats | null>(null);
-  const [devices, setDevices] = useState<AudioDeviceInfo[]>([{ deviceId: 'default', label: 'Default output' }]);
-  const [selectedDeviceId, setSelectedDeviceId] = useState('default');
-  const [deviceSelectionSupported, setDeviceSelectionSupported] = useState(true);
-  const [lastFrame, setLastFrame] = useState<AudioFrame | null>(null);
+  const session = useAudioSessionStore((state) => (sessionKey ? state.sessions[sessionKey] : undefined));
+  const ensureSession = useAudioSessionStore((state) => state.ensureSession);
+  const setVolume = useAudioSessionStore((state) => state.setVolume);
+  const setMuted = useAudioSessionStore((state) => state.setMuted);
+  const setOutputDevice = useAudioSessionStore((state) => state.setOutputDevice);
 
   useEffect(() => {
-    void listAudioOutputDevices().then(setDevices);
-  }, []);
-
-  useEffect(() => {
-    controllerRef.current = new StudioAudioPlaybackController(setStats);
-    return () => {
-      controllerRef.current?.close();
-      controllerRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    controllerRef.current?.setVolume(volume);
-  }, [volume]);
-
-  useEffect(() => {
-    if (!supportsLivePath || !playing) {
-      return undefined;
-    }
-
-    setConnectionState('connecting');
-    setMessage(null);
-    expectedSequenceRef.current = null;
-    return createAudioWebSocketSubscription({
-      endpoint: normalizedEndpoint,
-      onFrame: (frame) => {
-        setLastFrame(frame);
-        if (expectedSequenceRef.current !== null && frame.sequence !== expectedSequenceRef.current) {
-          setMessage(`Audio sequence gap: expected ${expectedSequenceRef.current}, got ${frame.sequence}.`);
-        }
-        expectedSequenceRef.current = frame.sequence + 1n;
-        controllerRef.current?.pushFrame(frame);
-      },
-      onConnectionState: (state, stateMessage) => {
-        setConnectionState(state);
-        if (stateMessage) {
-          setMessage(stateMessage);
-        }
-      },
-    });
-  }, [normalizedEndpoint, playing, supportsLivePath]);
-
-  useEffect(() => {
-    if (!runtimeActive) {
-      setPlaying(false);
-      controllerRef.current?.clear();
-    }
-  }, [runtimeActive]);
-
-  const togglePlayback = async () => {
-    if (!playing) {
-      await controllerRef.current?.start({ channels, sampleRate });
-      setPlaying(true);
+    if (!sessionKey || !endpoint) {
       return;
     }
+    ensureSession({
+      key: sessionKey,
+      endpoint,
+      channels,
+      sampleRate,
+      runtimeActive: supportsLivePath,
+    });
+  }, [channels, endpoint, ensureSession, sampleRate, sessionKey, supportsLivePath]);
 
-    controllerRef.current?.pause();
-    setPlaying(false);
-  };
+  const playing = session?.playing ?? false;
+  const connectionState = session?.connectionState ?? 'closed';
+  const volume = session?.volume ?? 0.8;
+  const muted = session?.muted ?? false;
+  const stats = session?.stats ?? null;
+  const devices = session?.devices ?? [{ deviceId: 'default', label: 'Default output' }];
+  const selectedDeviceId = session?.selectedDeviceId ?? 'default';
+  const deviceSelectionSupported = session?.deviceSelectionSupported ?? true;
+  const lastFrame = session?.lastFrame ?? null;
+  const message = session?.message ?? null;
 
   const handleDeviceChange = async (deviceId: string) => {
-    setSelectedDeviceId(deviceId);
-    const ok = await controllerRef.current?.setOutputDevice(deviceId);
-    setDeviceSelectionSupported(ok !== false);
+    if (!sessionKey) {
+      return;
+    }
+    await setOutputDevice(sessionKey, deviceId);
   };
 
   return (
@@ -153,12 +80,14 @@ export function AudioLiveRenderer({ liveContext }: AudioLiveRendererProps) {
         <button
           type="button"
           onClick={() => {
-            void togglePlayback();
+            if (sessionKey) {
+              setMuted(sessionKey, !muted);
+            }
           }}
           disabled={!supportsLivePath}
           className="h-9 rounded border border-slate-600 bg-slate-900 px-3 text-xs font-medium text-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {playing ? 'Pause' : 'Play'}
+          {muted ? 'Unmute' : 'Mute'}
         </button>
 
         <label className="grid grid-cols-[64px_1fr] items-center gap-2 text-[11px] text-slate-300">
@@ -169,7 +98,11 @@ export function AudioLiveRenderer({ liveContext }: AudioLiveRendererProps) {
             max="1"
             step="0.01"
             value={volume}
-            onChange={(event) => setVolume(Number(event.currentTarget.value))}
+            onChange={(event) => {
+              if (sessionKey) {
+                setVolume(sessionKey, Number(event.currentTarget.value));
+              }
+            }}
             className="w-full"
           />
         </label>
@@ -199,7 +132,7 @@ export function AudioLiveRenderer({ liveContext }: AudioLiveRendererProps) {
         <span>
           Buffer {stats ? `${stats.availableFrames}/${stats.capacityFrames}` : 'n/a'}
         </span>
-        <span>Underruns {stats?.underruns ?? 0}</span>
+        <span>{playing ? `Underruns ${stats?.underruns ?? 0}` : 'Starting'}</span>
       </div>
 
       {message && <p className="text-[11px] text-amber-200 break-words">{message}</p>}

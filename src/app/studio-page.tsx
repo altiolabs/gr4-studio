@@ -4,6 +4,7 @@ import { StatusPill } from '../components/status-pill';
 import { StudioMark } from '../components/studio-mark';
 import { StatusBadge } from '../components/status-badge';
 import { ApplicationView } from '../features/application/application-view';
+import { useAudioSessionStore } from '../features/application/audio/audio-session-store';
 import { VariablesView } from '../features/variables/variables-view';
 import {
   createDocumentPersistenceService,
@@ -471,10 +472,31 @@ export function StudioPage() {
         bindingUpdateMs: bindingView.updateMs,
         bindingSampleRate: bindingView.sampleRate,
         bindingChannels: bindingView.channels,
+        bindingSessionId: activeRuntimeContext?.sessionId ?? undefined,
         bindingReason: bindingView.reason,
       };
     });
   }, [activeRuntimeContext?.session, blockDetailsByType, controlWidgetRuntime, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes, resolvedGraph]);
+
+  const activeAudioSessionKeys = useMemo(() => {
+    if (!activeRuntimeContext?.sessionId || runtimeView?.executionState !== 'running') {
+      return [];
+    }
+    return workspacePanelEntries
+      .filter(
+        (entry) =>
+          entry.panel.kind === 'audio' &&
+          entry.panel.nodeId &&
+          entry.bindingStatus === 'configured' &&
+          entry.bindingTransport === 'websocket' &&
+          entry.bindingEndpoint,
+      )
+      .map((entry) => `${activeRuntimeContext.sessionId}:${entry.panel.nodeId}`);
+  }, [activeRuntimeContext?.sessionId, runtimeView?.executionState, workspacePanelEntries]);
+
+  useEffect(() => {
+    useAudioSessionStore.getState().cleanupMissingSessions(new Set(activeAudioSessionKeys));
+  }, [activeAudioSessionKeys]);
 
   useEffect(() => {
     if (!activeTabId || !activeRuntimeContext?.sessionId || !runtimeView) {
