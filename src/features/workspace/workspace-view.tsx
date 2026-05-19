@@ -22,6 +22,7 @@ import type { ReactNode } from 'react';
 import type { SplitNodePath } from '../graph-document/model/studio-layout';
 import { ControlPanelView } from '../control-panels/control-panel-view';
 import type { ResolvedControlWidget } from '../control-panels/control-panel-binding-resolution';
+import { readExplicitPlotPanelTitle } from './model/panel-display-title';
 
 export type WorkspacePanelViewModel = {
   panel: StudioPanelSpec;
@@ -108,7 +109,9 @@ function LayoutEditorPane({
   onMoveControlWidgetToPanel?: (panelId: string, widgetId: string, targetPanelId: string) => void;
 }) {
   const { panel } = entry;
-  const paneTitle = entry.nodePanelTitle ?? panel.title ?? entry.nodeDisplayName ?? panel.nodeId;
+  const blockTitle = entry.nodePanelTitle ?? panel.title ?? entry.nodeDisplayName ?? panel.nodeId;
+  const plotTitle = readExplicitPlotPanelTitle(entry.nodeParameters);
+  const paneTitle = plotTitle && blockTitle ? `${blockTitle}: ${plotTitle}` : plotTitle ?? blockTitle;
   const isPlotPanel = panel.kind === 'series' || panel.kind === 'series2d' || panel.kind === 'histogram';
 
   return (
