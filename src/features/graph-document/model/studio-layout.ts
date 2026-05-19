@@ -20,13 +20,22 @@ function roundLayoutSize(value: number): number {
   return Number.parseFloat(value.toFixed(6));
 }
 
-export function normalizeStudioLayoutNode(node: StudioLayoutNode): StudioLayoutNode | null {
+export function normalizeStudioLayoutNode(
+  node: StudioLayoutNode,
+  allowedPanelIds?: ReadonlySet<string>,
+): StudioLayoutNode | null {
   if (node.kind === 'pane') {
-    return node.panelId.trim() ? node : null;
+    if (!node.panelId.trim()) {
+      return null;
+    }
+    if (allowedPanelIds && !allowedPanelIds.has(node.panelId)) {
+      return null;
+    }
+    return node;
   }
 
   const normalizedChildren = node.children
-    .map((child) => normalizeStudioLayoutNode(child))
+    .map((child) => normalizeStudioLayoutNode(child, allowedPanelIds))
     .filter((child): child is StudioLayoutNode => child !== null);
 
   if (normalizedChildren.length === 0) {
@@ -74,12 +83,13 @@ export function buildColumnLayoutRoot(panelIds: readonly string[]): StudioLayout
 
 export function normalizeStudioLayoutSpec(
   layout: StudioLayoutSpec,
-  panelIds: readonly string[] = [],
+  panelIds?: readonly string[],
 ): StudioLayoutSpec {
-  const normalizedRoot = normalizeStudioLayoutNode(layout.root) ?? buildColumnLayoutRoot(panelIds);
+  const allowedPanelIds = panelIds ? new Set(panelIds) : undefined;
+  const normalizedRoot = normalizeStudioLayoutNode(layout.root, allowedPanelIds) ?? buildColumnLayoutRoot(panelIds ?? []);
   const rootPaneIds = collectLayoutPaneIds(normalizedRoot);
   const seen = new Set(rootPaneIds);
-  const missingPanelIds = panelIds.filter((panelId) => !seen.has(panelId));
+  const missingPanelIds = (panelIds ?? []).filter((panelId) => !seen.has(panelId));
   const withMissingRoot =
     missingPanelIds.length > 0
       ? buildColumnLayoutRoot([...rootPaneIds, ...missingPanelIds])

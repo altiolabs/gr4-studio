@@ -13,18 +13,40 @@ function panel(id: string, nodeId: string): StudioPanelSpec {
   };
 }
 
+function controlPanel(id: string): StudioPanelSpec {
+  return {
+    id,
+    kind: 'control',
+    title: id,
+    visible: true,
+    previewOnCanvas: false,
+    widgets: [],
+  };
+}
+
 describe('mergeSavedAndDerivedStudioPanels', () => {
-  it('keeps saved panels authoritative and appends only missing derived gaps', () => {
+  it('keeps active saved panels authoritative and appends only missing derived gaps', () => {
     const merged = mergeSavedAndDerivedStudioPanels({
-      savedPanels: [panel('saved-a', 'node-a'), panel('saved-stale', 'missing-node')],
-      derivedPanels: [panel('derived-a', 'node-a'), panel('derived-b', 'node-b')],
+      savedPanels: [
+        { ...panel('studio-panel:node-a', 'node-a'), title: 'Saved title' },
+        panel('studio-panel:missing-node', 'missing-node'),
+      ],
+      derivedPanels: [panel('studio-panel:node-a', 'node-a'), panel('studio-panel:node-b', 'node-b')],
     });
 
     expect(merged).toEqual([
-      panel('saved-a', 'node-a'),
-      panel('saved-stale', 'missing-node'),
-      panel('derived-b', 'node-b'),
+      { ...panel('studio-panel:node-a', 'node-a'), title: 'Saved title' },
+      panel('studio-panel:node-b', 'node-b'),
     ]);
+  });
+
+  it('preserves saved control panels while pruning data panels for missing nodes', () => {
+    const merged = mergeSavedAndDerivedStudioPanels({
+      savedPanels: [controlPanel('control-a'), panel('studio-panel:missing-node', 'missing-node')],
+      derivedPanels: [panel('studio-panel:node-a', 'node-a')],
+    });
+
+    expect(merged).toEqual([controlPanel('control-a'), panel('studio-panel:node-a', 'node-a')]);
   });
 
   it('is deterministic when no saved panels are present', () => {

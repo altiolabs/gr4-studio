@@ -275,11 +275,13 @@ export function StudioPage() {
   const derivedWorkspacePanels = useMemo(
     () =>
       deriveDefaultStudioPanelsFromNodes(
-        nodes.map((node) => ({
-          instanceId: node.instanceId,
-          blockTypeId: node.blockTypeId,
-          displayName: node.displayName,
-        })),
+        nodes
+          .filter((node) => (node.executionMode ?? 'active') === 'active')
+          .map((node) => ({
+            instanceId: node.instanceId,
+            blockTypeId: node.blockTypeId,
+            displayName: node.displayName,
+          })),
       ),
     [nodes],
   );

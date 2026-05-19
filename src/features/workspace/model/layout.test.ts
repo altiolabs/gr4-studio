@@ -113,7 +113,7 @@ describe('workspace layout model (split tree)', () => {
     });
   });
 
-  it('keeps saved split tree and appends missing panels deterministically', () => {
+  it('prunes stale panes from saved split tree and appends missing panels deterministically', () => {
     const layout = buildEffectiveStudioLayout(
       {
         version: 2,
@@ -148,11 +148,28 @@ describe('workspace layout model (split tree)', () => {
         kind: 'split',
         direction: 'column',
         children: [
-          { kind: 'pane', panelId: 'panel-z' },
           { kind: 'pane', panelId: 'panel-a' },
           { kind: 'pane', panelId: 'panel-b' },
         ],
       },
+      activePanelId: 'panel-a',
+    });
+  });
+
+  it('keeps saved layout panes when no valid panel list is provided', () => {
+    const layout = normalizeStudioLayoutSpec({
+      version: 2,
+      root: {
+        kind: 'split',
+        direction: 'column',
+        children: [{ kind: 'pane', panelId: 'panel-z' }],
+      },
+      activePanelId: 'panel-z',
+    });
+
+    expect(layout).toEqual({
+      version: 2,
+      root: { kind: 'pane', panelId: 'panel-z' },
       activePanelId: 'panel-z',
     });
   });
