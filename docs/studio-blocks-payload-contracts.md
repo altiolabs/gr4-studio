@@ -13,6 +13,7 @@ Related architecture doc:
 - `dataset-xy-json-v1`
 - phosphor spectrum rendering on top of `dataset-xy-json-v1` via `StudioPowerSpectrumSink` with `persistence=true` and phosphor tuning via `phosphor_intensity` / `phosphor_decay_ms`
 - `waterfall-spectrum-json-v1`
+- `audio-float32-binary-v1`
 
 Non-goals:
 
@@ -104,6 +105,40 @@ Frontend routing:
 
 - `payloadFormat=dataset-xy-json-v1` routes to the dataset XY parser, then into the existing vector XY rendering path.
 - `StudioPowerSpectrumSink` with `persistence=true` routes through the same dataset parser, then into the GQRX-style phosphor spectrum renderer. The phosphor panel reads `phosphor_intensity` and `phosphor_decay_ms` from the block parameters.
+
+## Audio Float32 Binary Contract
+
+`audio-float32-binary-v1`
+
+Expected transport:
+
+- WebSocket binary frames
+- one complete audio packet per WebSocket message
+
+Header layout, little-endian:
+
+- `magic`: `uint32`, ASCII `"SAUD"` as little-endian `0x44554153`
+- `version`: `uint16`, currently `1`
+- `flags`: `uint16`, currently `0`
+- `channels`: `uint16`, interleaved channel count
+- `sample_type`: `uint16`, currently `1` for float32
+- `sample_rate`: `uint32`, Hz
+- `frames`: `uint32`, sample frames per channel in this packet
+- `sequence`: `uint64`, monotonically increasing packet sequence
+- `timestamp_ns`: `uint64`, producer timestamp in nanoseconds
+- `payload`: `float32[frames * channels]`, interleaved by frame
+
+Semantics:
+
+- Samples are normalized float audio, normally in `[-1, 1]`.
+- Non-finite values are emitted as `0`.
+- The initial native sink clamps samples to `[-1, 1]` when `clip=true`.
+- The frontend audio runtime should validate sequence continuity and surface gaps as underrun/stall indicators.
+
+Frontend routing:
+
+- `payloadFormat=audio-float32-binary-v1` routes to the audio WebSocket parser and browser playback engine.
+- Playback uses a browser-owned clock; received frames are buffered for an `AudioWorklet` renderer rather than plotted.
 
 ## Waterfall spectrum contract
 

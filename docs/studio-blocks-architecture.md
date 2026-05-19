@@ -62,6 +62,7 @@ Rules:
 - `StudioPowerSpectrumSink`
 - `StudioWaterfallSink`
 - `StudioAudioMonitor`
+- `StudioAudioSink`
 - `StudioImageSink`
 
 The code currently registers concrete type variants for each family, for example:
@@ -72,6 +73,7 @@ The code currently registers concrete type variants for each family, for example
 - `gr::studio::StudioPowerSpectrumSink<...>`
 - `gr::studio::StudioWaterfallSink<...>`
 - `gr::studio::StudioAudioMonitor<...>`
+- `gr::studio::StudioAudioSink<...>`
 - `gr::studio::StudioImageSink<...>`
 
 See `src/features/graph-editor/runtime/known-block-bindings.ts` for the exact reflected IDs currently enabled.
@@ -144,6 +146,8 @@ Rendering is handled separately:
 - `StudioWaterfallSink` emits the effective quantized `time_span` together with `sample_rate`
 - `StudioWaterfallSink` also carries `autoscale`, `z_min`, and `z_max` parameters that control the rendered waterfall colormap range
 - Waterfall plots ignore the generic `x_min` / `x_max` / `y_min` / `y_max` axis-range parameters
+- `StudioAudioMonitor` is a waveform snapshot monitor and uses `audio-window-json-v1`
+- `StudioAudioSink` is a playback-oriented sink and uses `audio-float32-binary-v1` over websocket
 - image and audio panel kinds -> separate renderers
 
 For manual waterfall validation, the repo also ships canonical fixture payloads under `public/demo/`:

@@ -13,6 +13,8 @@ export type WorkspaceLiveBindingInfo = {
   endpoint?: string;
   showEndpointInUi?: boolean;
   updateMs?: number;
+  sampleRate?: number;
+  channels?: number;
   reason?: string;
 };
 
