@@ -126,6 +126,31 @@ function buildEffectiveParameterValues(
   return fromDefaults;
 }
 
+function stringifyResolvedParameterValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return typeof value === 'string' ? value : String(value);
+}
+
+function buildResolvedParameterValues(
+  parameterValues: Record<string, string>,
+  resolvedParameters: ReturnType<typeof resolveGraphVariables>['parametersByNodeId'][string] | undefined,
+): Record<string, string> {
+  if (!resolvedParameters) {
+    return parameterValues;
+  }
+
+  const resolvedValues = { ...parameterValues };
+  Object.entries(resolvedParameters).forEach(([name, resolvedParameter]) => {
+    if (resolvedParameter.state !== 'resolved') {
+      return;
+    }
+    resolvedValues[name] = stringifyResolvedParameterValue(resolvedParameter.value);
+  });
+  return resolvedValues;
+}
+
 function buildNewUntitledSnapshot(): EditorSnapshot {
   return {
     metadata: {
@@ -439,10 +464,14 @@ export function StudioPage() {
         sourceNode.parameters,
         blockDetailsByType.get(sourceNode.blockTypeId),
       );
+      const resolvedParameterValues = buildResolvedParameterValues(
+        effectiveParameterValues,
+        resolvedGraph.parametersByNodeId[sourceNode.instanceId],
+      );
       const bindingView = resolveCurrentSessionStudioBindingView({
         blockTypeId: sourceNode.blockTypeId,
         nodeInstanceId: sourceNode.instanceId,
-        parameterValues: effectiveParameterValues,
+        parameterValues: resolvedParameterValues,
         session: activeRuntimeContext?.session,
       });
 
