@@ -1,0 +1,1520 @@
+{
+  "format": "gr4-studio.graph",
+  "version": 1,
+  "metadata": {
+    "name": "fm_radio_mono.gr4s",
+    "schedulerId": "gr::scheduler::SimpleMulti",
+    "studio": {
+      "panels": [
+        {
+          "id": "studio-panel:gr__studio__StudioPowerSpectrumSink_float32__19",
+          "nodeId": "gr__studio__StudioPowerSpectrumSink_float32__19",
+          "kind": "series2d",
+          "title": "StudioPowerSpectrumSink",
+          "visible": true,
+          "previewOnCanvas": false
+        },
+        {
+          "id": "studio-panel:gr__studio__StudioSeriesSink_float32__20",
+          "nodeId": "gr__studio__StudioSeriesSink_float32__20",
+          "kind": "series",
+          "title": "StudioSeriesSink",
+          "visible": true,
+          "previewOnCanvas": false
+        },
+        {
+          "id": "control-panel",
+          "kind": "control",
+          "title": "Controls",
+          "visible": true,
+          "previewOnCanvas": false,
+          "widgets": []
+        }
+      ],
+      "variables": [
+        {
+          "id": "variable-1",
+          "name": "rf_sample_rate",
+          "binding": {
+            "kind": "expression",
+            "expr": "2000000.0"
+          }
+        },
+        {
+          "id": "variable-2",
+          "name": "audio_rate",
+          "binding": {
+            "kind": "literal",
+            "value": 32000
+          }
+        },
+        {
+          "id": "variable-3",
+          "name": "fm_max_deviation",
+          "binding": {
+            "kind": "literal",
+            "value": 75000
+          }
+        },
+        {
+          "id": "variable-4",
+          "name": "deemphasis_tau",
+          "binding": {
+            "kind": "expression",
+            "expr": "0.000075"
+          }
+        },
+        {
+          "id": "variable-5",
+          "name": "resampler_num_filters",
+          "binding": {
+            "kind": "literal",
+            "value": 32
+          }
+        },
+        {
+          "id": "variable-6",
+          "name": "resampler_stop_band_attenuation",
+          "binding": {
+            "kind": "expression",
+            "expr": "80.0"
+          }
+        },
+        {
+          "id": "variable-7",
+          "name": "sdr_center_frequency",
+          "binding": {
+            "kind": "literal",
+            "value": 99200000
+          }
+        },
+        {
+          "id": "variable-8",
+          "name": "soapy_bandwidth",
+          "binding": {
+            "kind": "expression",
+            "expr": "200000.0"
+          }
+        },
+        {
+          "id": "variable-9",
+          "name": "soapy_gain",
+          "binding": {
+            "kind": "expression",
+            "expr": "70.0"
+          }
+        },
+        {
+          "id": "variable-10",
+          "name": "pi",
+          "binding": {
+            "kind": "expression",
+            "expr": "3.141592653589793"
+          }
+        },
+        {
+          "id": "variable-11",
+          "name": "quadrature_gain",
+          "binding": {
+            "kind": "expression",
+            "expr": "quad_rate / (2 * pi * fm_max_deviation)"
+          }
+        },
+        {
+          "id": "variable-12",
+          "name": "resampler_rate",
+          "binding": {
+            "kind": "expression",
+            "expr": "audio_rate / quad_rate"
+          }
+        },
+        {
+          "id": "variable-13",
+          "name": "station_freq",
+          "binding": {
+            "kind": "literal",
+            "value": 99100000
+          }
+        },
+        {
+          "id": "variable-14",
+          "name": "rotator_frequency_shift",
+          "binding": {
+            "kind": "expression",
+            "expr": "sdr_center_frequency - station_freq"
+          }
+        },
+        {
+          "id": "variable-15",
+          "name": "quad_rate",
+          "binding": {
+            "kind": "literal",
+            "value": 400000
+          }
+        },
+        {
+          "id": "variable-16",
+          "name": "decim",
+          "binding": {
+            "kind": "expression",
+            "expr": "rf_sample_rate / quad_rate"
+          }
+        }
+      ],
+      "layout": {
+        "version": 2,
+        "root": {
+          "kind": "split",
+          "direction": "column",
+          "children": [
+            {
+              "kind": "split",
+              "direction": "row",
+              "children": [
+                {
+                  "kind": "pane",
+                  "panelId": "studio-panel:gr__studio__StudioPowerSpectrumSink_float32__19"
+                },
+                {
+                  "kind": "pane",
+                  "panelId": "studio-panel:gr__studio__StudioAudioSink_float32__21"
+                }
+              ]
+            },
+            {
+              "kind": "split",
+              "direction": "row",
+              "children": [
+                {
+                  "kind": "pane",
+                  "panelId": "studio-panel:gr__studio__StudioPowerSpectrumSink_complex_float32___2"
+                },
+                {
+                  "kind": "pane",
+                  "panelId": "studio-panel:gr__studio__StudioPowerSpectrumSink_complex_float32___2-copy-2"
+                }
+              ],
+              "sizes": [
+                50,
+                50
+              ]
+            },
+            {
+              "kind": "pane",
+              "panelId": "studio-panel:gr__studio__StudioSeriesSink_complex_float32___18"
+            }
+          ],
+          "sizes": [
+            33.334,
+            33.333,
+            33.333
+          ]
+        },
+        "activePanelId": "studio-panel:gr__studio__StudioPowerSpectrumSink_complex_float32___2-copy-2"
+      }
+    }
+  },
+  "graph": {
+    "nodes": [
+      {
+        "id": "gr__studio__StudioPowerSpectrumSink_complex_float32___2",
+        "blockType": "gr::studio::StudioPowerSpectrumSink<complex<float32>>",
+        "title": "Studiopowerspectrumsink<complex<float32>>",
+        "executionMode": "active",
+        "rotation": 0,
+        "position": {
+          "x": 735.3113193695258,
+          "y": 117.90114709816629
+        },
+        "parameters": {
+          "autoscale": {
+            "kind": "literal",
+            "value": true
+          },
+          "center_freq": {
+            "kind": "expression",
+            "expr": "0"
+          },
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "endpoint": {
+            "kind": "literal",
+            "value": "http://127.0.0.1:18085/snapshot"
+          },
+          "fft_size": {
+            "kind": "literal",
+            "value": "1024"
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "8192"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioPowerSpectrumSink<complex<float32>>"
+          },
+          "num_averages": {
+            "kind": "literal",
+            "value": "8"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "output_in_db": {
+            "kind": "literal",
+            "value": true
+          },
+          "persistence": {
+            "kind": "literal",
+            "value": false
+          },
+          "phosphor_decay_ms": {
+            "kind": "literal",
+            "value": "1024"
+          },
+          "phosphor_intensity": {
+            "kind": "literal",
+            "value": "1.100000023841858"
+          },
+          "plot_title": {
+            "kind": "literal",
+            "value": "After Rotator"
+          },
+          "sample_rate": {
+            "kind": "expression",
+            "expr": "rf_sample_rate"
+          },
+          "series_labels": {
+            "kind": "literal",
+            "value": "Power"
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "topic": {
+            "kind": "literal",
+            "value": ""
+          },
+          "transport": {
+            "kind": "literal",
+            "value": "websocket"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioPowerSpectrumSink<complex<float32>>#0"
+          },
+          "update_ms": {
+            "kind": "literal",
+            "value": "10"
+          },
+          "window": {
+            "kind": "literal",
+            "value": "BlackmanHarris"
+          },
+          "x_label": {
+            "kind": "literal",
+            "value": "Frequency"
+          },
+          "x_max": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "x_min": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "y_label": {
+            "kind": "literal",
+            "value": "Power"
+          },
+          "y_max": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "y_min": {
+            "kind": "literal",
+            "value": "0"
+          }
+        }
+      },
+      {
+        "id": "gr__blocks__math__Rotator_complex_float32___4",
+        "blockType": "gr::blocks::math::Rotator<complex<float32>>",
+        "title": "Rotator<complex<float32>>",
+        "executionMode": "active",
+        "rotation": 0,
+        "position": {
+          "x": 362.7602935428188,
+          "y": 344.1041174171275
+        },
+        "parameters": {
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "frequency_shift": {
+            "kind": "expression",
+            "expr": ""
+          },
+          "initial_phase": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "8192"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::blocks::math::Rotator<complex<float32>>"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "8192"
+          },
+          "phase_increment": {
+            "kind": "expression",
+            "expr": "2 * pi * rotator_frequency_shift / rf_sample_rate"
+          },
+          "sample_rate": {
+            "kind": "expression",
+            "expr": "rf_sample_rate"
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::blocks::math::Rotator<complex<float32>>#0"
+          }
+        }
+      },
+      {
+        "id": "gr__incubator__analog__QuadratureDemod_float32__5",
+        "blockType": "gr::incubator::analog::QuadratureDemod<float32>",
+        "title": "Quadraturedemod<float32>",
+        "executionMode": "active",
+        "rotation": 0,
+        "position": {
+          "x": 1096.7058091971678,
+          "y": 405.5072769112617
+        },
+        "parameters": {
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "gain": {
+            "kind": "expression",
+            "expr": "quadrature_gain"
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "4096"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::incubator::analog::QuadratureDemod<float32>"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "4096"
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::incubator::analog::QuadratureDemod<float32>#0"
+          }
+        }
+      },
+      {
+        "id": "gr__incubator__analog__FmDeemphasisFilter_float32__6",
+        "blockType": "gr::incubator::analog::FmDeemphasisFilter<float32>",
+        "title": "Fmdeemphasisfilter<float32>",
+        "executionMode": "active",
+        "rotation": 0,
+        "position": {
+          "x": 1464.4019158459869,
+          "y": 408.3801467714094
+        },
+        "parameters": {
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "4096"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::incubator::analog::FmDeemphasisFilter<float32>"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "4096"
+          },
+          "sample_rate": {
+            "kind": "expression",
+            "expr": "quad_rate"
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "tau": {
+            "kind": "expression",
+            "expr": "deemphasis_tau"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::incubator::analog::FmDeemphasisFilter<float32>#0"
+          }
+        }
+      },
+      {
+        "id": "gr__incubator__pfb__PfbArbResampler_float32__8",
+        "blockType": "gr::incubator::pfb::PfbArbResampler<float32>",
+        "title": "Pfbarbresampler<float32>",
+        "executionMode": "active",
+        "rotation": 0,
+        "position": {
+          "x": 1859.9539745545503,
+          "y": 405.35290459858385
+        },
+        "parameters": {
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "4096"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::incubator::pfb::PfbArbResampler<float32, float32>"
+          },
+          "num_filters": {
+            "kind": "expression",
+            "expr": "resampler_num_filters"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "1024"
+          },
+          "rate": {
+            "kind": "expression",
+            "expr": "resampler_rate"
+          },
+          "sample_delay": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "stop_band_attenuation": {
+            "kind": "expression",
+            "expr": "resampler_stop_band_attenuation"
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "taps": {
+            "kind": "literal",
+            "value": ""
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::incubator::pfb::PfbArbResampler<float32, float32>#0"
+          }
+        }
+      },
+      {
+        "id": "gr__incubator__audio__RtAudioSink_float32__12",
+        "blockType": "gr::incubator::audio::RtAudioSink<float32>",
+        "title": "Rtaudiosink<float32>",
+        "executionMode": "disabled",
+        "rotation": 0,
+        "position": {
+          "x": 2199.3857326675197,
+          "y": 402.1189925803556
+        },
+        "parameters": {
+          "channels_fallback": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "device_index": {
+            "kind": "literal",
+            "value": "-1"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "dither": {
+            "kind": "literal",
+            "value": false
+          },
+          "frames_per_buf": {
+            "kind": "literal",
+            "value": "1024"
+          },
+          "ignore_tag_sample_rate": {
+            "kind": "literal",
+            "value": true
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "1024"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::incubator::audio::RtAudioSink<float32>"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "sample_rate": {
+            "kind": "expression",
+            "expr": "audio_rate"
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "target_latency_s": {
+            "kind": "literal",
+            "value": "0.2"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::incubator::audio::RtAudioSink<float32>#0"
+          }
+        }
+      },
+      {
+        "id": "gr__incubator__soapysdr__SoapyRx_complex_float32___15",
+        "blockType": "gr::incubator::soapysdr::SoapyRx<complex<float32>>",
+        "title": "Soapyrx<complex<float32>>",
+        "executionMode": "active",
+        "rotation": 0,
+        "position": {
+          "x": -5,
+          "y": 336
+        },
+        "parameters": {
+          "antenna": {
+            "kind": "literal",
+            "value": ""
+          },
+          "bandwidth": {
+            "kind": "expression",
+            "expr": "rf_sample_rate"
+          },
+          "center_frequency": {
+            "kind": "expression",
+            "expr": "sdr_center_frequency"
+          },
+          "channel": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "debug": {
+            "kind": "literal",
+            "value": false
+          },
+          "device": {
+            "kind": "literal",
+            "value": "hackrf"
+          },
+          "device_args": {
+            "kind": "literal",
+            "value": ""
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "gain": {
+            "kind": "literal",
+            "value": "72"
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "8192"
+          },
+          "max_chunk_size": {
+            "kind": "literal",
+            "value": "8192"
+          },
+          "max_overflow_count": {
+            "kind": "literal",
+            "value": "10"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::incubator::soapysdr::SoapyRx<complex<float32>>"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "8192"
+          },
+          "sample_rate": {
+            "kind": "expression",
+            "expr": "rf_sample_rate"
+          },
+          "stream_timeout_us": {
+            "kind": "literal",
+            "value": "1000"
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::incubator::soapysdr::SoapyRx<complex<float32>>#0"
+          }
+        }
+      },
+      {
+        "id": "gr__incubator__filter__FirDecimator_complex_float32___16",
+        "blockType": "gr::incubator::filter::FirDecimator<complex<float32>>",
+        "title": "Firdecimator<complex<float32>>",
+        "executionMode": "active",
+        "rotation": 0,
+        "position": {
+          "x": 730.0367752348072,
+          "y": 391.46714217185263
+        },
+        "parameters": {
+          "attenuation_db": {
+            "kind": "literal",
+            "value": "30"
+          },
+          "beta": {
+            "kind": "literal",
+            "value": "6.760000228881836"
+          },
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "decim": {
+            "kind": "literal",
+            "value": "5"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "f_high": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "f_low": {
+            "kind": "literal",
+            "value": "120000"
+          },
+          "filter_response": {
+            "kind": "literal",
+            "value": "LOWPASS"
+          },
+          "gain": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "5"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::incubator::filter::FirDecimator<complex<float32>>"
+          },
+          "num_taps": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "sample_rate": {
+            "kind": "expression",
+            "expr": "rf_sample_rate"
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "taps": {
+            "kind": "literal",
+            "value": "[]"
+          },
+          "transition_width": {
+            "kind": "literal",
+            "value": "60000"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::incubator::filter::FirDecimator<complex<float32>>#0"
+          },
+          "window": {
+            "kind": "literal",
+            "value": "Kaiser"
+          },
+          "design_sample_rate": {
+            "kind": "literal",
+            "value": "0"
+          }
+        }
+      },
+      {
+        "id": "gr__studio__StudioPowerSpectrumSink_complex_float32___2-copy-2",
+        "blockType": "gr::studio::StudioPowerSpectrumSink<complex<float32>>",
+        "title": "Studiopowerspectrumsink<complex<float32>>",
+        "executionMode": "active",
+        "rotation": 0,
+        "position": {
+          "x": 1099.2860288137572,
+          "y": 612.5329013489617
+        },
+        "parameters": {
+          "autoscale": {
+            "kind": "literal",
+            "value": true
+          },
+          "center_freq": {
+            "kind": "expression",
+            "expr": "0"
+          },
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "endpoint": {
+            "kind": "literal",
+            "value": "http://127.0.0.1:18085/snapshot"
+          },
+          "fft_size": {
+            "kind": "literal",
+            "value": "1024"
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "8192"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioPowerSpectrumSink<complex<float32>>"
+          },
+          "num_averages": {
+            "kind": "literal",
+            "value": "8"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "output_in_db": {
+            "kind": "literal",
+            "value": true
+          },
+          "persistence": {
+            "kind": "literal",
+            "value": false
+          },
+          "phosphor_decay_ms": {
+            "kind": "literal",
+            "value": "1024"
+          },
+          "phosphor_intensity": {
+            "kind": "literal",
+            "value": "1.100000023841858"
+          },
+          "plot_title": {
+            "kind": "literal",
+            "value": "After Decimator"
+          },
+          "sample_rate": {
+            "kind": "expression",
+            "expr": "quad_rate"
+          },
+          "series_labels": {
+            "kind": "literal",
+            "value": "Power"
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "topic": {
+            "kind": "literal",
+            "value": ""
+          },
+          "transport": {
+            "kind": "literal",
+            "value": "websocket"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioPowerSpectrumSink<complex<float32>>#0"
+          },
+          "update_ms": {
+            "kind": "literal",
+            "value": "100"
+          },
+          "window": {
+            "kind": "literal",
+            "value": "BlackmanHarris"
+          },
+          "x_label": {
+            "kind": "literal",
+            "value": "Frequency"
+          },
+          "x_max": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "x_min": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "y_label": {
+            "kind": "literal",
+            "value": "Power"
+          },
+          "y_max": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "y_min": {
+            "kind": "literal",
+            "value": "0"
+          }
+        }
+      },
+      {
+        "id": "gr__studio__StudioSeriesSink_complex_float32___18",
+        "blockType": "gr::studio::StudioSeriesSink<complex<float32>>",
+        "title": "Studioseriessink<complex<float32>>",
+        "executionMode": "active",
+        "rotation": 0,
+        "position": {
+          "x": 734.6006882030449,
+          "y": 597.2919311131734
+        },
+        "parameters": {
+          "autoscale": {
+            "kind": "literal",
+            "value": true
+          },
+          "channels": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "endpoint": {
+            "kind": "literal",
+            "value": "http://127.0.0.1:18080/snapshot"
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioSeriesSink<complex<float32>>"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "plot_title": {
+            "kind": "literal",
+            "value": "Decimator Series"
+          },
+          "series_labels": {
+            "kind": "literal",
+            "value": ""
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "topic": {
+            "kind": "literal",
+            "value": ""
+          },
+          "transport": {
+            "kind": "literal",
+            "value": "websocket"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioSeriesSink<complex<float32>>#0"
+          },
+          "update_ms": {
+            "kind": "literal",
+            "value": "250"
+          },
+          "window_size": {
+            "kind": "literal",
+            "value": "1024"
+          },
+          "x_label": {
+            "kind": "literal",
+            "value": ""
+          },
+          "y_label": {
+            "kind": "literal",
+            "value": ""
+          },
+          "y_max": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "y_min": {
+            "kind": "literal",
+            "value": "0"
+          }
+        }
+      },
+      {
+        "id": "gr__studio__StudioPowerSpectrumSink_float32__19",
+        "blockType": "gr::studio::StudioPowerSpectrumSink<float32>",
+        "title": "Studiopowerspectrumsink<float32>",
+        "executionMode": "active",
+        "rotation": 0,
+        "position": {
+          "x": 2200.4818869531873,
+          "y": 202.4465290389001
+        },
+        "parameters": {
+          "autoscale": {
+            "kind": "literal",
+            "value": true
+          },
+          "center_freq": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "endpoint": {
+            "kind": "literal",
+            "value": "http://127.0.0.1:18085/snapshot"
+          },
+          "fft_size": {
+            "kind": "literal",
+            "value": "1024"
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioPowerSpectrumSink<float32>"
+          },
+          "num_averages": {
+            "kind": "literal",
+            "value": "8"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "output_in_db": {
+            "kind": "literal",
+            "value": true
+          },
+          "persistence": {
+            "kind": "literal",
+            "value": false
+          },
+          "phosphor_decay_ms": {
+            "kind": "literal",
+            "value": "1024"
+          },
+          "phosphor_intensity": {
+            "kind": "literal",
+            "value": "1.100000023841858"
+          },
+          "plot_title": {
+            "kind": "literal",
+            "value": "Power Spectrum"
+          },
+          "sample_rate": {
+            "kind": "expression",
+            "expr": "audio_sample_rate"
+          },
+          "series_labels": {
+            "kind": "literal",
+            "value": "Power"
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "topic": {
+            "kind": "literal",
+            "value": ""
+          },
+          "transport": {
+            "kind": "literal",
+            "value": "websocket"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioPowerSpectrumSink<float32>#0"
+          },
+          "update_ms": {
+            "kind": "literal",
+            "value": "10"
+          },
+          "window": {
+            "kind": "literal",
+            "value": "BlackmanHarris"
+          },
+          "x_label": {
+            "kind": "literal",
+            "value": "Frequency"
+          },
+          "x_max": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "x_min": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "y_label": {
+            "kind": "literal",
+            "value": "Power"
+          },
+          "y_max": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "y_min": {
+            "kind": "literal",
+            "value": "0"
+          }
+        }
+      },
+      {
+        "id": "gr__studio__StudioSeriesSink_float32__20",
+        "blockType": "gr::studio::StudioSeriesSink<float32>",
+        "title": "Studioseriessink<float32>",
+        "executionMode": "disabled",
+        "rotation": 0,
+        "position": {
+          "x": 2205.7439256717207,
+          "y": 12.813953751740904
+        },
+        "parameters": {
+          "autoscale": {
+            "kind": "literal",
+            "value": true
+          },
+          "channels": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "endpoint": {
+            "kind": "literal",
+            "value": "http://127.0.0.1:18080/snapshot"
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioSeriesSink<float32>"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "plot_title": {
+            "kind": "literal",
+            "value": ""
+          },
+          "series_labels": {
+            "kind": "literal",
+            "value": ""
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "topic": {
+            "kind": "literal",
+            "value": ""
+          },
+          "transport": {
+            "kind": "literal",
+            "value": "websocket"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioSeriesSink<float32>#0"
+          },
+          "update_ms": {
+            "kind": "literal",
+            "value": "250"
+          },
+          "window_size": {
+            "kind": "literal",
+            "value": "1024"
+          },
+          "x_label": {
+            "kind": "literal",
+            "value": ""
+          },
+          "y_label": {
+            "kind": "literal",
+            "value": ""
+          },
+          "y_max": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "y_min": {
+            "kind": "literal",
+            "value": "0"
+          }
+        }
+      },
+      {
+        "id": "gr__studio__StudioAudioSink_float32__21",
+        "blockType": "gr::studio::StudioAudioSink<float32>",
+        "title": "Studioaudiosink<float32>",
+        "executionMode": "active",
+        "rotation": 0,
+        "position": {
+          "x": 2204.1321524744144,
+          "y": 606.0005186426308
+        },
+        "parameters": {
+          "buffer_ms": {
+            "kind": "literal",
+            "value": "100"
+          },
+          "channels": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "clip": {
+            "kind": "literal",
+            "value": true
+          },
+          "compute_domain": {
+            "kind": "literal",
+            "value": "default_io"
+          },
+          "disconnect_on_done": {
+            "kind": "literal",
+            "value": true
+          },
+          "endpoint": {
+            "kind": "literal",
+            "value": "ws://127.0.0.1:18084/audio"
+          },
+          "frame_ms": {
+            "kind": "literal",
+            "value": "20"
+          },
+          "gain": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "input_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioAudioSink<float32>"
+          },
+          "output_chunk_size": {
+            "kind": "literal",
+            "value": "1"
+          },
+          "sample_rate": {
+            "kind": "expression",
+            "expr": "audio_rate"
+          },
+          "stride": {
+            "kind": "literal",
+            "value": "0"
+          },
+          "topic": {
+            "kind": "literal",
+            "value": ""
+          },
+          "transport": {
+            "kind": "literal",
+            "value": "websocket"
+          },
+          "ui_constraints": {
+            "kind": "literal",
+            "value": ""
+          },
+          "unique_name": {
+            "kind": "literal",
+            "value": "gr::studio::StudioAudioSink<float32>#0"
+          }
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "gr__blocks__math__Rotator_complex_float32___4:out->gr__studio__StudioPowerSpectrumSink_complex_float32___2:in",
+        "source": {
+          "nodeId": "gr__blocks__math__Rotator_complex_float32___4",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__studio__StudioPowerSpectrumSink_complex_float32___2",
+          "portId": "in"
+        }
+      },
+      {
+        "id": "gr__incubator__analog__QuadratureDemod_float32__5:out->gr__incubator__analog__FmDeemphasisFilter_float32__6:in",
+        "source": {
+          "nodeId": "gr__incubator__analog__QuadratureDemod_float32__5",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__incubator__analog__FmDeemphasisFilter_float32__6",
+          "portId": "in"
+        }
+      },
+      {
+        "id": "gr__incubator__analog__FmDeemphasisFilter_float32__6:out->gr__incubator__pfb__PfbArbResampler_float32__8:in",
+        "source": {
+          "nodeId": "gr__incubator__analog__FmDeemphasisFilter_float32__6",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__incubator__pfb__PfbArbResampler_float32__8",
+          "portId": "in"
+        }
+      },
+      {
+        "id": "gr__incubator__pfb__PfbArbResampler_float32__8:out->gr__incubator__audio__RtAudioSink_float32__12:in",
+        "source": {
+          "nodeId": "gr__incubator__pfb__PfbArbResampler_float32__8",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__incubator__audio__RtAudioSink_float32__12",
+          "portId": "in"
+        }
+      },
+      {
+        "id": "gr__incubator__soapysdr__SoapyRx_complex_float32___15:out->gr__blocks__math__Rotator_complex_float32___4:in",
+        "source": {
+          "nodeId": "gr__incubator__soapysdr__SoapyRx_complex_float32___15",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__blocks__math__Rotator_complex_float32___4",
+          "portId": "in"
+        }
+      },
+      {
+        "id": "gr__blocks__math__Rotator_complex_float32___4:out->gr__incubator__filter__FirDecimator_complex_float32___16:in",
+        "source": {
+          "nodeId": "gr__blocks__math__Rotator_complex_float32___4",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__incubator__filter__FirDecimator_complex_float32___16",
+          "portId": "in"
+        }
+      },
+      {
+        "id": "gr__incubator__filter__FirDecimator_complex_float32___16:out->gr__incubator__analog__QuadratureDemod_float32__5:in",
+        "source": {
+          "nodeId": "gr__incubator__filter__FirDecimator_complex_float32___16",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__incubator__analog__QuadratureDemod_float32__5",
+          "portId": "in"
+        }
+      },
+      {
+        "id": "gr__incubator__filter__FirDecimator_complex_float32___16:out->gr__studio__StudioPowerSpectrumSink_complex_float32___2-copy-2:in",
+        "source": {
+          "nodeId": "gr__incubator__filter__FirDecimator_complex_float32___16",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__studio__StudioPowerSpectrumSink_complex_float32___2-copy-2",
+          "portId": "in"
+        }
+      },
+      {
+        "id": "gr__incubator__filter__FirDecimator_complex_float32___16:out->gr__studio__StudioSeriesSink_complex_float32___18:in",
+        "source": {
+          "nodeId": "gr__incubator__filter__FirDecimator_complex_float32___16",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__studio__StudioSeriesSink_complex_float32___18",
+          "portId": "in"
+        }
+      },
+      {
+        "id": "gr__incubator__pfb__PfbArbResampler_float32__8:out->gr__studio__StudioPowerSpectrumSink_float32__19:in",
+        "source": {
+          "nodeId": "gr__incubator__pfb__PfbArbResampler_float32__8",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__studio__StudioPowerSpectrumSink_float32__19",
+          "portId": "in"
+        }
+      },
+      {
+        "id": "gr__incubator__pfb__PfbArbResampler_float32__8:out->gr__studio__StudioSeriesSink_float32__20:in",
+        "source": {
+          "nodeId": "gr__incubator__pfb__PfbArbResampler_float32__8",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__studio__StudioSeriesSink_float32__20",
+          "portId": "in"
+        }
+      },
+      {
+        "id": "gr__incubator__pfb__PfbArbResampler_float32__8:out->gr__studio__StudioAudioSink_float32__21:in",
+        "source": {
+          "nodeId": "gr__incubator__pfb__PfbArbResampler_float32__8",
+          "portId": "out"
+        },
+        "target": {
+          "nodeId": "gr__studio__StudioAudioSink_float32__21",
+          "portId": "in"
+        }
+      }
+    ]
+  }
+}
