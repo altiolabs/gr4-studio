@@ -16,6 +16,7 @@ import {
 } from './runtime-settings-model';
 import { useEditorStore } from '../graph-editor/store/editorStore';
 import { useGraphTabsStore, type EditorSnapshot } from '../graph-tabs/store/graphTabsStore';
+import type { ApplicationMode } from '../graph-document/model/studio-workspace';
 import type { RuntimeSettingsValue } from '../../lib/api/block-settings';
 import { useRuntimeSessionStore } from '../runtime-session/store/runtimeSessionStore';
 import { buildCurrentGraphSubmissionFromEditorSnapshot } from '../runtime-submission/model/current-graph-submission';
@@ -726,6 +727,7 @@ export function InspectorPanel() {
   const studioLayout = useEditorStore((state) => state.studioLayout);
   const studioPlotPalettes = useEditorStore((state) => state.studioPlotPalettes);
   const application = useEditorStore((state) => state.application);
+  const setApplication = useEditorStore((state) => state.setApplication);
   const nodes = useEditorStore((state) => state.nodes);
   const edges = useEditorStore((state) => state.edges);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -834,6 +836,22 @@ export function InspectorPanel() {
   );
 
   const recentActivity = runtimeContext?.activity.slice(0, 15) ?? [];
+  const applicationMode = application?.mode ?? 'in_app';
+  const applicationTitle = application?.title ?? '';
+  const updateApplicationMode = (mode: ApplicationMode) => {
+    setApplication({
+      mode,
+      renderer: application?.renderer ?? 'react',
+      title: application?.title,
+    });
+  };
+  const updateApplicationTitle = (title: string) => {
+    setApplication({
+      mode: application?.mode ?? 'in_app',
+      renderer: application?.renderer ?? 'react',
+      title,
+    });
+  };
 
   return (
     <div className="h-full min-h-0 flex flex-col">
@@ -895,6 +913,28 @@ export function InspectorPanel() {
                     ))}
                   </select>
                   {schedulersQuery.isError && <SummaryValue>Failed to load schedulers.</SummaryValue>}
+                </div>
+                <div>
+                  <SummaryLabel>Display Mode</SummaryLabel>
+                  <select
+                    value={applicationMode}
+                    onChange={(event) => updateApplicationMode(event.target.value as ApplicationMode)}
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100"
+                  >
+                    <option value="in_app">In-app</option>
+                    <option value="new_tab">New tab</option>
+                    <option value="popout">Popout</option>
+                  </select>
+                </div>
+                <div>
+                  <SummaryLabel>Display Title</SummaryLabel>
+                  <input
+                    type="text"
+                    value={applicationTitle}
+                    onChange={(event) => updateApplicationTitle(event.target.value)}
+                    placeholder={activeGraphTab?.document.displayName || documentName || 'Application'}
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 placeholder:text-slate-500"
+                  />
                 </div>
                 <div>
                   <SummaryLabel>Blocks</SummaryLabel>

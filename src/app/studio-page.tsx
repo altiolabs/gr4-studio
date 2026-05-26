@@ -216,7 +216,6 @@ export function StudioPage() {
   const setStudioLayout = useEditorStore((state) => state.setStudioLayout);
   const setStudioPanels = useEditorStore((state) => state.setStudioPanels);
   const setStudioPlotPalettes = useEditorStore((state) => state.setStudioPlotPalettes);
-  const setApplication = useEditorStore((state) => state.setApplication);
 
   const tabs = useGraphTabsStore((state) => state.tabs);
   const activeTabId = useGraphTabsStore((state) => state.activeTabId);
@@ -1284,14 +1283,6 @@ export function StudioPage() {
     setStudioPanels(nextPanels);
   };
 
-  const updateApplicationMode = (mode: ApplicationMode) => {
-    setApplication({
-      mode,
-      renderer: application?.renderer ?? 'react',
-      title: application?.title,
-    });
-  };
-
   return (
     <div className="h-screen overflow-hidden bg-slate-900 text-slate-100 flex flex-col">
       <header className="h-16 shrink-0 border-b border-cyan-950/70 bg-slate-950/92 px-4 flex items-center justify-between gap-4 shadow-[0_10px_40px_rgba(2,132,199,0.06)]">
@@ -1487,18 +1478,6 @@ export function StudioPage() {
               </button>
             ) : null}
             <div className="ml-auto flex items-center gap-2">
-              <label className="flex items-center gap-1 text-[11px] text-slate-400">
-                <span>Open</span>
-                <select
-                  value={applicationMode}
-                  onChange={(event) => updateApplicationMode(event.target.value as ApplicationMode)}
-                  className="h-7 rounded border border-slate-700 bg-slate-900 px-2 text-xs text-slate-200 outline-none focus:border-cyan-500"
-                >
-                  <option value="in_app">In-app</option>
-                  <option value="new_tab">New tab</option>
-                  <option value="popout">Popout</option>
-                </select>
-              </label>
               {runtimeView && activeTabId && (
                 <div className="flex items-center gap-1.5 rounded border border-slate-700 bg-slate-900/70 px-2 py-1">
                   <StatusPill status={runtimeView.executionState} />
