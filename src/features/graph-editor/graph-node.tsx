@@ -5,18 +5,25 @@ import type { RenderedPort } from '../ports/model/types';
 import { getPortTypeColor } from '../ports/model/typeColors';
 import type { FlowNodeData } from './model/types';
 import { HttpTimeSeriesPopout } from './runtime/http-time-series-popout';
-import { isQuarterTurnNodeRotation } from './model/node-rotation';
+import {
+  isQuarterTurnNodeRotation,
+  resolveNodePortVisualSide,
+  type LogicalNodePortSide,
+  type VisualNodePortSide,
+} from './model/node-rotation';
 
 type GraphFlowNode = Node<FlowNodeData>;
 
 const PORT_BADGE_HEIGHT_PX = 18;
 const PORT_BADGE_GAP_PX = Math.floor(PORT_BADGE_HEIGHT_PX * 0.5);
 const PORT_BADGE_STEP_PX = PORT_BADGE_HEIGHT_PX + PORT_BADGE_GAP_PX;
+const PORT_BADGE_MIN_WIDTH_PX = 56;
+const PORT_BADGE_MAX_WIDTH_PX = 140;
 const NODE_MIN_BODY_HEIGHT_PX = 120;
 const NODE_VERTICAL_PADDING_PX = 20;
 const NODE_MIN_BODY_WIDTH_PX = 224;
 
-function handleTopPosition(index: number, total: number): string {
+function stackedPortPosition(index: number, total: number): string {
   if (total <= 1) {
     return '50%';
   }
@@ -37,37 +44,95 @@ function requiredNodeHeightForPorts(portCount: number): number {
   );
 }
 
+function requiredNodeWidthForPorts(portCount: number): number {
+  if (portCount <= 1) {
+    return NODE_MIN_BODY_WIDTH_PX;
+  }
+
+  const stackedPortsWidth = PORT_BADGE_HEIGHT_PX + (portCount - 1) * PORT_BADGE_STEP_PX;
+  return Math.max(
+    NODE_MIN_BODY_WIDTH_PX,
+    stackedPortsWidth + NODE_VERTICAL_PADDING_PX * 2,
+  );
+}
+
 type PortBadgeProps = {
   port: RenderedPort;
   index: number;
   total: number;
-  side: 'left' | 'right';
+  side: LogicalNodePortSide;
   rotation: 0 | 90 | 180 | 270;
 };
 
-function getHandlePositionForRotation(side: 'left' | 'right', rotation: 0 | 90 | 180 | 270): Position {
-  if (rotation === 90) {
-    return side === 'left' ? Position.Top : Position.Bottom;
+function getHandlePositionForVisualSide(side: VisualNodePortSide): Position {
+  if (side === 'top') {
+    return Position.Top;
   }
 
-  if (rotation === 180) {
-    return side === 'left' ? Position.Right : Position.Left;
+  if (side === 'bottom') {
+    return Position.Bottom;
   }
 
-  if (rotation === 270) {
-    return side === 'left' ? Position.Bottom : Position.Top;
+  if (side === 'right') {
+    return Position.Right;
   }
 
-  return side === 'left' ? Position.Left : Position.Right;
+  return Position.Left;
+}
+
+function getPortBadgePlacementStyle(
+  side: VisualNodePortSide,
+  index: number,
+  total: number,
+): CSSProperties {
+  const offset = stackedPortPosition(index, total);
+
+  if (side === 'top') {
+    return {
+      top: 0,
+      left: offset,
+      transform: 'translate(-50%, -100%)',
+    };
+  }
+
+  if (side === 'bottom') {
+    return {
+      bottom: 0,
+      left: offset,
+      transform: 'translate(-50%, 100%)',
+    };
+  }
+
+  if (side === 'right') {
+    return {
+      right: 2,
+      top: offset,
+      transform: 'translate(100%, -50%)',
+    };
+  }
+
+  return {
+    left: 8,
+    top: offset,
+    transform: 'translate(-100%, -50%)',
+  };
+}
+
+function isVerticalPortSide(side: VisualNodePortSide): boolean {
+  return side === 'top' || side === 'bottom';
 }
 
 function ConnectablePortBadge({ port, index, total, side, rotation }: PortBadgeProps) {
   const typeColor = getPortTypeColor(port.typeName);
+  const visualSide = resolveNodePortVisualSide(side, rotation);
+  const isVertical = isVerticalPortSide(visualSide);
   const baseStyle: CSSProperties = {
-    width: 'auto',
-    minWidth: 56,
-    maxWidth: 140,
-    height: PORT_BADGE_HEIGHT_PX,
+    width: isVertical ? PORT_BADGE_HEIGHT_PX : 'auto',
+    minWidth: isVertical ? PORT_BADGE_HEIGHT_PX : PORT_BADGE_MIN_WIDTH_PX,
+    maxWidth: isVertical ? PORT_BADGE_HEIGHT_PX : PORT_BADGE_MAX_WIDTH_PX,
+    height: isVertical ? PORT_BADGE_MIN_WIDTH_PX : PORT_BADGE_HEIGHT_PX,
+    minHeight: isVertical ? PORT_BADGE_MIN_WIDTH_PX : undefined,
+    maxHeight: isVertical ? PORT_BADGE_MAX_WIDTH_PX : undefined,
     borderRadius: 3,
     border: `1px solid ${typeColor.border}`,
     background: typeColor.background,
@@ -78,77 +143,31 @@ function ConnectablePortBadge({ port, index, total, side, rotation }: PortBadgeP
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: '0 6px',
+    padding: isVertical ? '6px 0' : '0 6px',
     whiteSpace: 'nowrap',
     pointerEvents: 'all',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
   };
-
-  const sideStyle: CSSProperties = (() => {
-    if (rotation === 90) {
-      return side === 'left'
-        ? {
-            left: 8,
-            transform: 'translate(-100%, -50%)',
-          }
-        : {
-            right: 2,
-            transform: 'translate(100%, -50%)',
-          };
-    }
-
-    if (rotation === 180) {
-      return side === 'left'
-        ? {
-            left: 8,
-            transform: 'translate(-100%, -50%)',
-          }
-        : {
-            right: 2,
-            transform: 'translate(100%, -50%)',
-          };
-    }
-
-    if (rotation === 270) {
-      return side === 'left'
-        ? {
-            left: 8,
-            transform: 'translate(-100%, -50%)',
-          }
-        : {
-            right: 2,
-            transform: 'translate(100%, -50%)',
-          };
-    }
-
-    return side === 'left'
-      ? {
-          left: 8,
-          transform: 'translate(-100%, -50%)',
-        }
-      : {
-          right: 2,
-          transform: 'translate(100%, -50%)',
-        };
-  })();
+  const sideStyle = getPortBadgePlacementStyle(visualSide, index, total);
 
   return (
     <Handle
       id={port.handleId ?? port.portId}
       key={`${side}:${port.key}`}
-      type={side === 'left' ? 'target' : 'source'}
-      position={getHandlePositionForRotation(side, rotation)}
+      type={side === 'input' ? 'target' : 'source'}
+      position={getHandlePositionForVisualSide(visualSide)}
       title={port.displayLabel}
-      style={{ ...baseStyle, ...sideStyle, top: handleTopPosition(index, total), zIndex: 0 }}
+      style={{ ...baseStyle, ...sideStyle, zIndex: 0 }}
     >
       <span
         style={{
           display: 'inline-block',
-          maxWidth: '100%',
+          maxWidth: isVertical ? PORT_BADGE_MAX_WIDTH_PX : '100%',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
+          transform: isVertical ? 'rotate(90deg)' : undefined,
         }}
       >
         {port.displayLabel}
@@ -159,67 +178,40 @@ function ConnectablePortBadge({ port, index, total, side, rotation }: PortBadgeP
 
 function CollapsedPortBadge({ port, index, total, side, rotation }: PortBadgeProps) {
   const typeColor = getPortTypeColor(port.typeName);
-  const style: CSSProperties = (() => {
-    if (rotation === 90) {
-      return side === 'left'
-        ? {
-            left: 8,
-            transform: 'translate(-100%, -50%)',
-          }
-        : {
-            right: 2,
-            transform: 'translate(100%, -50%)',
-          };
-    }
-
-    if (rotation === 180) {
-      return side === 'left'
-        ? {
-            left: 8,
-            transform: 'translate(-100%, -50%)',
-          }
-        : {
-            right: 2,
-            transform: 'translate(100%, -50%)',
-          };
-    }
-
-    if (rotation === 270) {
-      return side === 'left'
-        ? {
-            left: 8,
-            transform: 'translate(-100%, -50%)',
-          }
-        : {
-            right: 2,
-            transform: 'translate(100%, -50%)',
-          };
-    }
-
-    return side === 'left'
-      ? {
-          left: 8,
-          transform: 'translate(-100%, -50%)',
-        }
-      : {
-          right: 2,
-          transform: 'translate(100%, -50%)',
-        };
-  })();
+  const visualSide = resolveNodePortVisualSide(side, rotation);
+  const isVertical = isVerticalPortSide(visualSide);
+  const style = getPortBadgePlacementStyle(visualSide, index, total);
 
   return (
     <div
       className="absolute z-0 min-w-14 max-w-[140px] h-[18px] rounded text-[10px] font-medium leading-4 flex items-center justify-center px-1 whitespace-nowrap overflow-hidden text-ellipsis"
       style={{
         ...style,
-        top: handleTopPosition(index, total),
         border: `1px solid ${typeColor.border}`,
         background: typeColor.background,
         color: typeColor.text,
+        width: isVertical ? PORT_BADGE_HEIGHT_PX : undefined,
+        minWidth: isVertical ? PORT_BADGE_HEIGHT_PX : undefined,
+        maxWidth: isVertical ? PORT_BADGE_HEIGHT_PX : undefined,
+        height: isVertical ? PORT_BADGE_MIN_WIDTH_PX : undefined,
+        minHeight: isVertical ? PORT_BADGE_MIN_WIDTH_PX : undefined,
+        maxHeight: isVertical ? PORT_BADGE_MAX_WIDTH_PX : undefined,
+        padding: isVertical ? '6px 0' : undefined,
       }}
       title={port.displayLabel}
     >
-      {port.displayLabel}
+      <span
+        style={{
+          display: 'inline-block',
+          maxWidth: isVertical ? PORT_BADGE_MAX_WIDTH_PX : '100%',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          transform: isVertical ? 'rotate(90deg)' : undefined,
+        }}
+      >
+        {port.displayLabel}
+      </span>
     </div>
   );
 }
@@ -230,25 +222,25 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
   const updateNodeInternals = useUpdateNodeInternals();
   const executionMode = data.executionMode ?? 'active';
   const rotation = data.rotation;
-  const isUpsideDown = rotation === 180;
   const isQuarterTurn = isQuarterTurnNodeRotation(rotation);
+  const maxPortCount = Math.max(inputPorts.length, outputPorts.length);
   const nodeWidthPx = isQuarterTurn
-    ? requiredNodeHeightForPorts(Math.max(inputPorts.length, outputPorts.length))
+    ? requiredNodeWidthForPorts(maxPortCount)
     : NODE_MIN_BODY_WIDTH_PX;
+  const requiredHeightPx = isQuarterTurn
+    ? NODE_MIN_BODY_HEIGHT_PX
+    : requiredNodeHeightForPorts(maxPortCount);
   const nodeStyle: CSSProperties = {
     width: `${nodeWidthPx}px`,
     minWidth: `${nodeWidthPx}px`,
     maxWidth: `${nodeWidthPx}px`,
-    minHeight: `${isQuarterTurn ? NODE_MIN_BODY_WIDTH_PX : requiredNodeHeightForPorts(Math.max(inputPorts.length, outputPorts.length))}px`,
-    transform: `rotate(${rotation}deg)`,
-    transformOrigin: 'center center',
+    minHeight: `${requiredHeightPx}px`,
   };
   const handleSignature = [
     `rotation:${rotation}`,
     ...inputPorts.map((port) => `${port.key}:${port.handleId ?? port.portId ?? ''}`),
     ...outputPorts.map((port) => `${port.key}:${port.handleId ?? port.portId ?? ''}`),
   ].join('|');
-  const requiredHeightPx = requiredNodeHeightForPorts(Math.max(inputPorts.length, outputPorts.length));
 
   useEffect(() => {
     updateNodeInternals(data.instanceId);
@@ -266,7 +258,7 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
             port={port}
             index={index}
             total={inputPorts.length}
-            side="left"
+            side="input"
             rotation={rotation}
           />
         ) : (
@@ -275,7 +267,7 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
             port={port}
             index={index}
             total={inputPorts.length}
-            side="left"
+            side="input"
             rotation={rotation}
           />
         ),
@@ -288,7 +280,7 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
             port={port}
             index={index}
             total={outputPorts.length}
-            side="right"
+            side="output"
             rotation={rotation}
           />
         ) : (
@@ -297,7 +289,7 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
             port={port}
             index={index}
             total={outputPorts.length}
-            side="right"
+            side="output"
             rotation={rotation}
           />
         ),
@@ -334,10 +326,7 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
             aria-hidden="true"
           />
         )}
-        <div
-          className="relative z-10"
-          style={isUpsideDown ? { transform: 'rotate(180deg)', transformOrigin: 'center center' } : undefined}
-        >
+        <div className="relative z-10">
           {data.supportsRuntimeVisualization && (
             <button
               type="button"

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { isQuarterTurnNodeRotation, rotateNodeRotation } from './node-rotation';
+import {
+  isQuarterTurnNodeRotation,
+  resolveNodePortVisualSide,
+  rotateNodeRotation,
+} from './node-rotation';
 
 describe('node rotation helpers', () => {
   it('cycles node rotations left and right', () => {
@@ -19,5 +23,19 @@ describe('node rotation helpers', () => {
     expect(isQuarterTurnNodeRotation(90)).toBe(true);
     expect(isQuarterTurnNodeRotation(180)).toBe(false);
     expect(isQuarterTurnNodeRotation(270)).toBe(true);
+  });
+
+  it('maps logical port sides to visual sides by rotation', () => {
+    expect(resolveNodePortVisualSide('input', 0)).toBe('left');
+    expect(resolveNodePortVisualSide('output', 0)).toBe('right');
+
+    expect(resolveNodePortVisualSide('input', 90)).toBe('top');
+    expect(resolveNodePortVisualSide('output', 90)).toBe('bottom');
+
+    expect(resolveNodePortVisualSide('input', 180)).toBe('right');
+    expect(resolveNodePortVisualSide('output', 180)).toBe('left');
+
+    expect(resolveNodePortVisualSide('input', 270)).toBe('bottom');
+    expect(resolveNodePortVisualSide('output', 270)).toBe('top');
   });
 });

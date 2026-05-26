@@ -600,7 +600,6 @@ export function GraphEditorPanel({
   }, [editorNodes, openRuntimeVisualizationId]);
 
   useEffect(() => {
-    const enableArrowRotationShortcut = false;
     const onKeyDown = (event: KeyboardEvent) => {
       if (isBlockPropertiesOpen) {
         return;
@@ -648,7 +647,7 @@ export function GraphEditorPanel({
       }
 
       const key = event.key.toLowerCase();
-      if (enableArrowRotationShortcut && (key === 'arrowleft' || key === 'arrowright')) {
+      if (key === 'arrowleft' || key === 'arrowright') {
         const direction = key === 'arrowright' ? 'right' : 'left';
         event.preventDefault();
         idsToRemove.forEach((nodeId) => {
