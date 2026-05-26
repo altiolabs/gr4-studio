@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isSessionStreamWebSocketPath,
   resolveProxyTarget,
+  rewriteIndexAssetUrls,
   stripAppApiPrefix,
 } from './app-server.mjs';
 
@@ -26,5 +27,15 @@ describe('desktop app server routing', () => {
         'http://127.0.0.1:8080',
       ).toString(),
     ).toBe('http://127.0.0.1:8080/sessions/sess_1/streams/stream_1/ws?topic=plot');
+  });
+
+  it('rewrites desktop index asset urls for nested application routes', () => {
+    expect(
+      rewriteIndexAssetUrls(
+        '<script src="./assets/index.js"></script><link href="./assets/index.css"><link href="./favicon.ico">',
+      ),
+    ).toBe(
+      '<script src="/assets/index.js"></script><link href="/assets/index.css"><link href="/favicon.ico">',
+    );
   });
 });

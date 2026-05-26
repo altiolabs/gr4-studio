@@ -162,8 +162,10 @@ function useDesktopBootStatus(): DesktopBootStatus | null {
 function AppBootstrap() {
   const bootStatus = useDesktopBootStatus();
   const isDesktopBootManaged = Boolean(window.gr4StudioShell?.getBootStatus);
+  const isDisplayApplicationRoute =
+    window.location.pathname.startsWith('/app-runtime/') || window.location.hash.startsWith('#/app-runtime/');
 
-  if (isDesktopBootManaged && !bootStatus) {
+  if (isDesktopBootManaged && !bootStatus && !isDisplayApplicationRoute) {
     return (
       <BootScreen
         status={{
@@ -178,7 +180,7 @@ function AppBootstrap() {
     );
   }
 
-  if (bootStatus && bootStatus.phase !== 'ready') {
+  if (bootStatus && bootStatus.phase !== 'ready' && !isDisplayApplicationRoute) {
     return <BootScreen status={bootStatus} />;
   }
 

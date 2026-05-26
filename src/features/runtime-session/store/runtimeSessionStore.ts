@@ -20,6 +20,16 @@ export type OperationState = 'none' | 'running-graph' | 'stopping-session' | 're
 export type GraphDriftState = 'in-sync' | 'out-of-sync';
 export type GraphSubmissionState = 'none' | 'current' | 'stale';
 export type RunIntent = 'none' | 'create-session' | 'replace-session-from-edits' | 'start-linked-session';
+export type RunTabResult =
+  | {
+      ok: true;
+      sessionId: string;
+      session: SessionRecord;
+    }
+  | {
+      ok: false;
+      error: string;
+    };
 
 export type TabRuntimeView = {
   executionState: ExecutionState;
@@ -63,7 +73,7 @@ type RuntimeSessionState = {
     tabId: string,
     document: GraphDocument,
     options?: { blockDetailsByType?: ReadonlyMap<string, BlockDetails> },
-  ) => Promise<void>;
+  ) => Promise<RunTabResult>;
   stopSessionForTab: (tabId: string) => Promise<void>;
   restartSessionForTab: (tabId: string) => Promise<void>;
   deleteSessionForTab: (tabId: string) => Promise<void>;
@@ -524,7 +534,7 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
 
               return next;
             })) {
-              return;
+              return { ok: false, error: 'Run was superseded by a newer runtime action.' };
             }
           }
 
@@ -533,14 +543,14 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
 
         if (!activeSessionId) {
           completeAction(tabId, actionVersion, 'error', 'No session available for run.');
-          return;
+          return { ok: false, error: 'No session available for run.' };
         }
 
         if (!activeSession) {
           activeSession = await refreshSessionStateWithVersion(tabId, activeSessionId, actionVersion);
           if (!activeSession) {
             completeAction(tabId, actionVersion, 'error', 'Failed to load linked session.');
-            return;
+            return { ok: false, error: 'Failed to load linked session.' };
           }
         }
 
@@ -554,14 +564,14 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
             lastUpdatedAt: nowIsoString(),
             lastAction: 'start',
           }))) {
-            return;
+            return { ok: false, error: 'Run was superseded by a newer runtime action.' };
           }
         }
 
         const converged = await pollSessionStateWithVersion(tabId, activeSessionId, actionVersion, 'running');
         if (!converged) {
           completeAction(tabId, actionVersion, 'error', 'Session did not converge to running in time.');
-          return;
+          return { ok: false, error: 'Session did not converge to running in time.' };
         }
 
         if (converged.state === 'error') {
@@ -571,7 +581,7 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
             'error',
             converged.lastError ?? 'Session reached error state while starting.',
           );
-          return;
+          return { ok: false, error: converged.lastError ?? 'Session reached error state while starting.' };
         }
 
         if (isReplacementRun) {
@@ -596,7 +606,7 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
 
             return next;
           })) {
-            return;
+            return { ok: false, error: 'Run was superseded by a newer runtime action.' };
           }
         }
 
@@ -616,8 +626,11 @@ export const useRuntimeSessionStore = create<RuntimeSessionState>((set, get) => 
 
         await get().refreshSessionList();
         completeAction(tabId, actionVersion, 'success', null, 'Session running.');
+        return { ok: true, sessionId: converged.id, session: converged };
       } catch (error) {
-        completeAction(tabId, actionVersion, 'error', toErrorMessage(error));
+        const message = toErrorMessage(error);
+        completeAction(tabId, actionVersion, 'error', message);
+        return { ok: false, error: message };
       }
     },
 

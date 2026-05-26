@@ -34,4 +34,10 @@ contextBridge.exposeInMainWorld('gr4StudioShell', {
       ipcRenderer.removeListener('gr4-studio:menu-command', listener);
     };
   },
+  openDisplayApplication(input) {
+    return ipcRenderer.invoke('gr4-studio:display-application:open', input);
+  },
+  getDisplayApplicationLaunchSnapshot(launchId) {
+    return ipcRenderer.invoke('gr4-studio:display-application:snapshot:get', launchId);
+  },
 });

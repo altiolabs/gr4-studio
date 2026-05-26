@@ -70,6 +70,12 @@ function getContentType(filePath) {
   }
 }
 
+export function rewriteIndexAssetUrls(html) {
+  return html.replace(/\b(src|href)="\.\/([^"]+)"/g, (_match, attribute, assetPath) => {
+    return `${attribute}="/${assetPath}"`;
+  });
+}
+
 function firstHeaderValue(value) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -270,14 +276,17 @@ async function serveStaticAsset(req, res, staticRoot) {
   }
 
   try {
-    const payload = await fs.readFile(resolvedPath);
+    const payload =
+      path.basename(resolvedPath) === 'index.html'
+        ? Buffer.from(rewriteIndexAssetUrls(await fs.readFile(resolvedPath, 'utf8')))
+        : await fs.readFile(resolvedPath);
     res.statusCode = 200;
     res.setHeader('content-type', getContentType(resolvedPath));
     res.end(payload);
   } catch {
     if (!path.extname(relativePath)) {
       const fallbackPath = path.join(staticRoot, 'index.html');
-      const payload = await fs.readFile(fallbackPath);
+      const payload = Buffer.from(rewriteIndexAssetUrls(await fs.readFile(fallbackPath, 'utf8')));
       res.statusCode = 200;
       res.setHeader('content-type', 'text/html; charset=utf-8');
       res.end(payload);

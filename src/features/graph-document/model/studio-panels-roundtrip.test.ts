@@ -104,6 +104,27 @@ describe('studio panel metadata round-trip', () => {
     expect(restored.metadata.studioPanels).toEqual(snapshot.metadata.studioPanels);
   });
 
+  it('preserves application display intent between editor snapshot and graph document', () => {
+    const snapshot = {
+      metadata: {
+        name: 'Graph',
+        application: {
+          mode: 'popout' as const,
+          renderer: 'react' as const,
+          title: 'Spectrum Console',
+        },
+      },
+      nodes: [],
+      edges: [],
+    };
+
+    const document = graphDocumentFromEditor(snapshot);
+    expect(document.metadata.application).toEqual(snapshot.metadata.application);
+
+    const restored = editorGraphFromDocument(document);
+    expect(restored.metadata.application).toEqual(snapshot.metadata.application);
+  });
+
   it('preserves node execution modes between editor snapshot and graph document', () => {
     const snapshot = {
       metadata: {

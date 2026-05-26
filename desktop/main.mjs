@@ -11,7 +11,10 @@ const APP_ICON_CANDIDATES = ['apple-touch-icon.png', 'favicon-32x32.png', 'favic
 let remotePickerResolve = null;
 let mainWindow = null;
 let remotePickerWindow = null;
+const displayApplicationWindows = new Set();
+const displayApplicationLaunchSnapshots = new Map();
 let desktopAppServer = null;
+let mainStartUrl = null;
 let desktopBootStatus = {
   phase: 'starting',
   message: 'Preparing gr4-studio…',
@@ -344,6 +347,46 @@ function updateDesktopBootStatus(patch) {
   }
 }
 
+function attachRendererDiagnostics(window, label) {
+  const formatConsoleValue = (value) => {
+    if (typeof value === 'string') {
+      return value;
+    }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  };
+
+  window.webContents.on('console-message', (...args) => {
+    const maybeDetails = args.find((arg) => arg && typeof arg === 'object' && 'message' in arg);
+    if (maybeDetails) {
+      const severity = ['debug', 'info', 'warn', 'error'][maybeDetails.level] ?? 'log';
+      const message = [
+        maybeDetails.message,
+        ...(Array.isArray(maybeDetails.args) ? maybeDetails.args.map(formatConsoleValue) : []),
+      ].join(' ');
+      console.info(`[gr4-studio][${label}:${severity}] ${message} (${maybeDetails.sourceId}:${maybeDetails.line})`);
+      return;
+    }
+
+    const [, level, message, line, sourceId] = args;
+    const severity = ['debug', 'info', 'warn', 'error'][level] ?? 'log';
+    console.info(`[gr4-studio][${label}:${severity}] ${formatConsoleValue(message)} (${sourceId}:${line})`);
+  });
+  window.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl) => {
+    console.error(
+      `[gr4-studio] ${label} failed to load: code=${errorCode} description=${errorDescription} url=${validatedUrl}`,
+    );
+  });
+  window.webContents.on('render-process-gone', (_event, details) => {
+    console.error(
+      `[gr4-studio] ${label} renderer exited: reason=${details.reason} exitCode=${details.exitCode}`,
+    );
+  });
+}
+
 function resolveBackendRuntimeConfig() {
   const backendMode = process.env.GR4_STUDIO_BACKEND_MODE || 'unknown';
   const explicitUrl = normalizeBackendUrl(process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL || process.env.GR4_CONTROL_PLANE_URL);
@@ -363,6 +406,69 @@ function resolveBackendRuntimeConfig() {
 }
 
 ipcMain.handle('gr4-studio:boot-status:get', async () => desktopBootStatus);
+
+ipcMain.handle('gr4-studio:display-application:snapshot:get', async (_event, launchId) => {
+  const key = typeof launchId === 'string' ? launchId.trim() : '';
+  return key ? displayApplicationLaunchSnapshots.get(key) ?? null : null;
+});
+
+function resolveDisplayApplicationUrl(launchId) {
+  if (!mainStartUrl) {
+    throw new Error('Studio has not finished opening its main window.');
+  }
+
+  const encodedLaunchId = encodeURIComponent(String(launchId));
+  if (mainStartUrl.startsWith('file:')) {
+    const [base] = mainStartUrl.split('#', 1);
+    return `${base}#/app-runtime/${encodedLaunchId}`;
+  }
+
+  return new URL(`/app-runtime/${encodedLaunchId}`, mainStartUrl).toString();
+}
+
+ipcMain.handle('gr4-studio:display-application:open', async (_event, input) => {
+  const launchId = typeof input?.launchId === 'string' ? input.launchId.trim() : '';
+  if (!launchId) {
+    return { ok: false, error: 'Missing display application launch id.' };
+  }
+
+  try {
+    if (input?.snapshot && typeof input.snapshot === 'object') {
+      displayApplicationLaunchSnapshots.set(launchId, input.snapshot);
+    }
+    logDesktop(`Opening display application launch=${launchId}`);
+    const appIconPath = await resolveAppIconPath();
+    const displayWindow = new BrowserWindow({
+      width: 1280,
+      height: 820,
+      minWidth: 720,
+      minHeight: 480,
+      backgroundColor: '#0f172a',
+      title: typeof input?.title === 'string' && input.title.trim() ? input.title.trim() : `${APP_NAME} Application`,
+      icon: appIconPath ?? undefined,
+      webPreferences: {
+        preload: path.join(app.getAppPath(), 'desktop', 'preload.cjs'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+
+    displayApplicationWindows.add(displayWindow);
+    displayWindow.on('closed', () => {
+      displayApplicationWindows.delete(displayWindow);
+    });
+    attachRendererDiagnostics(displayWindow, 'display-application');
+
+    const displayUrl = resolveDisplayApplicationUrl(launchId);
+    await displayWindow.loadURL(displayUrl);
+    displayWindow.focus();
+    return { ok: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[gr4-studio] Failed to open display application:', message);
+    return { ok: false, error: message };
+  }
+});
 
 async function resolveWindowStartUrl(runtimeConfig) {
   const devServerUrl = resolveStartUrl();
@@ -387,6 +493,7 @@ async function resolveWindowStartUrl(runtimeConfig) {
 
 async function createWindow(startUrl, runtimeConfig) {
   process.env.GR4_STUDIO_CONTROL_PLANE_BASE_URL = runtimeConfig.controlPlaneBaseUrl;
+  mainStartUrl = startUrl;
   const appIconPath = await resolveAppIconPath();
 
   mainWindow = new BrowserWindow({
@@ -406,20 +513,7 @@ async function createWindow(startUrl, runtimeConfig) {
     mainWindow = null;
   });
 
-  mainWindow.webContents.on('console-message', (_event, details) => {
-    const severity = ['debug', 'info', 'warn', 'error'][details.level] ?? 'log';
-    console.info(`[gr4-studio][renderer:${severity}] ${details.message} (${details.sourceId}:${details.line})`);
-  });
-  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedUrl) => {
-    console.error(
-      `[gr4-studio] Renderer failed to load: code=${errorCode} description=${errorDescription} url=${validatedUrl}`,
-    );
-  });
-  mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    console.error(
-      `[gr4-studio] Renderer process exited: reason=${details.reason} exitCode=${details.exitCode}`,
-    );
-  });
+  attachRendererDiagnostics(mainWindow, 'renderer');
 
   return mainWindow.loadURL(startUrl).then(() => mainWindow);
 }

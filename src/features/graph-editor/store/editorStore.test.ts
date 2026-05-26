@@ -91,6 +91,20 @@ describe('editorStore flow change application', () => {
     expect(useEditorStore.getState().edges).toEqual([]);
   });
 
+  it('stores application display mode intent', () => {
+    useEditorStore.getState().setApplication({
+      mode: 'new_tab',
+      renderer: 'react',
+      title: 'Runtime View',
+    });
+
+    expect(useEditorStore.getState().application).toEqual({
+      mode: 'new_tab',
+      renderer: 'react',
+      title: 'Runtime View',
+    });
+  });
+
   it('copies a selected subgraph and pastes it into a different graph snapshot', () => {
     useEditorStore.getState().copyNodesToClipboard(['node-1', 'node-2']);
 

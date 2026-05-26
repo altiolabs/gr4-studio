@@ -37,5 +37,12 @@ interface Window {
       }) => void,
     ) => () => void;
     readonly onMenuCommand?: (callback: (command: 'new' | 'open' | 'save' | 'saveAs' | 'rename') => void) => () => void;
+    readonly openDisplayApplication?: (input: {
+      launchId: string;
+      mode: 'new_tab' | 'popout';
+      title?: string;
+      snapshot?: unknown;
+    }) => Promise<{ ok: true } | { ok: false; error: string }>;
+    readonly getDisplayApplicationLaunchSnapshot?: (launchId: string) => Promise<unknown | null>;
   };
 }

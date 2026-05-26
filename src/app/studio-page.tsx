@@ -68,13 +68,19 @@ import {
   updateControlWidgetLabel,
 } from '../features/control-panels/control-panel-authoring';
 import { PlotStyleModal } from '../features/workspace/plot-style-modal';
-import type { StudioPlotStyleConfig, StudioVariable } from '../features/graph-document/model/studio-workspace';
+import type { ApplicationMode, StudioPlotStyleConfig, StudioVariable } from '../features/graph-document/model/studio-workspace';
 import { getBlockDetails, type BlockDetails } from '../lib/api/block-details';
+import type { SessionRecord } from '../lib/api/sessionsApi';
 import { config } from '../lib/config';
 import { isDescriptorBasedBindingFamily } from '../features/graph-editor/runtime/studio-managed-runtime-authoring';
+import {
+  buildDisplayApplicationUrl,
+  writeDisplayApplicationLaunchSnapshot,
+} from '../features/application/runtime/display-application-launch';
 
 type ConnectionStatus = 'idle' | 'loading' | 'connected' | 'error';
 type CenterViewMode = 'graph' | 'variables' | 'workspace' | 'application';
+type LaunchableApplicationMode = Extract<ApplicationMode, 'new_tab' | 'popout'>;
 type PendingDestructiveAction = { type: 'close-tab'; tabId: string } | null;
 
 function runButtonTitle(runIntent: 'none' | 'create-session' | 'replace-session-from-edits' | 'start-linked-session'): string {
@@ -188,6 +194,7 @@ export function StudioPage() {
     }
     return shouldShowUnsupportedBrowserNotice(useDocumentStore.getState().capabilities, window.localStorage);
   });
+  const displayLaunchWindowRef = useRef<Window | null>(null);
   const editorBoundTabIdRef = useRef<string | null>(null);
   const pendingEditorLoadRef = useRef<{ tabId: string; contentHash: string } | null>(null);
 
@@ -208,6 +215,7 @@ export function StudioPage() {
   const setStudioLayout = useEditorStore((state) => state.setStudioLayout);
   const setStudioPanels = useEditorStore((state) => state.setStudioPanels);
   const setStudioPlotPalettes = useEditorStore((state) => state.setStudioPlotPalettes);
+  const setApplication = useEditorStore((state) => state.setApplication);
 
   const tabs = useGraphTabsStore((state) => state.tabs);
   const activeTabId = useGraphTabsStore((state) => state.activeTabId);
@@ -404,108 +412,131 @@ export function StudioPage() {
     () => (studioPlotPalettes && studioPlotPalettes.length > 0 ? studioPlotPalettes : buildDefaultStudioPlotPalettes()),
     [studioPlotPalettes],
   );
+  const applicationMode = application?.mode ?? 'in_app';
+  const applicationTitle = application?.title?.trim() || activeTab?.document.displayName || documentName || 'Application';
   const activeCenterView: CenterViewMode = activeTabId ? centerViewByTabId[activeTabId] ?? 'graph' : 'graph';
   const runtimeView = activeTabId ? getTabRuntimeView(activeTabId, currentSubmissionContent, schedulerId) : null;
   const activeRuntimeContext = activeTabId ? runtimeContextsByTabId[activeTabId] : null;
-  const controlWidgetRuntime =
-    activeRuntimeContext && runtimeView
-      ? {
-          sessionId: activeRuntimeContext.sessionId,
-          executionState: runtimeView.executionState,
-          graphDriftState: runtimeView.graphDriftState,
-        }
-      : null;
-  const lastPropagatedRuntimeSnapshotRef = useRef<string | null>(null);
-  const workspacePanelEntries = useMemo<WorkspacePanelViewModel[]>(() => {
-    const nodeById = new Map(nodes.map((node) => [node.instanceId, node]));
-    const nodePanelTitlesById = buildDisambiguatedPanelTitles(
-      nodes.map((node) => ({
-        instanceId: node.instanceId,
-        blockTypeId: node.blockTypeId,
-        displayName: node.displayName,
-      })),
-    );
+  const buildWorkspacePanelEntriesForRuntime = useCallback(
+    (runtime: {
+      sessionId: string | null;
+      session: SessionRecord | null;
+      executionState: NonNullable<typeof runtimeView>['executionState'];
+      graphDriftState: NonNullable<typeof runtimeView>['graphDriftState'];
+    } | null): WorkspacePanelViewModel[] => {
+      const nodeById = new Map(nodes.map((node) => [node.instanceId, node]));
+      const nodePanelTitlesById = buildDisambiguatedPanelTitles(
+        nodes.map((node) => ({
+          instanceId: node.instanceId,
+          blockTypeId: node.blockTypeId,
+          displayName: node.displayName,
+        })),
+      );
+      const controlRuntime = runtime
+        ? {
+            sessionId: runtime.sessionId,
+            executionState: runtime.executionState,
+            graphDriftState: runtime.graphDriftState,
+          }
+        : null;
 
-    return mergedWorkspacePanels.map((panel) => {
-      if (!panel.nodeId) {
-        if (panel.kind === 'control') {
-          return {
-            panel,
-            controlWidgets: resolveControlPanelWidgetBindings({
+      return mergedWorkspacePanels.map((panel) => {
+        if (!panel.nodeId) {
+          if (panel.kind === 'control') {
+            return {
               panel,
-              nodeById,
-              blockDetailsByType,
-              resolvedGraph,
-              runtime: controlWidgetRuntime,
-            }),
-          };
-        }
-        return { panel };
-      }
-
-      const sourceNode = nodeById.get(panel.nodeId);
-      if (!sourceNode) {
-        if (panel.kind === 'control') {
-          return {
-            panel,
               controlWidgets: resolveControlPanelWidgetBindings({
                 panel,
                 nodeById,
                 blockDetailsByType,
                 resolvedGraph,
-                runtime: controlWidgetRuntime,
+                runtime: controlRuntime,
               }),
-          };
+            };
+          }
+          return { panel };
         }
-        return { panel };
-      }
 
-      const effectiveParameterValues = buildEffectiveParameterValues(
-        sourceNode.parameters,
-        blockDetailsByType.get(sourceNode.blockTypeId),
-      );
-      const resolvedParameterValues = buildResolvedParameterValues(
-        effectiveParameterValues,
-        resolvedGraph.parametersByNodeId[sourceNode.instanceId],
-      );
-      const bindingView = resolveCurrentSessionStudioBindingView({
-        blockTypeId: sourceNode.blockTypeId,
-        nodeInstanceId: sourceNode.instanceId,
-        parameterValues: resolvedParameterValues,
-        session: activeRuntimeContext?.session,
-      });
-
-      const controlWidgets =
-        panel.kind === 'control'
-          ? resolveControlPanelWidgetBindings({
+        const sourceNode = nodeById.get(panel.nodeId);
+        if (!sourceNode) {
+          if (panel.kind === 'control') {
+            return {
               panel,
-              nodeById,
-              blockDetailsByType,
-              resolvedGraph,
-              runtime: controlWidgetRuntime,
-            })
-          : undefined;
+              controlWidgets: resolveControlPanelWidgetBindings({
+                panel,
+                nodeById,
+                blockDetailsByType,
+                resolvedGraph,
+                runtime: controlRuntime,
+              }),
+            };
+          }
+          return { panel };
+        }
 
-      return {
-        panel,
-        studioPlotPalettes: effectiveStudioPlotPalettes,
-        nodePanelTitle: nodePanelTitlesById.get(sourceNode.instanceId),
-        nodeDisplayName: sourceNode.displayName,
-        nodeBlockTypeId: sourceNode.blockTypeId,
-        nodeParameters: effectiveParameterValues,
-        controlWidgets,
-        bindingStatus: bindingView.status,
-        bindingTransport: bindingView.transport,
-        bindingEndpoint: bindingView.endpoint,
-        bindingShowEndpointInUi: !isDescriptorBasedBindingFamily(sourceNode.blockTypeId),
-        bindingUpdateMs: bindingView.updateMs,
-        bindingSampleRate: bindingView.sampleRate,
-        bindingChannels: bindingView.channels,
-        bindingSessionId: activeRuntimeContext?.sessionId ?? undefined,
-        bindingReason: bindingView.reason,
-      };
-    });
-  }, [activeRuntimeContext?.session, blockDetailsByType, controlWidgetRuntime, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes, resolvedGraph]);
+        const effectiveParameterValues = buildEffectiveParameterValues(
+          sourceNode.parameters,
+          blockDetailsByType.get(sourceNode.blockTypeId),
+        );
+        const resolvedParameterValues = buildResolvedParameterValues(
+          effectiveParameterValues,
+          resolvedGraph.parametersByNodeId[sourceNode.instanceId],
+        );
+        const bindingView = resolveCurrentSessionStudioBindingView({
+          blockTypeId: sourceNode.blockTypeId,
+          nodeInstanceId: sourceNode.instanceId,
+          parameterValues: resolvedParameterValues,
+          session: runtime?.session,
+        });
+
+        const controlWidgets =
+          panel.kind === 'control'
+            ? resolveControlPanelWidgetBindings({
+                panel,
+                nodeById,
+                blockDetailsByType,
+                resolvedGraph,
+                runtime: controlRuntime,
+              })
+            : undefined;
+
+        return {
+          panel,
+          studioPlotPalettes: effectiveStudioPlotPalettes,
+          nodePanelTitle: nodePanelTitlesById.get(sourceNode.instanceId),
+          nodeDisplayName: sourceNode.displayName,
+          nodeBlockTypeId: sourceNode.blockTypeId,
+          nodeParameters: effectiveParameterValues,
+          controlWidgets,
+          bindingStatus: bindingView.status,
+          bindingTransport: bindingView.transport,
+          bindingEndpoint: bindingView.endpoint,
+          bindingShowEndpointInUi: !isDescriptorBasedBindingFamily(sourceNode.blockTypeId),
+          bindingUpdateMs: bindingView.updateMs,
+          bindingSampleRate: bindingView.sampleRate,
+          bindingChannels: bindingView.channels,
+          bindingSessionId: runtime?.sessionId ?? undefined,
+          bindingReason: bindingView.reason,
+        };
+      });
+    },
+    [blockDetailsByType, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes, resolvedGraph],
+  );
+  const lastPropagatedRuntimeSnapshotRef = useRef<string | null>(null);
+  const workspacePanelEntries = useMemo<WorkspacePanelViewModel[]>(
+    () =>
+      buildWorkspacePanelEntriesForRuntime(
+        activeRuntimeContext && runtimeView
+          ? {
+              sessionId: activeRuntimeContext.sessionId,
+              session: activeRuntimeContext.session,
+              executionState: runtimeView.executionState,
+              graphDriftState: runtimeView.graphDriftState,
+            }
+          : null,
+      ),
+    [activeRuntimeContext, buildWorkspacePanelEntriesForRuntime, runtimeView],
+  );
 
   const activeAudioSessionKeys = useMemo(() => {
     if (!activeRuntimeContext?.sessionId || runtimeView?.executionState !== 'running') {
@@ -796,6 +827,14 @@ export function StudioPage() {
     }));
   };
 
+  useEffect(() => {
+    if (applicationMode === 'in_app' || activeCenterView !== 'application') {
+      return;
+    }
+    setActiveCenterView('graph');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCenterView, applicationMode]);
+
   const downgradeTabWritableBacking = (tabId: string, sourceKind: SourceKind = 'imported_file') => {
     patchTabDocument(tabId, (current) => ({
       ...current,
@@ -1035,9 +1074,94 @@ export function StudioPage() {
     performCloseTab(targetTabId);
   };
 
+  const launchDisplayApplication = (params: {
+    mode: LaunchableApplicationMode;
+    tabId: string;
+    session: SessionRecord;
+  }) => {
+    const displayPanelEntries = buildWorkspacePanelEntriesForRuntime({
+      sessionId: params.session.id,
+      session: params.session,
+      executionState: 'running',
+      graphDriftState: 'in-sync',
+    }).filter((entry) => shouldShowPanelInRenderedLayout(entry.panel));
+    const displayLayout = buildEffectiveRenderedStudioLayout(
+      studioLayout,
+      displayPanelEntries.map((entry) => entry.panel),
+    );
+    const snapshot = writeDisplayApplicationLaunchSnapshot({
+      sourceTabId: params.tabId,
+      sessionId: params.session.id,
+      title: applicationTitle,
+      mode: params.mode,
+      executionState: 'running',
+      panelEntries: displayPanelEntries,
+      layout: displayLayout,
+    });
+    const url = buildDisplayApplicationUrl(snapshot.launchId);
+    const target = params.mode === 'new_tab' ? '_blank' : `gr4-studio-app-${snapshot.launchId}`;
+    const features =
+      params.mode === 'popout'
+        ? 'popup=yes,width=1280,height=820,noopener,noreferrer'
+        : 'noopener,noreferrer';
+    const reservedWindow = displayLaunchWindowRef.current && !displayLaunchWindowRef.current.closed
+      ? displayLaunchWindowRef.current
+      : null;
+    if (reservedWindow) {
+      reservedWindow.location.href = url;
+      reservedWindow.focus();
+    }
+    if (window.gr4StudioShell?.openDisplayApplication) {
+      void window.gr4StudioShell.openDisplayApplication({
+        launchId: snapshot.launchId,
+        mode: params.mode,
+        title: applicationTitle,
+        snapshot,
+      }).then((openResult) => {
+        if (!openResult.ok) {
+          setLastError(`Could not open display application: ${openResult.error}`);
+        }
+      });
+    } else {
+      const opened = reservedWindow ?? window.open(url, target, features);
+      if (!opened) {
+        setLastError('Browser blocked the display application window.');
+      }
+    }
+    displayLaunchWindowRef.current = null;
+  };
+
+  const openActiveDisplayApplication = () => {
+    if (
+      !activeTabId ||
+      !activeRuntimeContext?.session ||
+      runtimeView?.executionState !== 'running' ||
+      (applicationMode !== 'new_tab' && applicationMode !== 'popout')
+    ) {
+      return;
+    }
+
+    launchDisplayApplication({
+      tabId: activeTabId,
+      mode: applicationMode,
+      session: activeRuntimeContext.session,
+    });
+  };
+
   const runActiveTab = async () => {
     if (!activeTabId || !activeTab) {
       return;
+    }
+
+    const launchMode = applicationMode;
+    const nativeDisplayWindow =
+      (launchMode === 'new_tab' || launchMode === 'popout') && Boolean(window.gr4StudioShell?.openDisplayApplication);
+    if ((launchMode === 'new_tab' || launchMode === 'popout') && !nativeDisplayWindow) {
+      const target = launchMode === 'new_tab' ? '_blank' : `gr4-studio-app-${activeTabId}`;
+      const features = launchMode === 'popout' ? 'popup=yes,width=1280,height=820' : undefined;
+      displayLaunchWindowRef.current = window.open('', target, features);
+    } else {
+      displayLaunchWindowRef.current = null;
     }
 
     const persistedHash = activeTab.document.lastPersistedContentHash;
@@ -1048,13 +1172,31 @@ export function StudioPage() {
     if (shouldSaveBeforeRun) {
       const saveResult = await saveTab(activeTabId, 'save');
       if (saveResult.kind !== 'success') {
+        displayLaunchWindowRef.current?.close();
+        displayLaunchWindowRef.current = null;
         return;
       }
     }
 
     const latestTab = useGraphTabsStore.getState().tabs.find((tab) => tab.id === activeTabId);
     const document = graphDocumentFromEditor(latestTab?.snapshot ?? currentSnapshot);
-    await runTab(activeTabId, document, { blockDetailsByType });
+    const result = await runTab(activeTabId, document, { blockDetailsByType });
+    if (!result.ok) {
+      displayLaunchWindowRef.current?.close();
+      displayLaunchWindowRef.current = null;
+      return;
+    }
+
+    if (launchMode === 'in_app' || launchMode === 'external') {
+      setActiveCenterView('application');
+      return;
+    }
+
+    launchDisplayApplication({
+      tabId: activeTabId,
+      mode: launchMode,
+      session: result.session,
+    });
   };
 
   const applyLayoutEditorSplitDrop = (
@@ -1133,6 +1275,14 @@ export function StudioPage() {
       };
     });
     setStudioPanels(nextPanels);
+  };
+
+  const updateApplicationMode = (mode: ApplicationMode) => {
+    setApplication({
+      mode,
+      renderer: application?.renderer ?? 'react',
+      title: application?.title,
+    });
   };
 
   return (
@@ -1316,18 +1466,32 @@ export function StudioPage() {
             >
               Layout Editor
             </button>
-            <button
-              type="button"
-              onClick={() => setActiveCenterView('application')}
-              className={`rounded border px-2 py-1 text-xs ${
-                activeCenterView === 'application'
-                  ? 'border-emerald-600/70 bg-emerald-900/30 text-emerald-100'
-                  : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
-              }`}
-            >
-              Application
-            </button>
+            {applicationMode === 'in_app' ? (
+              <button
+                type="button"
+                onClick={() => setActiveCenterView('application')}
+                className={`rounded border px-2 py-1 text-xs ${
+                  activeCenterView === 'application'
+                    ? 'border-emerald-600/70 bg-emerald-900/30 text-emerald-100'
+                    : 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                In-app
+              </button>
+            ) : null}
             <div className="ml-auto flex items-center gap-2">
+              <label className="flex items-center gap-1 text-[11px] text-slate-400">
+                <span>Open</span>
+                <select
+                  value={applicationMode}
+                  onChange={(event) => updateApplicationMode(event.target.value as ApplicationMode)}
+                  className="h-7 rounded border border-slate-700 bg-slate-900 px-2 text-xs text-slate-200 outline-none focus:border-cyan-500"
+                >
+                  <option value="in_app">In-app</option>
+                  <option value="new_tab">New tab</option>
+                  <option value="popout">Popout</option>
+                </select>
+              </label>
               {runtimeView && activeTabId && (
                 <div className="flex items-center gap-1.5 rounded border border-slate-700 bg-slate-900/70 px-2 py-1">
                   <StatusPill status={runtimeView.executionState} />
@@ -1342,6 +1506,23 @@ export function StudioPage() {
                       <path d="M4 2.5v11l8-5.5z" />
                     </svg>
                   </button>
+                  {applicationMode !== 'in_app' && (
+                    <button
+                      type="button"
+                      onClick={openActiveDisplayApplication}
+                      disabled={
+                        Boolean(activeRuntimeContext?.busy) ||
+                        !activeRuntimeContext?.session ||
+                        runtimeView.executionState !== 'running'
+                      }
+                      title="Open display"
+                      className="h-6 w-6 rounded border border-cyan-700/70 bg-cyan-900/35 text-cyan-200 hover:bg-cyan-800/45 disabled:opacity-50"
+                    >
+                      <svg viewBox="0 0 16 16" className="mx-auto h-3.5 w-3.5 fill-current" aria-hidden="true">
+                        <path d="M2.5 3.5h11v7h-11zM4 12h8v1H4z" />
+                      </svg>
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => void stopSessionForTab(activeTabId)}
@@ -1407,13 +1588,17 @@ export function StudioPage() {
                 panelEntries={renderedWorkspacePanelEntries}
                 layout={workspaceLayout}
                 executionState={runtimeView?.executionState}
-                onUpdateVariableValue={(variableName, binding) => {
-                  const targetVariable = (studioVariables ?? []).find((variable) => variable.name === variableName);
-                  if (!targetVariable) {
-                    return;
-                  }
-                  updateVariable(targetVariable.id, { binding });
-                }}
+                onUpdateVariableValue={
+                  runtimeView?.executionState === 'running'
+                    ? undefined
+                    : (variableName, binding) => {
+                        const targetVariable = (studioVariables ?? []).find((variable) => variable.name === variableName);
+                        if (!targetVariable) {
+                          return;
+                        }
+                        updateVariable(targetVariable.id, { binding });
+                      }
+                }
               />
             )}
             <PlotStyleModal

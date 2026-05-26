@@ -75,6 +75,7 @@ type EditorState = {
   setStudioVariables: (variables: StudioVariable[]) => void;
   setStudioPlotPalettes: (palettes: StudioPlotPaletteSpec[]) => void;
   setStudioLayout: (layout: StudioLayoutSpec) => void;
+  setApplication: (application: ApplicationSpec | undefined) => void;
   clearGraph: () => void;
   replaceGraph: (input: {
     nodes: EditorGraphNode[];
@@ -182,6 +183,11 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   setStudioLayout: (layout) => {
     set({
       studioLayout: layout,
+    });
+  },
+  setApplication: (application) => {
+    set({
+      application,
     });
   },
   clearGraph: () => {

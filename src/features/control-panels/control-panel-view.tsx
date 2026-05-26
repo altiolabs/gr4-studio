@@ -1,11 +1,16 @@
 import { createPortal } from 'react-dom';
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { RuntimeSettingsValue } from '../../lib/api/block-settings';
 import { useRuntimeBlockSettings } from '../inspector/hooks/use-runtime-block-settings';
 import { toRuntimeSettingsErrorMessage } from '../inspector/runtime-settings-model';
 import { getCompatibleControlWidgetInputKinds, getControlWidgetTargetLabel } from './control-panel-authoring';
 import type { ResolvedControlWidget } from './control-panel-binding-resolution';
 import type { ExpressionBinding } from '../variables/model/types';
+import {
+  applyLocalVariableControlValues,
+  expressionBindingToLocalValue,
+  type LocalVariableControlValues,
+} from './local-variable-state';
 
 function stateLabel(state: ResolvedControlWidget['state']): string {
   if (state === 'missing_node') {
@@ -716,14 +721,30 @@ export function ControlPanelView({
   onRemoveWidget?: (panelId: string, widgetId: string) => void;
   onMoveWidgetToPanel?: (panelId: string, widgetId: string, targetPanelId: string) => void;
 }) {
+  const [localVariableValues, setLocalVariableValues] = useState<LocalVariableControlValues>({});
+  const effectiveWidgets = useMemo(
+    () => applyLocalVariableControlValues(widgets, localVariableValues),
+    [localVariableValues, widgets],
+  );
+  const updateVariableValue = (variableName: string, binding: ExpressionBinding) => {
+    if (onUpdateVariableValue) {
+      onUpdateVariableValue(variableName, binding);
+      return;
+    }
+    setLocalVariableValues((current) => ({
+      ...current,
+      [variableName]: expressionBindingToLocalValue(binding),
+    }));
+  };
+
   return (
     <div className="space-y-1.5">
-      {widgets.length === 0 ? (
+      {effectiveWidgets.length === 0 ? (
         <div className="rounded border border-dashed border-slate-700 bg-slate-950/40 px-3 py-2 text-xs text-slate-400">
           No widgets defined.
         </div>
       ) : (
-        widgets.map((widget) => (
+        effectiveWidgets.map((widget) => (
           <ControlWidgetField
             key={widget.id}
             widget={widget}
@@ -731,7 +752,7 @@ export function ControlPanelView({
             isEditable={isEditable && Boolean(panelId)}
             isPanelSelected={isPanelSelected}
             controlPanelOptions={controlPanelOptions}
-            onUpdateVariableValue={onUpdateVariableValue}
+            onUpdateVariableValue={updateVariableValue}
             onUpdateWidgetLabel={onUpdateWidgetLabel}
             onUpdateWidgetInputKind={onUpdateWidgetInputKind}
             onMoveWidget={onMoveWidget}
