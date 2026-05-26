@@ -30,6 +30,7 @@ import {
 import {
   getEditorVirtualRouteIssues,
   getVirtualRoutingBlockDetails,
+  isNoteBlockType,
   isVirtualRoutingBlockType,
 } from '../graph-editor/model/virtual-routing';
 
@@ -492,6 +493,7 @@ function SelectionTab({
     ? toCanonicalBlockDisplayName(selectedBlock.displayName, selectedBlock.blockTypeId)
     : '';
   const isVirtualRouting = selectedBlock ? isVirtualRoutingBlockType(selectedBlock.blockTypeId) : false;
+  const isNote = selectedBlock ? isNoteBlockType(selectedBlock.blockTypeId) : false;
   const blockDetailsQuery = useBlockDetailsQuery(selectedBlock?.blockTypeId);
 
   const draftParameterValues = Object.entries(selectedBlock?.parameters ?? {}).reduce<Record<string, string>>(
@@ -559,11 +561,13 @@ function SelectionTab({
         </div>
       </SectionCard>
 
-      {isVirtualRouting ? (
+      {isVirtualRouting || isNote ? (
         <SectionCard>
-          <SummaryLabel>Virtual Route</SummaryLabel>
+          <SummaryLabel>{isNote ? 'Note' : 'Virtual Route'}</SummaryLabel>
           <p className="text-sm text-slate-300">
-            This block is editor-only. It is removed before runtime submission and replaced with direct graph connections through its matching stream_id.
+            {isNote
+              ? 'This block is editor-only. It displays text on the graph canvas and is removed before runtime submission.'
+              : 'This block is editor-only. It is removed before runtime submission and replaced with direct graph connections through its matching stream_id.'}
           </p>
         </SectionCard>
       ) : (

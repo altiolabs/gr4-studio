@@ -168,6 +168,12 @@ Rules:
 - a virtual sink without a matching virtual source is reported as a warning.
 - legacy temporary ids `gr4-studio::VirtualSink` and `gr4-studio::VirtualSource` are normalized to the `studio::...` ids when graph documents are loaded.
 
+Studio also supports an editor-only note block:
+
+- `studio::Note`
+
+The note block displays its `text` parameter directly on the graph canvas. It is preserved in `.gr4s` documents and omitted from runtime `.gr4c` submission.
+
 ## Display Application Lifecycle
 
 The runtime display application can render in-app or as an application-only display route. The selected mode is persisted in graph document `metadata.application`.

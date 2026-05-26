@@ -9,6 +9,7 @@ import {
   isVirtualRoutingBlockType,
   isVirtualSinkBlockType,
   isVirtualSourceBlockType,
+  isNoteBlockType,
 } from '../../graph-editor/model/virtual-routing';
 
 function stableHash(input: string): string {
@@ -289,20 +290,37 @@ function buildRuntimeGraph(document: GraphDocument): {
   nodes: GraphDocumentNode[];
   edges: GraphDocumentEdge[];
 } {
+  const omittedEditorNodeIds = new Set(
+    document.graph.nodes.filter((node) => isNoteBlockType(node.blockType)).map((node) => node.id),
+  );
   const disabledNodeIds = new Set(
-    document.graph.nodes.filter((node) => (node.executionMode ?? 'active') === 'disabled').map((node) => node.id),
+    document.graph.nodes
+      .filter((node) => (node.executionMode ?? 'active') === 'disabled')
+      .map((node) => node.id),
   );
   const bypassedNodeIds = new Set(
     document.graph.nodes
-      .filter((node) => (node.executionMode ?? 'active') === 'bypassed' && !disabledNodeIds.has(node.id))
+      .filter(
+        (node) =>
+          (node.executionMode ?? 'active') === 'bypassed' &&
+          !disabledNodeIds.has(node.id) &&
+          !omittedEditorNodeIds.has(node.id),
+      )
       .map((node) => node.id),
   );
 
   const nodes = document.graph.nodes.filter(
-    (node) => !disabledNodeIds.has(node.id) && (node.executionMode ?? 'active') !== 'bypassed',
+    (node) =>
+      !disabledNodeIds.has(node.id) &&
+      !omittedEditorNodeIds.has(node.id) &&
+      (node.executionMode ?? 'active') !== 'bypassed',
   );
   let edges = document.graph.edges.filter(
-    (edge) => !disabledNodeIds.has(edge.source.nodeId) && !disabledNodeIds.has(edge.target.nodeId),
+    (edge) =>
+      !disabledNodeIds.has(edge.source.nodeId) &&
+      !disabledNodeIds.has(edge.target.nodeId) &&
+      !omittedEditorNodeIds.has(edge.source.nodeId) &&
+      !omittedEditorNodeIds.has(edge.target.nodeId),
   );
 
   const existingEdgeIds = new Set(edges.map((edge) => edge.id));

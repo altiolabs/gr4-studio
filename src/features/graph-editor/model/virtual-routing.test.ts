@@ -4,6 +4,7 @@ import {
   isVirtualRoutingBlockType,
   LEGACY_VIRTUAL_SOURCE_BLOCK_TYPE,
   getEditorVirtualRouteIssues,
+  NOTE_BLOCK_TYPE,
   VIRTUAL_SINK_BLOCK_TYPE,
   VIRTUAL_SOURCE_BLOCK_TYPE,
 } from './virtual-routing';
@@ -31,6 +32,7 @@ function node(
 describe('virtual routing model', () => {
   it('uses studio namespace catalog ids and accepts legacy gr4-studio ids', () => {
     expect(getVirtualRoutingCatalogBlocks().map((block) => block.blockTypeId)).toEqual([
+      NOTE_BLOCK_TYPE,
       'studio::VirtualSource',
       'studio::VirtualSink',
     ]);

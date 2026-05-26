@@ -25,6 +25,8 @@ const NODE_MIN_BODY_WIDTH_PX = 224;
 const VIRTUAL_NODE_MIN_WIDTH_PX = 96;
 const VIRTUAL_NODE_MAX_WIDTH_PX = 210;
 const VIRTUAL_NODE_HEIGHT_PX = 48;
+const NOTE_NODE_WIDTH_PX = 240;
+const NOTE_NODE_MIN_HEIGHT_PX = 96;
 
 function stackedPortPosition(index: number, total: number): string {
   if (total <= 1) {
@@ -231,16 +233,22 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
   const executionMode = data.executionMode ?? 'active';
   const rotation = data.rotation;
   const isVirtualRouting = data.isVirtualRouting;
+  const isNote = data.isNote;
   const isQuarterTurn = isQuarterTurnNodeRotation(rotation);
   const maxPortCount = Math.max(inputPorts.length, outputPorts.length);
   const streamId = data.parameterValues.stream_id?.trim() || 'route';
+  const noteText = data.parameterValues.text?.trim() || 'Note';
   const virtualNodeWidthPx = getVirtualNodeWidth(streamId);
-  const nodeWidthPx = isVirtualRouting
+  const nodeWidthPx = isNote
+    ? NOTE_NODE_WIDTH_PX
+    : isVirtualRouting
     ? virtualNodeWidthPx
     : isQuarterTurn
     ? requiredNodeWidthForPorts(maxPortCount)
     : NODE_MIN_BODY_WIDTH_PX;
-  const requiredHeightPx = isVirtualRouting
+  const requiredHeightPx = isNote
+    ? NOTE_NODE_MIN_HEIGHT_PX
+    : isVirtualRouting
     ? VIRTUAL_NODE_HEIGHT_PX
     : isQuarterTurn
     ? NODE_MIN_BODY_HEIGHT_PX
@@ -312,7 +320,7 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
 
       <div
         className={`relative z-10 h-full border shadow-sm transition ${
-          isVirtualRouting ? 'rounded-2xl px-2.5 py-1.5' : 'rounded-md px-3 py-2'
+          isVirtualRouting ? 'rounded-2xl px-2.5 py-1.5' : isNote ? 'rounded-lg px-3 py-2.5' : 'rounded-md px-3 py-2'
         } ${
           executionMode === 'disabled'
             ? selected
@@ -326,6 +334,10 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
                 ? selected
                   ? 'border-sky-300 bg-slate-800 ring-1 ring-sky-200/70 shadow-[0_0_0_1px_rgba(14,165,233,0.55),0_0_18px_rgba(14,165,233,0.35)]'
                   : 'border-sky-700 bg-slate-900 shadow-[0_0_0_1px_rgba(14,165,233,0.30)]'
+              : isNote
+                ? selected
+                  ? 'border-yellow-200 bg-yellow-950/35 ring-1 ring-yellow-200/65 shadow-[0_0_0_1px_rgba(250,204,21,0.45),0_0_18px_rgba(250,204,21,0.20)]'
+                  : 'border-yellow-600/80 bg-yellow-950/25 shadow-[0_0_0_1px_rgba(250,204,21,0.20)]'
               : data.missingFromCatalog
                 ? selected
                   ? 'border-rose-300 bg-slate-800 ring-1 ring-rose-300/70 shadow-[0_0_0_1px_rgba(244,63,94,0.65),0_0_18px_rgba(244,63,94,0.45)]'
@@ -347,7 +359,13 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
             aria-hidden="true"
           />
         )}
-        {isVirtualRouting ? (
+        {isNote ? (
+          <div className="relative z-10 h-full min-h-[76px] overflow-hidden text-[12px] leading-5 text-yellow-50/95">
+            <div className="whitespace-pre-wrap break-words">
+              {noteText}
+            </div>
+          </div>
+        ) : isVirtualRouting ? (
           <div className="relative z-10 flex h-full min-h-[36px] flex-col items-center justify-center gap-0.5">
             <div className="max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-[8px] font-bold uppercase tracking-wide text-sky-300/90">
               Virtual

@@ -20,6 +20,7 @@ import {
 } from '../graph-editor/runtime/studio-managed-runtime-authoring';
 import {
   getEditorVirtualRouteIssues,
+  isNoteBlockType,
   isVirtualRoutingBlockType,
   isVirtualSinkBlockType,
   isVirtualSourceBlockType,
@@ -114,6 +115,7 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
   const [pendingControlParameter, setPendingControlParameter] = useState<BlockParameterMeta | null>(null);
 
   const blockDetailsQuery = useBlockDetailsQuery(block?.blockTypeId);
+  const isNoteBlock = block ? isNoteBlockType(block.blockTypeId) : false;
   const isVirtualRoutingBlock = block ? isVirtualRoutingBlockType(block.blockTypeId) : false;
   const isVirtualSourceBlock = block ? isVirtualSourceBlockType(block.blockTypeId) : false;
   const virtualSinkStreamIds = useMemo(() => {
@@ -300,7 +302,20 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
     const enumChoices = parameter.enumChoices ?? [];
     const enumTypeLabel = getBlockParameterEnumTypeLabel(parameter);
     const hasEnumChoices = enumChoices.length > 0;
+    const isNoteTextParameter = isNoteBlock && parameter.name === 'text';
     const isVirtualStreamIdParameter = isVirtualRoutingBlock && parameter.name === 'stream_id';
+
+    if (isNoteTextParameter && isLiteral) {
+      return (
+        <textarea
+          value={currentValue}
+          disabled={disabled}
+          rows={5}
+          onChange={(event) => setDraftValue(parameter.name, event.target.value)}
+          className="w-full resize-y rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm leading-5 text-slate-100 disabled:opacity-60"
+        />
+      );
+    }
 
     if (isVirtualStreamIdParameter && isLiteral) {
       const listId = `${block?.instanceId ?? 'virtual'}-stream-id-options`;

@@ -4,6 +4,7 @@ import type { EditorGraphEdge, EditorGraphNode, EditorNodeParameterDrafts } from
 
 export const VIRTUAL_SINK_BLOCK_TYPE = 'studio::VirtualSink';
 export const VIRTUAL_SOURCE_BLOCK_TYPE = 'studio::VirtualSource';
+export const NOTE_BLOCK_TYPE = 'studio::Note';
 export const LEGACY_VIRTUAL_SINK_BLOCK_TYPE = 'gr4-studio::VirtualSink';
 export const LEGACY_VIRTUAL_SOURCE_BLOCK_TYPE = 'gr4-studio::VirtualSource';
 
@@ -26,6 +27,14 @@ export function isVirtualRoutingBlockType(blockTypeId: string): boolean {
   return isVirtualSinkBlockType(blockTypeId) || isVirtualSourceBlockType(blockTypeId);
 }
 
+export function isNoteBlockType(blockTypeId: string): boolean {
+  return blockTypeId === NOTE_BLOCK_TYPE;
+}
+
+export function isStudioEditorOnlyBlockType(blockTypeId: string): boolean {
+  return isVirtualRoutingBlockType(blockTypeId) || isNoteBlockType(blockTypeId);
+}
+
 export function normalizeVirtualRoutingBlockType(blockTypeId: string): string {
   if (blockTypeId === LEGACY_VIRTUAL_SINK_BLOCK_TYPE) {
     return VIRTUAL_SINK_BLOCK_TYPE;
@@ -45,6 +54,23 @@ export function getVirtualRoutingInitialParameters(): EditorNodeParameterDrafts 
       bindingKind: 'literal',
     },
   };
+}
+
+export function getStudioEditorBlockInitialParameters(blockTypeId: string): EditorNodeParameterDrafts {
+  if (isNoteBlockType(blockTypeId)) {
+    return {
+      text: {
+        value: 'Note',
+        bindingKind: 'literal',
+      },
+    };
+  }
+
+  if (isVirtualRoutingBlockType(blockTypeId)) {
+    return getVirtualRoutingInitialParameters();
+  }
+
+  return {};
 }
 
 export type VirtualRouteIssue = {
@@ -143,6 +169,15 @@ export function getEditorVirtualRouteIssues(
 export function getVirtualRoutingCatalogBlocks(): BlockCatalogItem[] {
   return [
     {
+      blockTypeId: NOTE_BLOCK_TYPE,
+      displayName: 'Note',
+      category: 'Studio',
+      description: 'Editor-only note displayed as text on the graph canvas.',
+      inputs: [],
+      outputs: [],
+      parameters: [{ name: 'text', type: 'string', default: 'Note' }],
+    },
+    {
       blockTypeId: VIRTUAL_SOURCE_BLOCK_TYPE,
       displayName: 'Virtual Source',
       category: 'Graph Routing',
@@ -164,6 +199,28 @@ export function getVirtualRoutingCatalogBlocks(): BlockCatalogItem[] {
 }
 
 export function getVirtualRoutingBlockDetails(blockTypeId: string): BlockDetails | undefined {
+  if (isNoteBlockType(blockTypeId)) {
+    return {
+      blockTypeId,
+      displayName: 'Note',
+      description: 'Editor-only note displayed as text on the graph canvas.',
+      parameters: [
+        {
+          name: 'text',
+          label: 'text',
+          description: 'Text to display on the graph canvas.',
+          defaultValue: 'Note',
+          mutable: true,
+          readOnly: false,
+          valueType: 'string',
+          valueKind: 'scalar',
+        },
+      ],
+      inputPorts: [],
+      outputPorts: [],
+    };
+  }
+
   if (!isVirtualRoutingBlockType(blockTypeId)) {
     return undefined;
   }

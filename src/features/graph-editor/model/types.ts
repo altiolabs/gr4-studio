@@ -54,6 +54,7 @@ export type FlowNodeData = {
   renderedInputPorts: RenderedPort[];
   renderedOutputPorts: RenderedPort[];
   isVirtualRouting: boolean;
+  isNote: boolean;
   supportsRuntimeVisualization: boolean;
   isRuntimeVisualizationOpen: boolean;
   onOpenRuntimeVisualization?: (instanceId: string) => void;

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { toGrctrlContentSubmission } from './toGrctrlPayload';
 import type { GraphDocument } from '../../graph-document/model/types';
 import {
+  NOTE_BLOCK_TYPE,
   VIRTUAL_SINK_BLOCK_TYPE,
   VIRTUAL_SOURCE_BLOCK_TYPE,
 } from '../../graph-editor/model/virtual-routing';
@@ -730,5 +731,38 @@ describe('toGrctrlContentSubmission', () => {
     expect(() => toGrctrlContentSubmission(document)).toThrow(
       'Virtual source route "audio" has no matching virtual sink.',
     );
+  });
+
+  it('omits note blocks from runtime export', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: { name: 'note-export' },
+      graph: {
+        nodes: [
+          {
+            id: 'source',
+            blockType: 'gr::testing::NullSource<float32>',
+            position: { x: 0, y: 0 },
+            parameters: {},
+          },
+          {
+            id: 'note',
+            blockType: NOTE_BLOCK_TYPE,
+            position: { x: 100, y: 0 },
+            parameters: {
+              text: { kind: 'literal', value: 'This is a note.' },
+            },
+          },
+        ],
+        edges: [],
+      },
+    };
+
+    const submission = toGrctrlContentSubmission(document);
+
+    expect(submission.content).toContain('- id: "gr::testing::NullSource<float32>"');
+    expect(submission.content).not.toContain(NOTE_BLOCK_TYPE);
+    expect(submission.content).not.toContain('This is a note.');
   });
 });

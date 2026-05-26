@@ -24,6 +24,7 @@ import { rotateNodeRotation } from './model/node-rotation';
 import {
   getVirtualRoutingBlockDetails,
   getVirtualRoutingCatalogBlocks,
+  isNoteBlockType,
   isVirtualRoutingBlockType,
 } from './model/virtual-routing';
 import {
@@ -152,6 +153,7 @@ function toFlowNodeData(
       renderedInputPorts: resolvedPorts.inputs,
       renderedOutputPorts: resolvedPorts.outputs,
       isVirtualRouting: isVirtualRoutingBlockType(node.blockTypeId),
+      isNote: isNoteBlockType(node.blockTypeId),
       supportsRuntimeVisualization,
       isRuntimeVisualizationOpen: supportsRuntimeVisualization && openRuntimeVisualizationId === node.instanceId,
       onOpenRuntimeVisualization,
