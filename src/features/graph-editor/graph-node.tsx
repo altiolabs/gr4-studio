@@ -307,8 +307,8 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
         className={`relative z-10 h-full rounded-md border px-3 py-2 shadow-sm transition ${
           executionMode === 'disabled'
             ? selected
-              ? 'border-slate-500 bg-slate-800/55 opacity-70 ring-1 ring-slate-400/55'
-              : 'border-slate-700 bg-slate-900/70 opacity-70'
+              ? 'border-slate-500 bg-slate-900 ring-1 ring-slate-400/55'
+              : 'border-slate-700 bg-slate-900'
             : executionMode === 'bypassed'
               ? selected
                 ? 'border-amber-300 bg-slate-800 ring-1 ring-amber-200/70 shadow-[0_0_0_1px_rgba(245,158,11,0.55),0_0_18px_rgba(245,158,11,0.35)]'
@@ -324,7 +324,20 @@ export function GraphNode({ data, selected }: NodeProps<GraphFlowNode>) {
         style={{ minHeight: `${requiredHeightPx}px` }}
         title={`${data.displayName}\n${data.blockTypeId}${executionMode === 'active' ? '' : `\nMode: ${executionMode}`}`}
       >
-        <div style={isUpsideDown ? { transform: 'rotate(180deg)', transformOrigin: 'center center' } : undefined}>
+        {executionMode === 'disabled' && (
+          <div
+            className="pointer-events-none absolute inset-0 rounded-md opacity-35"
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(135deg, rgba(148, 163, 184, 0.38) 0, rgba(148, 163, 184, 0.38) 3px, transparent 3px, transparent 10px)',
+            }}
+            aria-hidden="true"
+          />
+        )}
+        <div
+          className="relative z-10"
+          style={isUpsideDown ? { transform: 'rotate(180deg)', transformOrigin: 'center center' } : undefined}
+        >
           {data.supportsRuntimeVisualization && (
             <button
               type="button"
