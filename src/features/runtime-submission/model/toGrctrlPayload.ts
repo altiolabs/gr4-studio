@@ -5,6 +5,11 @@ import { resolveGraphVariables } from '../../variables/model/resolveGraphVariabl
 import type { JsonPrimitive } from '../../variables/model/types';
 import { createEdgeId } from '../../graph-editor/model/nodeFactory';
 import { lookupStudioKnownBlockBinding } from '../../graph-editor/runtime/known-block-bindings';
+import {
+  isVirtualRoutingBlockType,
+  isVirtualSinkBlockType,
+  isVirtualSourceBlockType,
+} from '../../graph-editor/model/virtual-routing';
 
 function stableHash(input: string): string {
   let hash = 2166136261;
@@ -184,6 +189,102 @@ type ToGrctrlContentSubmissionOptions = {
   blockDetailsByType?: ReadonlyMap<string, BlockDetails>;
 };
 
+function getLiteralStringParameter(node: GraphDocumentNode, name: string): string {
+  const parameter = node.parameters[name];
+  const value = parameter?.kind === 'literal' ? parameter.value : undefined;
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function expandVirtualRoutes(params: {
+  nodes: GraphDocumentNode[];
+  edges: GraphDocumentEdge[];
+}): {
+  nodes: GraphDocumentNode[];
+  edges: GraphDocumentEdge[];
+} {
+  const virtualNodes = params.nodes.filter((node) => isVirtualRoutingBlockType(node.blockType));
+  if (virtualNodes.length === 0) {
+    return params;
+  }
+
+  const virtualNodeIds = new Set(virtualNodes.map((node) => node.id));
+  const virtualSinkByStreamId = new Map<string, GraphDocumentNode>();
+  const virtualSourcesByStreamId = new Map<string, GraphDocumentNode[]>();
+
+  virtualNodes.forEach((node) => {
+    const streamId = getLiteralStringParameter(node, 'stream_id');
+    if (!streamId) {
+      throw new Error(`Virtual routing block "${node.id}" requires a literal stream_id parameter.`);
+    }
+
+    if (isVirtualSinkBlockType(node.blockType)) {
+      const existing = virtualSinkByStreamId.get(streamId);
+      if (existing) {
+        throw new Error(
+          `Virtual route "${streamId}" has multiple sinks: "${existing.id}" and "${node.id}".`,
+        );
+      }
+      virtualSinkByStreamId.set(streamId, node);
+      return;
+    }
+
+    if (isVirtualSourceBlockType(node.blockType)) {
+      const sources = virtualSourcesByStreamId.get(streamId) ?? [];
+      sources.push(node);
+      virtualSourcesByStreamId.set(streamId, sources);
+    }
+  });
+
+  const nextEdges = params.edges.filter(
+    (edge) => !virtualNodeIds.has(edge.source.nodeId) && !virtualNodeIds.has(edge.target.nodeId),
+  );
+  const existingEdgeIds = new Set(nextEdges.map((edge) => edge.id));
+
+  for (const [streamId, sources] of virtualSourcesByStreamId.entries()) {
+    const sink = virtualSinkByStreamId.get(streamId);
+    if (!sink) {
+      throw new Error(`Virtual source route "${streamId}" has no matching virtual sink.`);
+    }
+
+    const incoming = params.edges.filter((edge) => edge.target.nodeId === sink.id);
+    const outgoing = sources.flatMap((source) =>
+      params.edges.filter((edge) => edge.source.nodeId === source.id),
+    );
+
+    incoming.forEach((inputEdge) => {
+      outgoing.forEach((outputEdge) => {
+        const nextEdgeId = createEdgeId(
+          inputEdge.source.nodeId,
+          outputEdge.target.nodeId,
+          inputEdge.source.portId,
+          outputEdge.target.portId,
+        );
+        if (existingEdgeIds.has(nextEdgeId)) {
+          return;
+        }
+
+        existingEdgeIds.add(nextEdgeId);
+        nextEdges.push({
+          id: nextEdgeId,
+          source: {
+            nodeId: inputEdge.source.nodeId,
+            portId: inputEdge.source.portId,
+          },
+          target: {
+            nodeId: outputEdge.target.nodeId,
+            portId: outputEdge.target.portId,
+          },
+        });
+      });
+    });
+  }
+
+  return {
+    nodes: params.nodes.filter((node) => !virtualNodeIds.has(node.id)),
+    edges: nextEdges,
+  };
+}
+
 function buildRuntimeGraph(document: GraphDocument): {
   nodes: GraphDocumentNode[];
   edges: GraphDocumentEdge[];
@@ -253,7 +354,7 @@ function buildRuntimeGraph(document: GraphDocument): {
     }
   }
 
-  return { nodes, edges };
+  return expandVirtualRoutes({ nodes, edges });
 }
 
 function shouldOmitParameter(name: string, rawValue: JsonPrimitive | undefined): boolean {

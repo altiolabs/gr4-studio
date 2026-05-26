@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { toGrctrlContentSubmission } from './toGrctrlPayload';
 import type { GraphDocument } from '../../graph-document/model/types';
+import {
+  VIRTUAL_SINK_BLOCK_TYPE,
+  VIRTUAL_SOURCE_BLOCK_TYPE,
+} from '../../graph-editor/model/virtual-routing';
 import type { BlockDetails } from '../../../lib/api/block-details';
 
 function makeDocument(name: string, uiConstraintsValue: string): GraphDocument {
@@ -532,5 +536,199 @@ describe('toGrctrlContentSubmission', () => {
     expect(submission.content).toContain('- [source, out, sink, in]');
     expect(submission.content).toContain('- [sink, out, tail, in]');
     expect(submission.content).not.toContain('- [source, out, mid, in]');
+  });
+
+  it('expands matching virtual sink and source blocks into direct runtime connections', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: { name: 'virtual-route' },
+      graph: {
+        nodes: [
+          {
+            id: 'source',
+            blockType: 'gr::testing::NullSource<float32>',
+            position: { x: 0, y: 0 },
+            parameters: {},
+          },
+          {
+            id: 'route_sink',
+            blockType: VIRTUAL_SINK_BLOCK_TYPE,
+            position: { x: 100, y: 0 },
+            parameters: {
+              stream_id: { kind: 'literal', value: 'audio' },
+            },
+          },
+          {
+            id: 'route_source',
+            blockType: VIRTUAL_SOURCE_BLOCK_TYPE,
+            position: { x: 200, y: 0 },
+            parameters: {
+              stream_id: { kind: 'literal', value: 'audio' },
+            },
+          },
+          {
+            id: 'sink',
+            blockType: 'gr::testing::NullSink<float32>',
+            position: { x: 300, y: 0 },
+            parameters: {},
+          },
+        ],
+        edges: [
+          {
+            id: 'edge-1',
+            source: { nodeId: 'source', portId: 'out' },
+            target: { nodeId: 'route_sink', portId: 'in' },
+          },
+          {
+            id: 'edge-2',
+            source: { nodeId: 'route_source', portId: 'out' },
+            target: { nodeId: 'sink', portId: 'in' },
+          },
+        ],
+      },
+    };
+
+    const submission = toGrctrlContentSubmission(document);
+
+    expect(submission.content).not.toContain(VIRTUAL_SINK_BLOCK_TYPE);
+    expect(submission.content).not.toContain(VIRTUAL_SOURCE_BLOCK_TYPE);
+    expect(submission.content).toContain('- [source, out, sink, in]');
+    expect(submission.content).not.toContain('route_sink');
+    expect(submission.content).not.toContain('route_source');
+  });
+
+  it('expands one virtual sink to multiple virtual sources', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: { name: 'virtual-fanout' },
+      graph: {
+        nodes: [
+          {
+            id: 'source',
+            blockType: 'gr::testing::NullSource<float32>',
+            position: { x: 0, y: 0 },
+            parameters: {},
+          },
+          {
+            id: 'route_sink',
+            blockType: VIRTUAL_SINK_BLOCK_TYPE,
+            position: { x: 100, y: 0 },
+            parameters: {
+              stream_id: { kind: 'literal', value: 'audio' },
+            },
+          },
+          {
+            id: 'route_source_a',
+            blockType: VIRTUAL_SOURCE_BLOCK_TYPE,
+            position: { x: 200, y: -40 },
+            parameters: {
+              stream_id: { kind: 'literal', value: 'audio' },
+            },
+          },
+          {
+            id: 'route_source_b',
+            blockType: VIRTUAL_SOURCE_BLOCK_TYPE,
+            position: { x: 200, y: 40 },
+            parameters: {
+              stream_id: { kind: 'literal', value: 'audio' },
+            },
+          },
+          {
+            id: 'sink_a',
+            blockType: 'gr::testing::NullSink<float32>',
+            position: { x: 300, y: -40 },
+            parameters: {},
+          },
+          {
+            id: 'sink_b',
+            blockType: 'gr::testing::NullSink<float32>',
+            position: { x: 300, y: 40 },
+            parameters: {},
+          },
+        ],
+        edges: [
+          {
+            id: 'edge-1',
+            source: { nodeId: 'source', portId: 'out' },
+            target: { nodeId: 'route_sink', portId: 'in' },
+          },
+          {
+            id: 'edge-2',
+            source: { nodeId: 'route_source_a', portId: 'out' },
+            target: { nodeId: 'sink_a', portId: 'in' },
+          },
+          {
+            id: 'edge-3',
+            source: { nodeId: 'route_source_b', portId: 'out' },
+            target: { nodeId: 'sink_b', portId: 'in' },
+          },
+        ],
+      },
+    };
+
+    const submission = toGrctrlContentSubmission(document);
+
+    expect(submission.content).toContain('- [source, out, sink_a, in]');
+    expect(submission.content).toContain('- [source, out, sink_b, in]');
+  });
+
+  it('rejects duplicate virtual sinks for the same stream id', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: { name: 'duplicate-virtual-sinks' },
+      graph: {
+        nodes: [
+          {
+            id: 'route_sink_a',
+            blockType: VIRTUAL_SINK_BLOCK_TYPE,
+            position: { x: 0, y: 0 },
+            parameters: {
+              stream_id: { kind: 'literal', value: 'audio' },
+            },
+          },
+          {
+            id: 'route_sink_b',
+            blockType: VIRTUAL_SINK_BLOCK_TYPE,
+            position: { x: 100, y: 0 },
+            parameters: {
+              stream_id: { kind: 'literal', value: 'audio' },
+            },
+          },
+        ],
+        edges: [],
+      },
+    };
+
+    expect(() => toGrctrlContentSubmission(document)).toThrow(
+      'Virtual route "audio" has multiple sinks',
+    );
+  });
+
+  it('rejects virtual sources without matching virtual sinks', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: { name: 'missing-virtual-sink' },
+      graph: {
+        nodes: [
+          {
+            id: 'route_source',
+            blockType: VIRTUAL_SOURCE_BLOCK_TYPE,
+            position: { x: 0, y: 0 },
+            parameters: {
+              stream_id: { kind: 'literal', value: 'audio' },
+            },
+          },
+        ],
+        edges: [],
+      },
+    };
+
+    expect(() => toGrctrlContentSubmission(document)).toThrow(
+      'Virtual source route "audio" has no matching virtual sink.',
+    );
   });
 });

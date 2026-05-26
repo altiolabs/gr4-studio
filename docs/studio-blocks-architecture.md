@@ -150,6 +150,24 @@ Rendering is handled separately:
 - `StudioAudioSink` is a playback-oriented sink and uses `audio-float32-binary-v1` over websocket
 - image and audio panel kinds -> separate renderers
 
+## Virtual Graph Routing
+
+Studio supports editor-only virtual routing blocks modeled after GNU Radio Companion virtual source/sink usage:
+
+- `studio::VirtualSink`
+- `studio::VirtualSource`
+
+These blocks are graph-document/editor constructs only. They are preserved in `.gr4s` documents, but they are removed before runtime `.gr4c` submission. Runtime export connects the real upstream edge of a matching `VirtualSink(stream_id=...)` directly to the real downstream edges of matching `VirtualSource(stream_id=...)` blocks.
+
+Rules:
+
+- `stream_id` must be a literal, non-empty route name.
+- one virtual sink is allowed per `stream_id`.
+- one or more virtual sources may consume a matching `stream_id`.
+- a virtual source without a matching virtual sink is an error.
+- a virtual sink without a matching virtual source is reported as a warning.
+- legacy temporary ids `gr4-studio::VirtualSink` and `gr4-studio::VirtualSource` are normalized to the `studio::...` ids when graph documents are loaded.
+
 ## Display Application Lifecycle
 
 The runtime display application can render in-app or as an application-only display route. The selected mode is persisted in graph document `metadata.application`.

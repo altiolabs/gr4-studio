@@ -42,6 +42,7 @@ import { GraphEditorPanel } from '../features/graph-editor/graph-editor-panel';
 import { GraphTabsBar } from '../features/graph-tabs/components/graph-tabs-bar';
 import { useGraphTabsStore, type EditorSnapshot } from '../features/graph-tabs/store/graphTabsStore';
 import { useEditorStore } from '../features/graph-editor/store/editorStore';
+import { getVirtualRoutingBlockDetails } from '../features/graph-editor/model/virtual-routing';
 import { InspectorPanel } from '../features/inspector/inspector-panel';
 import { GlobalSessionsDrawer } from '../features/runtime-session/components/global-sessions-drawer';
 import { resolveCurrentSessionStudioBindingView } from '../features/runtime-session/model/runtime-binding-resolution';
@@ -326,7 +327,10 @@ export function StudioPage() {
   const blockDetailQueries = useQueries({
     queries: uniqueBlockTypes.map((blockTypeId) => ({
       queryKey: ['block-details', blockTypeId],
-      queryFn: () => getBlockDetails(blockTypeId),
+      queryFn: () => {
+        const virtualDetails = getVirtualRoutingBlockDetails(blockTypeId);
+        return virtualDetails ? Promise.resolve(virtualDetails) : getBlockDetails(blockTypeId);
+      },
       staleTime: 60_000,
     })),
   });
@@ -340,10 +344,13 @@ export function StudioPage() {
     });
     return map;
   }, [blockDetailQueries, uniqueBlockTypes]);
-  const currentSubmissionContent = useMemo(
-    () => buildCurrentGraphSubmissionFromEditorSnapshot(currentSnapshot, { blockDetailsByType }).content,
-    [blockDetailsByType, currentSnapshot],
-  );
+  const currentSubmissionContent = useMemo(() => {
+    try {
+      return buildCurrentGraphSubmissionFromEditorSnapshot(currentSnapshot, { blockDetailsByType }).content;
+    } catch {
+      return null;
+    }
+  }, [blockDetailsByType, currentSnapshot]);
   const resolvedGraph = useMemo(
     () => resolveGraphVariables(serializedSnapshot.document),
     [serializedSnapshot.document],

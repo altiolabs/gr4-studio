@@ -22,6 +22,11 @@ import type { EditorGraphEdge, EditorGraphNode, FlowNodeData } from './model/typ
 import { getNodeExecutionMode, isLinearBypassableBlock } from './model/node-execution';
 import { rotateNodeRotation } from './model/node-rotation';
 import {
+  getVirtualRoutingBlockDetails,
+  getVirtualRoutingCatalogBlocks,
+  isVirtualRoutingBlockType,
+} from './model/virtual-routing';
+import {
   buildBlockCardSummary,
   toCanonicalBlockDisplayName,
   toShortBlockName,
@@ -146,6 +151,7 @@ function toFlowNodeData(
       parameterOverflowCount: cardSummary.parameterOverflowCount,
       renderedInputPorts: resolvedPorts.inputs,
       renderedOutputPorts: resolvedPorts.outputs,
+      isVirtualRouting: isVirtualRoutingBlockType(node.blockTypeId),
       supportsRuntimeVisualization,
       isRuntimeVisualizationOpen: supportsRuntimeVisualization && openRuntimeVisualizationId === node.instanceId,
       onOpenRuntimeVisualization,
@@ -414,7 +420,10 @@ export function GraphEditorPanel({
   const blockDetailQueries = useQueries({
     queries: uniqueBlockTypes.map((blockTypeId) => ({
       queryKey: ['block-details', blockTypeId],
-      queryFn: () => getBlockDetails(blockTypeId),
+      queryFn: () => {
+        const virtualDetails = getVirtualRoutingBlockDetails(blockTypeId);
+        return virtualDetails ? Promise.resolve(virtualDetails) : getBlockDetails(blockTypeId);
+      },
       staleTime: 60_000,
     })),
   });
@@ -429,7 +438,10 @@ export function GraphEditorPanel({
     return map;
   }, [blockDetailQueries, uniqueBlockTypes]);
   const catalogBlockTypeIds = useMemo(() => {
-    return new Set((blockCatalogQuery.data ?? []).map((block) => block.blockTypeId));
+    return new Set([
+      ...getVirtualRoutingCatalogBlocks().map((block) => block.blockTypeId),
+      ...(blockCatalogQuery.data ?? []).map((block) => block.blockTypeId),
+    ]);
   }, [blockCatalogQuery.data]);
   const hasResolvedCatalog = blockCatalogQuery.isSuccess;
   const fallbackPortsByNodeId = useMemo(() => buildFallbackPortMap(editorEdges), [editorEdges]);

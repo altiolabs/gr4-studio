@@ -18,6 +18,12 @@ import {
   getDescriptorBindingAuthoringMessage,
   isDescriptorBindingHiddenParameter,
 } from '../graph-editor/runtime/studio-managed-runtime-authoring';
+import {
+  getEditorVirtualRouteIssues,
+  isVirtualRoutingBlockType,
+  isVirtualSinkBlockType,
+  isVirtualSourceBlockType,
+} from '../graph-editor/model/virtual-routing';
 
 type BlockPropertiesModalProps = {
   instanceId: string;
@@ -96,6 +102,8 @@ function buildInitialDraftValues(
 
 export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesModalProps) {
   const block = useEditorStore((state) => state.getNodeById(instanceId));
+  const nodes = useEditorStore((state) => state.nodes);
+  const edges = useEditorStore((state) => state.edges);
   const updateNodeParameterBindings = useEditorStore((state) => state.updateNodeParameterBindings);
   const studioPanels = useEditorStore((state) => state.studioPanels);
   const setStudioPanels = useEditorStore((state) => state.setStudioPanels);
@@ -106,6 +114,15 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
   const [pendingControlParameter, setPendingControlParameter] = useState<BlockParameterMeta | null>(null);
 
   const blockDetailsQuery = useBlockDetailsQuery(block?.blockTypeId);
+  const isVirtualRoutingBlock = block ? isVirtualRoutingBlockType(block.blockTypeId) : false;
+  const isVirtualSourceBlock = block ? isVirtualSourceBlockType(block.blockTypeId) : false;
+  const virtualSinkStreamIds = useMemo(() => {
+    const ids = nodes
+      .filter((node) => isVirtualSinkBlockType(node.blockTypeId))
+      .map((node) => node.parameters.stream_id?.value.trim() ?? '')
+      .filter((value) => value.length > 0);
+    return Array.from(new Set(ids)).sort((left, right) => left.localeCompare(right));
+  }, [nodes]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -191,6 +208,30 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
     [block?.blockTypeId, parameterRows],
   );
   const canCommit = isDraftInitialized && !blockDetailsQuery.isPending && !blockDetailsQuery.isError;
+  const virtualRouteIssues = useMemo(() => {
+    if (!block || !isVirtualRoutingBlock) {
+      return [];
+    }
+
+    const draftedNodes = nodes.map((node) =>
+      node.instanceId === block.instanceId
+        ? {
+            ...node,
+            parameters: {
+              ...node.parameters,
+              stream_id: {
+                value: draftValues.stream_id?.value ?? node.parameters.stream_id?.value ?? '',
+                bindingKind: 'literal' as const,
+              },
+            },
+          }
+        : node,
+    );
+
+    return getEditorVirtualRouteIssues(draftedNodes, edges).filter((issue) =>
+      issue.nodeIds.includes(block.instanceId),
+    );
+  }, [block, draftValues.stream_id?.value, edges, isVirtualRoutingBlock, nodes]);
   const setDraftValue = (parameterName: string, value: string) => {
     setDraftValues((prev) => ({
       ...prev,
@@ -259,6 +300,30 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
     const enumChoices = parameter.enumChoices ?? [];
     const enumTypeLabel = getBlockParameterEnumTypeLabel(parameter);
     const hasEnumChoices = enumChoices.length > 0;
+    const isVirtualStreamIdParameter = isVirtualRoutingBlock && parameter.name === 'stream_id';
+
+    if (isVirtualStreamIdParameter && isLiteral) {
+      const listId = `${block?.instanceId ?? 'virtual'}-stream-id-options`;
+      return (
+        <>
+          <input
+            type="text"
+            value={currentValue}
+            list={isVirtualSourceBlock && virtualSinkStreamIds.length > 0 ? listId : undefined}
+            disabled={disabled}
+            onChange={(event) => setDraftValue(parameter.name, event.target.value)}
+            className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 disabled:opacity-60"
+          />
+          {isVirtualSourceBlock && virtualSinkStreamIds.length > 0 && (
+            <datalist id={listId}>
+              {virtualSinkStreamIds.map((streamId) => (
+                <option key={streamId} value={streamId} />
+              ))}
+            </datalist>
+          )}
+        </>
+      );
+    }
 
     if (isBoolean && isLiteral) {
       const checked = coerceBlockPropertyLiteralValue(currentValue) === true;
@@ -451,6 +516,21 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                   {descriptorBindingAuthoringMessage}
                 </div>
               )}
+              {virtualRouteIssues.length > 0 && (
+                <div className="rounded border border-slate-700 bg-slate-950/60 p-3 text-xs">
+                  <p className="mb-2 font-semibold uppercase tracking-wide text-slate-300">Virtual Route</p>
+                  <div className="space-y-1">
+                    {virtualRouteIssues.map((issue) => (
+                      <p
+                        key={`${issue.severity}:${issue.message}`}
+                        className={issue.severity === 'error' ? 'text-rose-300' : 'text-amber-200'}
+                      >
+                        {issue.message}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
               {editableParameters.length === 0 ? (
                 <p className="text-sm text-slate-400">This block has no editable parameters in General.</p>
               ) : (
@@ -472,10 +552,11 @@ export function BlockPropertiesModal({ instanceId, onClose }: BlockPropertiesMod
                         </label>
                         <select
                           value={draftValues[parameter.name]?.bindingKind ?? 'literal'}
+                          disabled={isVirtualRoutingBlock && parameter.name === 'stream_id'}
                           onChange={(event) =>
                             setDraftBindingKind(parameter.name, event.target.value as DraftValue['bindingKind'])
                           }
-                          className="w-full min-w-0 rounded border border-slate-600 bg-slate-900 px-1.5 py-1 text-[11px] text-slate-200"
+                          className="w-full min-w-0 rounded border border-slate-600 bg-slate-900 px-1.5 py-1 text-[11px] text-slate-200 disabled:opacity-60"
                         >
                           <option value="literal">Literal</option>
                           <option value="expression">Expression</option>

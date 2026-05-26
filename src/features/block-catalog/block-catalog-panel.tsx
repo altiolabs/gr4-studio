@@ -4,6 +4,7 @@ import { ApiClientError } from '../../lib/api/client';
 import { PanelHeader } from '../../components/panel-header';
 import { extractDoxygenBrief } from '../documentation/model/doxygen';
 import { toEditorCatalogBlock } from '../graph-editor/model/nodeFactory';
+import { getVirtualRoutingCatalogBlocks } from '../graph-editor/model/virtual-routing';
 import { useEditorStore } from '../graph-editor/store/editorStore';
 import {
   buildCategoryTree,
@@ -132,6 +133,10 @@ function CategoryTreeView({
 export function BlockCatalogPanel() {
   const { data, isPending, isError, error } = useBlockCatalogQuery();
   const [searchQuery, setSearchQuery] = useState('');
+  const catalogBlocks = useMemo(
+    () => [...getVirtualRoutingCatalogBlocks(), ...(data ?? [])],
+    [data],
+  );
   const loadingMessage =
     config.backendMode === 'local'
       ? 'Connecting to local gr4cp...'
@@ -146,10 +151,10 @@ export function BlockCatalogPanel() {
 
     const query = searchQuery.trim().toLowerCase();
     if (!query) {
-      return data;
+      return catalogBlocks;
     }
 
-    return data.filter((block) => {
+    return catalogBlocks.filter((block) => {
       const parsed = parseTypeId(block.blockTypeId);
       const normalizedCategory = normalizeCategoryPath(block);
       return (
@@ -160,7 +165,7 @@ export function BlockCatalogPanel() {
         parsed.familyName.toLowerCase().includes(query)
       );
     });
-  }, [data, searchQuery]);
+  }, [catalogBlocks, data, searchQuery]);
 
   const categoryTree = useMemo(() => buildCategoryTree(filteredBlocks), [filteredBlocks]);
   const allCategoryPaths = useMemo(() => collectCategoryPaths(categoryTree), [categoryTree]);

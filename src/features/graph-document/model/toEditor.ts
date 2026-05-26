@@ -1,4 +1,5 @@
 import type { EditorGraphEdge, EditorGraphNode } from '../../graph-editor/model/types';
+import { normalizeVirtualRoutingBlockType } from '../../graph-editor/model/virtual-routing';
 import type { ApplicationSpec, StudioLayoutSpec, StudioPanelSpec, StudioPlotPaletteSpec, StudioVariable } from './studio-workspace';
 import type { GraphDocument } from './types';
 
@@ -29,28 +30,31 @@ export function editorGraphFromDocument(document: GraphDocument): EditorGraphRep
       studioPlotPalettes: document.metadata.studio?.plotPalettes,
       application: document.metadata.application,
     },
-    nodes: document.graph.nodes.map((node) => ({
-      instanceId: node.id,
-      blockTypeId: node.blockType,
-      displayName: node.title ?? node.blockType,
-      category: undefined,
-      executionMode: node.executionMode ?? 'active',
-      rotation: node.rotation ?? 0,
-      position: {
-        x: node.position.x,
-        y: node.position.y,
-      },
-      parameters: Object.entries(node.parameters).reduce(
-        (acc, [name, value]) => {
-          acc[name] =
-            value.kind === 'expression'
-              ? { value: value.expr, bindingKind: 'expression' }
-              : { value: String(value.value), bindingKind: 'literal' };
-          return acc;
+    nodes: document.graph.nodes.map((node) => {
+      const blockTypeId = normalizeVirtualRoutingBlockType(node.blockType);
+      return {
+        instanceId: node.id,
+        blockTypeId,
+        displayName: node.title ?? blockTypeId,
+        category: undefined,
+        executionMode: node.executionMode ?? 'active',
+        rotation: node.rotation ?? 0,
+        position: {
+          x: node.position.x,
+          y: node.position.y,
         },
-        {} as Record<string, { value: string; bindingKind: 'literal' | 'expression' }>,
-      ),
-    })),
+        parameters: Object.entries(node.parameters).reduce(
+          (acc, [name, value]) => {
+            acc[name] =
+              value.kind === 'expression'
+                ? { value: value.expr, bindingKind: 'expression' }
+                : { value: String(value.value), bindingKind: 'literal' };
+            return acc;
+          },
+          {} as Record<string, { value: string; bindingKind: 'literal' | 'expression' }>,
+        ),
+      };
+    }),
     edges: document.graph.edges.map((edge) => ({
       id: edge.id,
       sourceInstanceId: edge.source.nodeId,

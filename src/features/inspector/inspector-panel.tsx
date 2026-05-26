@@ -27,6 +27,11 @@ import {
   buildStudioAuthoringBindingView,
   getDescriptorBindingAuthoringMessage,
 } from '../graph-editor/runtime/studio-managed-runtime-authoring';
+import {
+  getEditorVirtualRouteIssues,
+  getVirtualRoutingBlockDetails,
+  isVirtualRoutingBlockType,
+} from '../graph-editor/model/virtual-routing';
 
 type InspectorTabId = 'selection' | 'graph' | 'session';
 
@@ -486,6 +491,7 @@ function SelectionTab({
   const canonicalDisplayName = selectedBlock
     ? toCanonicalBlockDisplayName(selectedBlock.displayName, selectedBlock.blockTypeId)
     : '';
+  const isVirtualRouting = selectedBlock ? isVirtualRoutingBlockType(selectedBlock.blockTypeId) : false;
   const blockDetailsQuery = useBlockDetailsQuery(selectedBlock?.blockTypeId);
 
   const draftParameterValues = Object.entries(selectedBlock?.parameters ?? {}).reduce<Record<string, string>>(
@@ -553,12 +559,21 @@ function SelectionTab({
         </div>
       </SectionCard>
 
-      <RuntimeSettingsCard
-        runtimeContext={runtimeContext}
-        graphDriftState={graphDriftState}
-        selectedBlock={selectedBlock}
-        blockDetails={blockDetailsQuery.data}
-      />
+      {isVirtualRouting ? (
+        <SectionCard>
+          <SummaryLabel>Virtual Route</SummaryLabel>
+          <p className="text-sm text-slate-300">
+            This block is editor-only. It is removed before runtime submission and replaced with direct graph connections through its matching stream_id.
+          </p>
+        </SectionCard>
+      ) : (
+        <RuntimeSettingsCard
+          runtimeContext={runtimeContext}
+          graphDriftState={graphDriftState}
+          selectedBlock={selectedBlock}
+          blockDetails={blockDetailsQuery.data}
+        />
+      )}
 
       <SectionCard>
         <SummaryLabel>Resolved Ports</SummaryLabel>
@@ -714,7 +729,10 @@ export function InspectorPanel() {
   const blockDetailQueries = useQueries({
     queries: uniqueBlockTypes.map((blockTypeId) => ({
       queryKey: ['block-details', blockTypeId],
-      queryFn: () => getBlockDetails(blockTypeId),
+      queryFn: () => {
+        const virtualDetails = getVirtualRoutingBlockDetails(blockTypeId);
+        return virtualDetails ? Promise.resolve(virtualDetails) : getBlockDetails(blockTypeId);
+      },
       staleTime: 60_000,
     })),
   });
@@ -763,12 +781,27 @@ export function InspectorPanel() {
     ],
   );
 
-  const currentSubmissionContent = useMemo(
-    () => buildCurrentGraphSubmissionFromEditorSnapshot(currentSnapshot, { blockDetailsByType }).content,
-    [blockDetailsByType, currentSnapshot],
+  const virtualRouteIssues = useMemo(
+    () => getEditorVirtualRouteIssues(nodes, edges),
+    [edges, nodes],
   );
+  const currentSubmissionResult = useMemo(() => {
+    try {
+      return {
+        content: buildCurrentGraphSubmissionFromEditorSnapshot(currentSnapshot, { blockDetailsByType }).content,
+        error: null,
+      };
+    } catch (error) {
+      return {
+        content: '',
+        error: error instanceof Error ? error.message : 'Could not build graph submission.',
+      };
+    }
+  }, [blockDetailsByType, currentSnapshot]);
 
-  const runtimeView = activeGraphTabId ? getTabRuntimeView(activeGraphTabId, currentSubmissionContent, schedulerId) : null;
+  const runtimeView = activeGraphTabId
+    ? getTabRuntimeView(activeGraphTabId, currentSubmissionResult.content, schedulerId)
+    : null;
   const canExportCurrentGraph = canDownloadCurrentGraph(activeGraphTab);
 
   const handleDownloadGrc = () => {
@@ -880,6 +913,22 @@ export function InspectorPanel() {
                   <SummaryValue>{runIntentLabel(runtimeView?.runIntent)}</SummaryValue>
                 </div>
               </div>
+              {(virtualRouteIssues.length > 0 || currentSubmissionResult.error) && (
+                <div className="space-y-2 rounded border border-slate-700 bg-slate-950/50 p-2">
+                  <SummaryLabel>Graph Issues</SummaryLabel>
+                  {currentSubmissionResult.error && (
+                    <p className="text-xs text-rose-300">{currentSubmissionResult.error}</p>
+                  )}
+                  {virtualRouteIssues.map((issue) => (
+                    <p
+                      key={`${issue.severity}:${issue.message}:${issue.nodeIds.join(',')}`}
+                      className={`text-xs ${issue.severity === 'error' ? 'text-rose-300' : 'text-amber-200'}`}
+                    >
+                      {issue.message}
+                    </p>
+                  ))}
+                </div>
+              )}
               <div className="pt-2">
                 <button
                   type="button"

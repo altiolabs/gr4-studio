@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { graphDocumentFromEditor } from './fromEditor';
 import { editorGraphFromDocument } from './toEditor';
+import type { GraphDocument } from './types';
 
 describe('studio panel metadata round-trip', () => {
   it('preserves studio panels and layout between editor snapshot and graph document', () => {
@@ -209,5 +210,108 @@ describe('studio panel metadata round-trip', () => {
       value: 'http://legacy-host:18080/legacy-series',
       bindingKind: 'literal',
     });
+  });
+
+  it('normalizes legacy virtual routing block ids when loading graph documents', () => {
+    const document: GraphDocument = {
+      format: 'gr4-studio.graph',
+      version: 1,
+      metadata: {
+        name: 'Graph',
+      },
+      graph: {
+        nodes: [
+          {
+            id: 'route_source',
+            blockType: 'gr4-studio::VirtualSource',
+            title: 'Virtual Source',
+            position: { x: 0, y: 0 },
+            parameters: {
+              stream_id: { kind: 'literal', value: 'audio' },
+            },
+          },
+          {
+            id: 'route_sink',
+            blockType: 'gr4-studio::VirtualSink',
+            title: 'Virtual Sink',
+            position: { x: 100, y: 0 },
+            parameters: {
+              stream_id: { kind: 'literal', value: 'audio' },
+            },
+          },
+        ],
+        edges: [],
+      },
+    };
+
+    const restored = editorGraphFromDocument(document);
+    expect(restored.nodes.map((node) => node.blockTypeId)).toEqual([
+      'studio::VirtualSource',
+      'studio::VirtualSink',
+    ]);
+
+    const resaved = graphDocumentFromEditor(restored);
+    expect(resaved.graph.nodes.map((node) => node.blockType)).toEqual([
+      'studio::VirtualSource',
+      'studio::VirtualSink',
+    ]);
+  });
+
+  it('preserves virtual routing blocks in graph documents', () => {
+    const snapshot = {
+      metadata: {
+        name: 'Graph',
+      },
+      nodes: [
+        {
+          instanceId: 'route_sink',
+          blockTypeId: 'studio::VirtualSink',
+          displayName: 'Virtual Sink',
+          parameters: {
+            stream_id: { value: 'audio', bindingKind: 'literal' as const },
+          },
+          position: { x: 0, y: 0 },
+        },
+        {
+          instanceId: 'route_source',
+          blockTypeId: 'studio::VirtualSource',
+          displayName: 'Virtual Source',
+          parameters: {
+            stream_id: { value: 'audio', bindingKind: 'literal' as const },
+          },
+          position: { x: 100, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: 'virtual-route-edge',
+          sourceInstanceId: 'route_source',
+          targetInstanceId: 'real_sink',
+          sourcePort: 'out',
+          targetPort: 'in',
+        },
+      ],
+    };
+
+    const document = graphDocumentFromEditor(snapshot);
+    expect(document.graph.nodes.map((node) => node.blockType)).toEqual([
+      'studio::VirtualSink',
+      'studio::VirtualSource',
+    ]);
+    expect(document.graph.edges[0]).toEqual({
+      id: 'virtual-route-edge',
+      source: { nodeId: 'route_source', portId: 'out' },
+      target: { nodeId: 'real_sink', portId: 'in' },
+    });
+
+    const restored = editorGraphFromDocument(document);
+    expect(restored.nodes.map((node) => ({
+      instanceId: node.instanceId,
+      blockTypeId: node.blockTypeId,
+      displayName: node.displayName,
+      parameters: node.parameters,
+      position: node.position,
+    }))).toEqual(snapshot.nodes);
+    expect(restored.edges).toEqual(snapshot.edges);
   });
 });
