@@ -1,42 +1,8 @@
-# Display Application Popout Plan
+# Display Application Popout Implementation
 
-## Goal
+## Current Behavior
 
-Make the Studio display application open either in the main Studio window, a browser tab, or a popup-style window while keeping its runtime lifecycle local to the running graph session.
-
-The display application must not own graph editor state. While a graph is running, controls in the display application should maintain local UI state and write only to the active runtime session when a control is bound to a runtime parameter.
-
-## Principles
-
-- Keep the authored graph and the running display application separate.
-- Do not add control-plane streaming or new backend endpoints.
-- Use existing session and block settings APIs.
-- Treat `metadata.application` as presentation intent, not execution state.
-- Keep browser, Electron, and WASM paths explicit.
-
-## Runtime Display Contract
-
-Status: mostly done.
-
-Add a frontend launch snapshot containing only what an application-only window needs:
-
-- [x] source graph tab id
-- [x] session id
-- [x] execution state at launch
-- [x] visible Studio panel entries
-- [x] rendered layout
-- [x] plot palettes and resolved binding data
-- [x] optional title
-- [ ] stronger runtime validation/schema for launch snapshot payloads
-- [ ] explicit launch snapshot cleanup/expiry
-
-The snapshot must not contain editor callbacks, graph mutation handlers, document handles, or file persistence state.
-
-## Persisted Display Mode
-
-Status: done for initial modes.
-
-Use the existing graph document field:
+Studio can render the runtime display application in three modes stored in graph document `metadata.application`:
 
 ```json
 {
@@ -50,103 +16,103 @@ Use the existing graph document field:
 }
 ```
 
-Supported initial modes:
+Supported modes:
 
-- [x] `in_app`: run graph, then switch the center view to Application.
-- [x] `new_tab`: run graph, then open the application-only route in a browser tab.
-- [x] `popout`: run graph, then open the application-only route in a popup-style browser window.
-- [x] Electron-native `BrowserWindow` mapping for `popout`.
+- `in_app`: Run switches the center view to the in-app display.
+- `new_tab`: Run opens an application-only display route.
+- `popout`: Run opens an application-only display route in a popup/window.
+
+The center **In-app** tab is only shown when mode is `in_app`. In `new_tab` or `popout` mode, the display is treated as a separate client rather than a Studio editor tab.
+
+In Electron, both `new_tab` and `popout` currently open a separate native `BrowserWindow`; Electron does not provide browser-style tabs by default. In a browser, `new_tab` uses `_blank` and `popout` uses popup window features.
+
+## User Workflow
+
+The display mode selector lives near the runtime controls. Running a graph uses the selected mode:
+
+- `In-app`: starts the session and switches to the in-app display.
+- `New tab`: starts the session and opens the display route.
+- `Popout`: starts the session and opens a popup/window.
+
+When a running session already exists, **Open Display** reopens a display client without rerunning or replacing the graph. Run remains the action for creating, starting, or replacing the runtime session.
+
+Closing a display tab/window does not stop or delete the flowgraph session. Session lifecycle remains owned by the main Studio runtime controls.
 
 ## Application-Only Route
 
-Status: done for browser route.
-
-Add a route like:
+The display client route is:
 
 ```text
 /app-runtime/:launchId
 ```
 
-This route renders only the display application:
+This route renders only the runtime display application:
 
-- [x] no graph tabs
-- [x] no block catalog
-- [x] no graph editor
-- [x] no inspector
-- [x] no document persistence UI
+- no graph tabs
+- no block catalog
+- no graph editor
+- no inspector
+- no document persistence UI
 
-The route reads the launch snapshot by `launchId`, renders `ApplicationView`, and tracks the referenced session state through existing session APIs.
+The route renders `ApplicationView` from a launch snapshot and polls the referenced session state through existing session APIs.
 
-## Browser Launch Handoff
+## Launch Snapshot
 
-Status: done for initial browser/WASM-compatible path.
+Launching a separate display writes a frontend launch snapshot with only the data needed by the display client:
 
-For browser and WASM-compatible paths:
+- source graph tab id
+- session id
+- execution state at launch
+- visible Studio panel entries
+- rendered layout
+- plot palettes and resolved binding data
+- optional title
 
-- [x] write the launch snapshot into web storage under a generated `launchId`
-- [x] open `/app-runtime/:launchId`
-- [x] let the opened route read the snapshot
-- [x] reserve a window immediately on Run click to reduce popup blocking
-- [ ] add `BroadcastChannel` or equivalent coordination if existing display windows should update in place
+The snapshot intentionally excludes graph editor mutation callbacks, document handles, file persistence state, and graph editing state.
 
-Storage is a handoff mechanism only. It is not authoritative runtime state.
+For browser/WASM-compatible contexts, the snapshot is stored in web storage under a generated `launchId`. For Electron, the renderer also passes the snapshot through preload IPC to the main process, and the display window can read it back through IPC. This avoids relying on storage partition behavior for native windows.
 
-## Electron Launch Path
+## Electron Path
 
-Status: done for initial native popout.
-
-Initial implementation can use the same browser `window.open` path. A later Electron-specific slice should expose a preload API such as:
+Electron exposes:
 
 ```ts
-gr4StudioShell.openDisplayApplication({ launchId, mode, title })
+gr4StudioShell.openDisplayApplication({ launchId, mode, title, snapshot })
+gr4StudioShell.getDisplayApplicationLaunchSnapshot(launchId)
 ```
 
-The Electron main process should create a second `BrowserWindow` for `popout`.
+The main process creates a second `BrowserWindow` for display clients and loads `/app-runtime/:launchId`.
 
-Done:
-
-- [x] exposed `gr4StudioShell.openDisplayApplication(...)` through preload
-- [x] added main-process IPC for display application windows
-- [x] opens `/app-runtime/:launchId` in a second Electron `BrowserWindow`
-- [x] keeps browser `window.open` fallback for non-Electron contexts
+The desktop app server rewrites built `index.html` asset URLs from relative `./assets/...` paths to root-relative `/assets/...` paths when serving through the local app server. This is required because `/app-runtime/:launchId` is a nested route, and otherwise the browser resolves the bundle path under `/app-runtime/assets/...`.
 
 ## Runtime-Local Control Lifecycle
 
-Status: partially done.
+The display application does not own graph editor state:
 
-In the application-only route:
-
-- [x] application-only route does not call editor store mutation APIs
-- [x] application-only route does not mark the graph document dirty
-- [x] application-only route does not update graph variables or graph parameters
-- [x] in-app Application view also stops variable-control editor mutation while the graph is running
-- [x] parameter-bound controls continue to write to the running session via block settings APIs when valid
-- [x] variable-bound controls use a local display-state store when no graph-editor update callback is provided
-- [ ] optional future mapping from variable-bound controls to explicit runtime parameter updates
+- application-only route does not call editor store mutation APIs
+- application-only route does not mark the graph document dirty
+- application-only route does not update graph variables or graph parameters
+- in-app display also stops variable-control editor mutation while the graph is running
+- parameter-bound controls continue to write to the running session via block settings APIs when valid
+- variable-bound controls use local display state when no graph-editor update callback is provided
 
 If graph-level persistence of changed controls is needed later, add an explicit "Apply to graph" workflow.
 
 ## Session Lifecycle
 
-Status: partially done.
+The display application is keyed by session id:
 
-The display application should be keyed by session id:
+- running session: plots and runtime parameter controls are active
+- stopped/error/deleted session: display shows inactive/error state and remains readable
+- parent editor tab closes: display can remain open until the session ends
+- rerun/replacement session: launch a fresh display application
+- closing the display tab/window: does not stop or delete the session
 
-- [x] running session: plots and runtime parameter controls are active
-- [x] stopped/error/deleted session: show inactive/error state and keep the display readable
-- [x] parent editor tab closes: display can remain open until the session ends
-- [x] rerun/replacement session: launch a fresh display application
-- [ ] add explicit stale/expired launch snapshot UI beyond the current missing-snapshot state
-- [ ] add optional coordination for reusing/updating an existing display window
+## Remaining Follow-Ups
 
-## Implementation Order
-
-1. [x] Add persisted display mode setter and compact UI.
-2. [x] Make `runTab` return a typed result.
-3. [x] Switch to the Application view after successful `in_app` runs.
-4. [x] Add launch snapshot storage and `/app-runtime/:launchId`.
-5. [x] Open `new_tab` and browser `popout` after successful runs.
-6. [x] Keep application-only controls runtime-local by omitting editor mutation callbacks.
-7. [x] Add Electron-native popout IPC/window creation.
-8. [ ] Add broader tests for run branching and runtime-local controls.
-9. [x] Add tests for persistence and launch snapshot handoff.
+- Decide whether to hide or relabel `new_tab` in Electron, since it currently opens another native window like `popout`.
+- Add stronger runtime validation/schema for launch snapshot payloads.
+- Add explicit launch snapshot cleanup/expiry.
+- Add optional coordination for reusing/updating an existing display window.
+- Add optional variable-control mapping to explicit runtime parameter updates.
+- Add broader tests for StudioPage run branching and runtime-local control behavior.

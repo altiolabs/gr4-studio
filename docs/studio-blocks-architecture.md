@@ -150,6 +150,29 @@ Rendering is handled separately:
 - `StudioAudioSink` is a playback-oriented sink and uses `audio-float32-binary-v1` over websocket
 - image and audio panel kinds -> separate renderers
 
+## Display Application Lifecycle
+
+The runtime display application can render in-app or as an application-only display route. The selected mode is persisted in graph document `metadata.application`.
+
+Supported display modes:
+
+- `in_app`: the main Studio center view shows the display as an **In-app** tab.
+- `new_tab`: Studio launches `/app-runtime/:launchId` as a separate display client.
+- `popout`: Studio launches `/app-runtime/:launchId` as a popup/window. In Electron this is a native `BrowserWindow`.
+
+The display route is a runtime client, not an editor:
+
+- it receives a launch snapshot with visible panel entries, layout, resolved bindings, and session id
+- it does not own graph editor state
+- it does not mark documents dirty
+- closing it does not stop or delete the session
+- parameter-bound controls write to the running session through block settings APIs
+- variable-bound controls are local display state unless an editor update callback is explicitly supplied
+
+Use the main Studio runtime controls to stop or delete sessions. Use **Open Display** to reopen a display client for an already running linked session.
+
+More detail: `docs/display-application-popout-plan.md`.
+
 For manual waterfall validation, the repo also ships canonical fixture payloads under `public/demo/`:
 
 - `waterfall-spectrum-json-v1.normal.json`
