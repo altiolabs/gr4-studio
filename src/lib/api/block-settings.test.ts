@@ -27,7 +27,7 @@ describe('block-settings api', () => {
       enabled: true,
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      '/sessions/sess%201/blocks/sig%2F0/settings',
+      '/api/sessions/sess%201/blocks/sig%2F0/settings',
       expect.objectContaining({
         method: 'GET',
       }),
@@ -50,7 +50,7 @@ describe('block-settings api', () => {
     await setBlockSettings('sess_1', 'sig0', { gain: 1.25 });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/sessions/sess_1/blocks/sig0/settings',
+      '/api/sessions/sess_1/blocks/sig0/settings',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ gain: 1.25 }),
@@ -74,7 +74,7 @@ describe('block-settings api', () => {
     await setBlockSettings('sess_1', 'sig0', { gain: 1.25 }, 'immediate');
 
     expect(fetchMock).toHaveBeenCalledWith(
-      '/sessions/sess_1/blocks/sig0/settings?mode=immediate',
+      '/api/sessions/sess_1/blocks/sig0/settings?mode=immediate',
       expect.any(Object),
     );
   });

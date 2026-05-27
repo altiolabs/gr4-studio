@@ -82,7 +82,7 @@ describe('graph node short-name presentation', () => {
     expect(summary.parameterLines.some((line) => line.startsWith('endpoint='))).toBe(false);
   });
 
-  it('keeps endpoint parameters in graph-node summary chips for unsupported families', () => {
+  it('hides endpoint parameters from graph-node summary chips for descriptor-managed families', () => {
     const summary = buildBlockCardSummary(
       {
         displayName: 'StudioWaterfallSink<float32>',
@@ -95,6 +95,7 @@ describe('graph node short-name presentation', () => {
       undefined,
     );
 
-    expect(summary.parameterLines).toEqual(['transport=http_poll', 'endpoint=http://127.0.0.1:18087/snapshot']);
+    expect(summary.parameterLines).toEqual(['transport=http_poll']);
+    expect(summary.parameterLines.some((line) => line.startsWith('endpoint='))).toBe(false);
   });
 });
