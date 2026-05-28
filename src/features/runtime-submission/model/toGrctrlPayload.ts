@@ -392,7 +392,11 @@ function shouldOmitParameter(name: string, rawValue: JsonPrimitive | undefined):
 }
 
 function shouldOmitParameterForBlock(blockTypeId: string, name: string, rawValue: JsonPrimitive | undefined): boolean {
-  if (blockTypeId.startsWith('gr::studio::StudioSeriesSink<') && (name === 'x_min' || name === 'x_max')) {
+  if (
+    (blockTypeId.startsWith('gr::studio::StudioSeriesSink<') ||
+      blockTypeId.startsWith('gr::studio::StudioPowerSpectrumSink<')) &&
+    (name === 'x_min' || name === 'x_max')
+  ) {
     return true;
   }
 

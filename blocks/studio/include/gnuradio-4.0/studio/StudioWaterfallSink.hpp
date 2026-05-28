@@ -79,7 +79,7 @@ public:
         }
     }
 
-    void configure(std::size_t fft_size, std::size_t num_averages, float time_span, float sample_rate, std::string window, bool output_in_db) {
+    void configure(std::size_t fft_size, std::size_t num_averages, float time_span, float sample_rate, gr::algorithm::window::Type window, bool output_in_db) {
         std::lock_guard lock(_mutex);
         _fftSize = std::max<std::size_t>(1UZ, fft_size);
         _numAverages = std::max<std::size_t>(1UZ, num_averages);
@@ -88,12 +88,10 @@ public:
         _timeSpanSamples = quantizedSamples;
         _historyRows = std::max<std::size_t>(1UZ, quantizedSamples / _fftSize);
         _sampleRate = sample_rate > 0.0F ? sample_rate : 1.0F;
-        _windowName = std::move(window);
+        _windowType = window;
+        _windowName = std::string(magic_enum::enum_name(window));
         _outputInDb = output_in_db;
 
-        const auto parsedWindow = magic_enum::enum_cast<gr::algorithm::window::Type>(_windowName, magic_enum::case_insensitive)
-                                      .value_or(gr::algorithm::window::Type::BlackmanHarris);
-        _windowType = parsedWindow;
         _window.assign(_fftSize, value_type{});
         gr::algorithm::window::create(_window, _windowType);
 
@@ -583,7 +581,7 @@ struct StudioWaterfallSink : Block<StudioWaterfallSink<T>> {
     Annotated<gr::Size_t, "fft_size", Doc<"FFT size used for each spectrum frame">, Visible> fft_size = 1024UZ;
     Annotated<gr::Size_t, "num_averages", Doc<"Number of FFT frames averaged into each history row">, Visible> num_averages = 8UZ;
     Annotated<float, "time_span", Doc<"Total waterfall history span in seconds (quantized to fft_size using sample_rate)">, Visible> time_span = 256.0F;
-    Annotated<std::string, "window", Doc<gr::algorithm::window::TypeNames>, Visible> window = std::string(magic_enum::enum_name(gr::algorithm::window::Type::BlackmanHarris));
+    Annotated<gr::algorithm::window::Type, "window", Doc<"FFT window function">, Visible> window = gr::algorithm::window::Type::BlackmanHarris;
     Annotated<float, "sample_rate", Doc<"Input sample rate in Hz">, Visible> sample_rate = 1.0F;
     Annotated<bool, "output_in_db", Doc<"Render the waterfall history in dB">, Visible> output_in_db = true;
     Annotated<bool, "autoscale", Doc<"Automatically derive the waterfall colormap range from live data">, Visible> autoscale = true;

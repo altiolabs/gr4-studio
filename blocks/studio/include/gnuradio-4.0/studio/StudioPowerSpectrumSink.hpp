@@ -177,14 +177,12 @@ public:
         float sample_rate,
         float center_freq,
         std::uint32_t update_ms,
-        std::string window,
+        gr::algorithm::window::Type window,
         bool output_in_db,
         bool persistence_enabled,
         float phosphor_intensity,
         float phosphor_decay_ms,
         bool autoscale_enabled,
-        float x_min,
-        float x_max,
         float y_min,
         float y_max) {
         std::lock_guard lock(_mutex);
@@ -193,20 +191,16 @@ public:
         _sampleRate = sample_rate > 0.0F ? sample_rate : 1.0F;
         _centerFreq = center_freq;
         _updateMs = update_ms;
-        _windowName = std::move(window);
+        _windowType = window;
+        _windowName = std::string(magic_enum::enum_name(window));
         _outputInDb = output_in_db;
         _persistenceEnabled = persistence_enabled;
         _phosphorIntensity = phosphor_intensity;
         _phosphorDecayMs = phosphor_decay_ms;
         _autoscale = autoscale_enabled;
-        _xMin = x_min;
-        _xMax = x_max;
         _yMin = y_min;
         _yMax = y_max;
 
-        const auto parsedWindow = magic_enum::enum_cast<gr::algorithm::window::Type>(_windowName, magic_enum::case_insensitive)
-                                      .value_or(gr::algorithm::window::Type::BlackmanHarris);
-        _windowType = parsedWindow;
         _window.assign(_fftSize, value_type{});
         gr::algorithm::window::create(_window, _windowType);
 
@@ -320,8 +314,6 @@ public:
         value_type phosphorIntensity = static_cast<value_type>(1.1F);
         value_type phosphorDecayMs = static_cast<value_type>(1024.0F);
         bool autoscaleEnabled = true;
-        value_type xMin = static_cast<value_type>(0.0F);
-        value_type xMax = static_cast<value_type>(0.0F);
         value_type yMin = static_cast<value_type>(0.0F);
         value_type yMax = static_cast<value_type>(0.0F);
 
@@ -340,8 +332,6 @@ public:
             phosphorIntensity = _phosphorIntensity;
             phosphorDecayMs = _phosphorDecayMs;
             autoscaleEnabled = _autoscale;
-            xMin = _xMin;
-            xMax = _xMax;
             yMin = _yMin;
             yMax = _yMax;
         }
@@ -367,8 +357,6 @@ public:
             os << "\"phosphor_intensity\":" << phosphorIntensity << ",";
             os << "\"phosphor_decay_ms\":" << phosphorDecayMs << ",";
             os << "\"autoscale\":" << (autoscaleEnabled ? "true" : "false") << ",";
-            os << "\"x_min\":" << xMin << ",";
-            os << "\"x_max\":" << xMax << ",";
             os << "\"y_min\":" << yMin << ",";
             os << "\"y_max\":" << yMax << ",";
             os << "\"data\":[]}";
@@ -397,8 +385,6 @@ public:
         os << "\"phosphor_intensity\":" << phosphorIntensity << ",";
         os << "\"phosphor_decay_ms\":" << phosphorDecayMs << ",";
         os << "\"autoscale\":" << (autoscaleEnabled ? "true" : "false") << ",";
-        os << "\"x_min\":" << xMin << ",";
-        os << "\"x_max\":" << xMax << ",";
         os << "\"y_min\":" << yMin << ",";
         os << "\"y_max\":" << yMax << ",";
         os << "\"data\":[";
@@ -516,8 +502,6 @@ private:
     value_type _phosphorIntensity = static_cast<value_type>(1.1F);
     value_type _phosphorDecayMs = static_cast<value_type>(1024.0F);
     bool _autoscale = true;
-    value_type _xMin = static_cast<value_type>(0.0F);
-    value_type _xMax = static_cast<value_type>(0.0F);
     value_type _yMin = static_cast<value_type>(0.0F);
     value_type _yMax = static_cast<value_type>(0.0F);
     std::uint64_t _sequence = 0UZ;
@@ -1009,7 +993,7 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
     Annotated<std::uint32_t, "update_ms", Doc<"Suggested update interval in milliseconds for http_poll and websocket transports">, Visible> update_ms = 10U;
     Annotated<gr::Size_t, "fft_size", Doc<"FFT size used for each spectrum frame">, Visible> fft_size = 1024UZ;
     Annotated<gr::Size_t, "num_averages", Doc<"Number of FFT frames averaged into the displayed spectrum">, Visible> num_averages = 8UZ;
-    Annotated<std::string, "window", Doc<gr::algorithm::window::TypeNames>, Visible> window = std::string(magic_enum::enum_name(gr::algorithm::window::Type::BlackmanHarris));
+    Annotated<gr::algorithm::window::Type, "window", Doc<"FFT window function">, Visible> window = gr::algorithm::window::Type::BlackmanHarris;
     Annotated<float, "sample_rate", Doc<"Input sample rate in Hz">, Visible> sample_rate = 1.0F;
     Annotated<float, "center_freq", Doc<"Optional RF center frequency in Hz added to the displayed frequency axis">, Visible> center_freq = 0.0F;
     Annotated<bool, "output_in_db", Doc<"Render the averaged power spectrum in dB">, Visible> output_in_db = true;
@@ -1021,8 +1005,6 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
     Annotated<std::string, "y_label", Doc<"Optional semantic y-axis label for Studio Application">, Visible> y_label = "Power";
     Annotated<std::string, "series_labels", Doc<"Optional comma-separated series labels for Studio Application">, Visible> series_labels = "Power";
     Annotated<bool, "autoscale", Doc<"Enable automatic axis scaling in Studio Application">, Visible> autoscale = true;
-    Annotated<float, "x_min", Doc<"Optional x-axis minimum when autoscale is disabled">, Visible> x_min = 0.0F;
-    Annotated<float, "x_max", Doc<"Optional x-axis maximum when autoscale is disabled">, Visible> x_max = 0.0F;
     Annotated<float, "y_min", Doc<"Optional y-axis minimum when autoscale is disabled">, Visible> y_min = 0.0F;
     Annotated<float, "y_max", Doc<"Optional y-axis maximum when autoscale is disabled">, Visible> y_max = 0.0F;
     Annotated<std::string, "topic", Doc<"Optional stream topic for pub/sub transports">, Visible> topic = "";
@@ -1047,8 +1029,6 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
         y_label,
         series_labels,
         autoscale,
-        x_min,
-        x_max,
         y_min,
         y_max,
         topic);
@@ -1068,8 +1048,6 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
             phosphor_intensity,
             phosphor_decay_ms,
             autoscale,
-            x_min,
-            x_max,
             y_min,
             y_max);
         _lastFrameProcessAt = {};
@@ -1095,8 +1073,6 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
             new_settings.contains("phosphor_intensity") ||
             new_settings.contains("phosphor_decay_ms") ||
             new_settings.contains("autoscale") ||
-            new_settings.contains("x_min") ||
-            new_settings.contains("x_max") ||
             new_settings.contains("y_min") ||
             new_settings.contains("y_max")) {
             _window.configure(
@@ -1111,8 +1087,6 @@ struct StudioPowerSpectrumSink : Block<StudioPowerSpectrumSink<T>> {
                 phosphor_intensity,
                 phosphor_decay_ms,
                 autoscale,
-                x_min,
-                x_max,
                 y_min,
                 y_max);
             _lastFrameProcessAt = {};

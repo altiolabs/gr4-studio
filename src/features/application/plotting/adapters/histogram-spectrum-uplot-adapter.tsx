@@ -52,6 +52,27 @@ function shouldResetScalesForDataUpdate(ranges: Pick<PlotAdapterProps['spec'], '
   return ranges.xRange?.auto !== false && ranges.yRange?.auto !== false;
 }
 
+function finiteExtent(values: readonly number[]): { min: number; max: number } | null {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  values.forEach((value) => {
+    if (!Number.isFinite(value)) {
+      return;
+    }
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  });
+
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return null;
+  }
+  if (min === max) {
+    const padding = Math.abs(min) > 0 ? Math.abs(min) * 0.01 : 1;
+    return { min: min - padding, max: max + padding };
+  }
+  return { min, max };
+}
+
 function applyExplicitScales(chart: uPlot, ranges: Pick<PlotAdapterProps['spec'], 'xRange' | 'yRange'>): void {
   if (ranges.xRange?.auto === false) {
     chart.setScale('x', {
@@ -64,6 +85,40 @@ function applyExplicitScales(chart: uPlot, ranges: Pick<PlotAdapterProps['spec']
       min: ranges.yRange.min ?? 0,
       max: ranges.yRange.max ?? 1,
     });
+  }
+}
+
+function applyDataUpdateScales(
+  chart: uPlot,
+  data: uPlot.AlignedData,
+  ranges: Pick<PlotAdapterProps['spec'], 'xRange' | 'yRange'>,
+): void {
+  if (ranges.xRange?.auto === false) {
+    chart.setScale('x', {
+      min: ranges.xRange.min ?? 0,
+      max: ranges.xRange.max ?? 1,
+    });
+  } else {
+    const xExtent = finiteExtent((data[0] ?? []) as readonly number[]);
+    if (xExtent) {
+      chart.setScale('x', xExtent);
+    }
+  }
+
+  if (ranges.yRange?.auto === false) {
+    chart.setScale('y', {
+      min: ranges.yRange.min ?? 0,
+      max: ranges.yRange.max ?? 1,
+    });
+  } else {
+    const values: number[] = [];
+    data.slice(1).forEach((series) => {
+      values.push(...((series ?? []) as readonly number[]));
+    });
+    const yExtent = finiteExtent(values);
+    if (yExtent) {
+      chart.setScale('y', yExtent);
+    }
   }
 }
 
@@ -319,12 +374,14 @@ export function PhosphorSpectrumUplotAdapter({ spec, frame, width, height }: Plo
     const firstPoints = alignedData[0]?.length ?? 0;
     const signature = `${sequence}:${firstPoints}:${frame.meta?.state ?? 'na'}`;
     if (signature === lastDataSignatureRef.current) {
-      applyExplicitScales(chartRef.current, { xRange: spec.xRange, yRange: spec.yRange });
+      applyDataUpdateScales(chartRef.current, alignedData, { xRange: spec.xRange, yRange: spec.yRange });
       return;
     }
     lastDataSignatureRef.current = signature;
     chartRef.current.setData(alignedData, shouldResetScalesForDataUpdate({ xRange: spec.xRange, yRange: spec.yRange }));
-    applyExplicitScales(chartRef.current, { xRange: spec.xRange, yRange: spec.yRange });
+    if (!shouldResetScalesForDataUpdate({ xRange: spec.xRange, yRange: spec.yRange })) {
+      applyDataUpdateScales(chartRef.current, alignedData, { xRange: spec.xRange, yRange: spec.yRange });
+    }
   }, [alignedData, frame.meta?.sequence, frame.meta?.state, spec.xRange, spec.yRange]);
 
   return <div ref={plotHostRef} className="h-full min-h-0 w-full overflow-hidden rounded border border-slate-800 bg-slate-950" />;

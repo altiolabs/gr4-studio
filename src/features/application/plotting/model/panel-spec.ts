@@ -214,9 +214,11 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
     entry.panel.title ??
     entry.panel.nodeId;
   const persistenceEnabled = parseBooleanValue(readParameterValue(entry.nodeParameters, ['persistence'])) ?? false;
+  const isPowerSpectrum =
+    Boolean(binding?.blockTypeId.startsWith('gr::studio::StudioPowerSpectrumSink'));
   const isPersistentSpectrum =
     persistenceEnabled &&
-    Boolean(binding?.blockTypeId.startsWith('gr::studio::StudioPowerSpectrumSink'));
+    isPowerSpectrum;
   const isHistogram = entry.panel.kind === 'histogram' || isPersistentSpectrum;
   const isSeries2D =
     !isHistogram &&
@@ -264,7 +266,9 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
   const phosphorTuning = isHistogram ? resolvePhosphorSpectrumTuning(entry.nodeParameters) : undefined;
   const ignoredRangeKeys = isWaterfall
     ? [...X_RANGE_PARAMETER_KEYS, ...Y_RANGE_PARAMETER_KEYS]
-    : isSeries2D || isHistogram
+    : isPowerSpectrum
+      ? X_RANGE_PARAMETER_KEYS
+      : isSeries2D || isHistogram
       ? []
       : X_RANGE_PARAMETER_KEYS;
   const cacheKey = buildPlotSpecCacheKey(entry, ignoredRangeKeys);
@@ -277,7 +281,7 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
     ? {}
     : {
         xRange: isSeries2D || isHistogram
-          ? !autoscale && manualXRange
+          ? !isPowerSpectrum && !autoscale && manualXRange
             ? {
                 auto: false,
                 min: manualXRange.min,

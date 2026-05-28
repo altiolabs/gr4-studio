@@ -354,7 +354,7 @@ describe('derivePlotPanelSpec', () => {
     });
   });
 
-  it('keeps manual x and y ranges available for PowerSpectrumSink when autoscale is disabled', () => {
+  it('keeps PowerSpectrumSink x range automatic when autoscale is disabled', () => {
     const spec = derivePlotPanelSpec(
       makeSeriesEntry({
         panel: {
@@ -377,9 +377,7 @@ describe('derivePlotPanelSpec', () => {
     );
 
     expect(spec?.view.xRange).toEqual({
-      auto: false,
-      min: -2400000,
-      max: 2400000,
+      auto: true,
     });
     expect(spec?.view.yRange).toEqual({
       auto: false,

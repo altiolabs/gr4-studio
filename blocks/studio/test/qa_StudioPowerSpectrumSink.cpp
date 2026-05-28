@@ -27,7 +27,7 @@ template<typename TBlock>
 void configureBlock(TBlock& block) {
     block.fft_size = 4UZ;
     block.num_averages = 2UZ;
-    block.window = std::string("Rectangular");
+    block.window = gr::algorithm::window::Type::Rectangular;
     block.sample_rate = 8.0F;
     block.center_freq = 100.0F;
     block.update_ms = 125U;
@@ -36,8 +36,6 @@ void configureBlock(TBlock& block) {
     block.phosphor_intensity = 1.25F;
     block.phosphor_decay_ms = 750.0F;
     block.autoscale = false;
-    block.x_min = -2.0F;
-    block.x_max = 2.0F;
     block.y_min = -1.5F;
     block.y_max = 1.5F;
 
@@ -53,8 +51,6 @@ void configureBlock(TBlock& block) {
                                  {"phosphor_intensity", 1.25F},
                                  {"phosphor_decay_ms", 750.0F},
                                  {"autoscale", false},
-                                 {"x_min", -2.0F},
-                                 {"x_max", 2.0F},
                                  {"y_min", -1.5F},
                                  {"y_max", 1.5F},
                              });
@@ -128,8 +124,8 @@ void testFloatSpectrum() {
     assert(json.find("\"phosphor_intensity\":1.25") != std::string::npos);
     assert(json.find("\"phosphor_decay_ms\":750") != std::string::npos);
     assert(json.find("\"autoscale\":false") != std::string::npos);
-    assert(json.find("\"x_min\":-2") != std::string::npos);
-    assert(json.find("\"x_max\":2") != std::string::npos);
+    assert(json.find("\"x_min\"") == std::string::npos);
+    assert(json.find("\"x_max\"") == std::string::npos);
     assert(json.find("\"y_min\":-1.5") != std::string::npos);
     assert(json.find("\"y_max\":1.5") != std::string::npos);
     assert(json.find("[100,0.25]") != std::string::npos);
