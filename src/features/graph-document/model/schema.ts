@@ -90,6 +90,13 @@ const studioControlWidgetSpecSchema: z.ZodType<StudioControlWidgetSpec> = z.obje
   inputKind: z.enum(['text', 'number', 'slider', 'boolean', 'enum']),
   enumOptions: z.array(z.string().min(1)).optional(),
   enumLabels: z.record(z.string(), z.string()).optional(),
+  slider: z
+    .object({
+      min: z.number().finite().optional(),
+      max: z.number().finite().optional(),
+      step: z.number().finite().positive().optional(),
+    })
+    .optional(),
   mode: z.enum(['staged', 'immediate']).optional(),
 });
 

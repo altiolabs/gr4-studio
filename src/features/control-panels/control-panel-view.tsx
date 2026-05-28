@@ -6,6 +6,7 @@ import { toRuntimeSettingsErrorMessage } from '../inspector/runtime-settings-mod
 import { getCompatibleControlWidgetInputKinds, getControlWidgetTargetLabel } from './control-panel-authoring';
 import type { ResolvedControlWidget } from './control-panel-binding-resolution';
 import type { ExpressionBinding } from '../variables/model/types';
+import type { StudioControlWidgetSliderConfig } from '../graph-document/model/studio-workspace';
 import {
   applyLocalVariableControlValues,
   expressionBindingToLocalValue,
@@ -92,6 +93,16 @@ function isNumericWidget(widget: ResolvedControlWidget): boolean {
   return widget.inputKind === 'number' || widget.inputKind === 'slider';
 }
 
+function resolveSliderConfig(config: StudioControlWidgetSliderConfig | undefined): Required<StudioControlWidgetSliderConfig> {
+  const min = Number.isFinite(config?.min) ? (config?.min as number) : -100;
+  const max = Number.isFinite(config?.max) ? (config?.max as number) : 100;
+  return {
+    min: max > min ? min : -100,
+    max: max > min ? max : 100,
+    step: Number.isFinite(config?.step) && (config?.step as number) > 0 ? (config?.step as number) : 1,
+  };
+}
+
 type ControlPanelTargetOption = {
   id: string;
   title?: string;
@@ -111,6 +122,11 @@ type ControlWidgetFieldProps = {
     widgetId: string,
     inputKind: 'text' | 'number' | 'slider' | 'boolean' | 'enum',
   ) => void;
+  onUpdateWidgetSliderConfig?: (
+    panelId: string,
+    widgetId: string,
+    slider: StudioControlWidgetSliderConfig,
+  ) => void;
   onMoveWidget?: (panelId: string, widgetId: string, direction: 'up' | 'down') => void;
   onRemoveWidget?: (panelId: string, widgetId: string) => void;
   onMoveWidgetToPanel?: (panelId: string, widgetId: string, targetPanelId: string) => void;
@@ -125,6 +141,7 @@ function ControlWidgetField({
   onUpdateVariableValue,
   onUpdateWidgetLabel,
   onUpdateWidgetInputKind,
+  onUpdateWidgetSliderConfig,
   onMoveWidget,
   onRemoveWidget,
   onMoveWidgetToPanel,
@@ -194,11 +211,22 @@ function ControlWidgetField({
       }
 
       const desiredWidth = 320;
+      const viewportPadding = 12;
+      const gap = 10;
       const left = Math.max(12, Math.min(triggerRect.right - desiredWidth, window.innerWidth - desiredWidth - 12));
-      const top = Math.min(triggerRect.bottom + 10, window.innerHeight - 20);
+      const menuHeight = menuRef.current?.offsetHeight ?? 360;
+      const maxHeight = Math.max(220, window.innerHeight - viewportPadding * 2);
+      const renderedHeight = Math.min(menuHeight, maxHeight);
+      const spaceBelow = window.innerHeight - triggerRect.bottom - viewportPadding;
+      const spaceAbove = triggerRect.top - viewportPadding;
+      const opensBelow = spaceBelow >= renderedHeight || spaceBelow >= spaceAbove;
+      const top = opensBelow
+        ? Math.min(triggerRect.bottom + gap, window.innerHeight - renderedHeight - viewportPadding)
+        : Math.max(viewportPadding, triggerRect.top - renderedHeight - gap);
       setMenuStyle({
         left,
         top,
+        maxHeight,
       });
     };
 
@@ -269,7 +297,7 @@ function ControlWidgetField({
           patch: {
             [widget.binding.parameterName]: pendingValue,
           },
-          mode: 'immediate',
+          mode: 'staged',
         });
       }
     } catch (error) {
@@ -319,17 +347,17 @@ function ControlWidgetField({
               aria-label="Widget actions"
               aria-modal="true"
               onClick={(event) => event.stopPropagation()}
-              className="fixed w-80 rounded-lg border border-slate-700 bg-slate-950 shadow-2xl ring-1 ring-black/30"
+              className="fixed flex w-80 flex-col overflow-hidden rounded-lg border border-slate-700 bg-slate-950 shadow-2xl ring-1 ring-black/30"
               style={menuStyle}
             >
-              <div className="border-b border-slate-700 px-3 py-2">
+              <div className="shrink-0 border-b border-slate-700 px-3 py-2">
                 <p className="text-xs font-semibold text-slate-100">Widget actions</p>
                 <p className="mt-0.5 text-[11px] text-slate-400">
                   {getControlWidgetTargetLabel(widget)} ·{' '}
                   {widget.binding.kind === 'parameter' ? widget.binding.parameterName : widget.binding.variableName}
                 </p>
               </div>
-              <div className="space-y-3 p-3">
+              <div className="min-h-0 space-y-3 overflow-y-auto p-3">
                 <div className="space-y-1">
                   <label className="block text-[11px] uppercase tracking-wide text-slate-400">Label</label>
                   <input
@@ -345,6 +373,32 @@ function ControlWidgetField({
                     className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 outline-none focus:border-cyan-500"
                   />
                 </div>
+                {widget.inputKind === 'slider' && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['min', 'max', 'step'] as const).map((key) => (
+                      <label key={key} className="space-y-1">
+                        <span className="block text-[11px] uppercase tracking-wide text-slate-400">{key}</span>
+                        <input
+                          type="number"
+                          value={widget.slider?.[key] ?? ''}
+                          placeholder={key === 'min' ? '-100' : key === 'max' ? '100' : '1'}
+                          onChange={(event) => {
+                            const text = event.target.value.trim();
+                            const next = text === '' ? undefined : Number(text);
+                            if (text !== '' && !Number.isFinite(next)) {
+                              return;
+                            }
+                            onUpdateWidgetSliderConfig?.(panelId, widget.id, {
+                              ...(widget.slider ?? {}),
+                              [key]: next,
+                            });
+                          }}
+                          className="w-full rounded border border-slate-600 bg-slate-900 px-2 py-1 text-sm text-slate-100 outline-none focus:border-cyan-500"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                )}
                 <div className="space-y-1">
                   <label className="block text-[11px] uppercase tracking-wide text-slate-400">Type</label>
                   <select
@@ -492,6 +546,7 @@ function ControlWidgetField({
   if (isNumericWidget(widget)) {
     const numericCommittedValue = Number(committedText);
     const numericDraftValue = Number(draftText);
+    const sliderConfig = resolveSliderConfig(widget.slider);
     const sliderValue =
       Number.isFinite(numericDraftValue) && draftText !== '' ? numericDraftValue : numericCommittedValue;
     return (
@@ -500,10 +555,10 @@ function ControlWidgetField({
         {widget.inputKind === 'slider' ? (
           <input
             type="range"
-            min={-100}
-            max={100}
-            step={1}
-            value={Number.isFinite(sliderValue) ? sliderValue : 0}
+            min={sliderConfig.min}
+            max={sliderConfig.max}
+            step={sliderConfig.step}
+            value={Number.isFinite(sliderValue) ? sliderValue : sliderConfig.min}
             disabled={isDisabled}
             onChange={(event) => {
               if (isDisabled) {
@@ -701,6 +756,7 @@ export function ControlPanelView({
   onUpdateVariableValue,
   onUpdateWidgetLabel,
   onUpdateWidgetInputKind,
+  onUpdateWidgetSliderConfig,
   onMoveWidget,
   onRemoveWidget,
   onMoveWidgetToPanel,
@@ -716,6 +772,11 @@ export function ControlPanelView({
     panelId: string,
     widgetId: string,
     inputKind: 'text' | 'number' | 'slider' | 'boolean' | 'enum',
+  ) => void;
+  onUpdateWidgetSliderConfig?: (
+    panelId: string,
+    widgetId: string,
+    slider: StudioControlWidgetSliderConfig,
   ) => void;
   onMoveWidget?: (panelId: string, widgetId: string, direction: 'up' | 'down') => void;
   onRemoveWidget?: (panelId: string, widgetId: string) => void;
@@ -755,6 +816,7 @@ export function ControlPanelView({
             onUpdateVariableValue={updateVariableValue}
             onUpdateWidgetLabel={onUpdateWidgetLabel}
             onUpdateWidgetInputKind={onUpdateWidgetInputKind}
+            onUpdateWidgetSliderConfig={onUpdateWidgetSliderConfig}
             onMoveWidget={onMoveWidget}
             onRemoveWidget={onRemoveWidget}
             onMoveWidgetToPanel={onMoveWidgetToPanel}

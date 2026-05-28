@@ -39,6 +39,12 @@ export type StudioControlWidgetBinding =
 
 export type StudioControlWidgetInputKind = 'text' | 'number' | 'slider' | 'boolean' | 'enum';
 
+export type StudioControlWidgetSliderConfig = {
+  min?: number;
+  max?: number;
+  step?: number;
+};
+
 export type StudioControlWidgetSpec = {
   id: string;
   kind: 'parameter';
@@ -47,6 +53,7 @@ export type StudioControlWidgetSpec = {
   inputKind: StudioControlWidgetInputKind;
   enumOptions?: string[];
   enumLabels?: Record<string, string>;
+  slider?: StudioControlWidgetSliderConfig;
   mode?: 'staged' | 'immediate';
 };
 

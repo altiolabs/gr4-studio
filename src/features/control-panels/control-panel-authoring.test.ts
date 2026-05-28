@@ -14,6 +14,7 @@ import {
   renameControlPanelTitle,
   updateControlWidgetInputKind,
   updateControlWidgetLabel,
+  updateControlWidgetSliderConfig,
 } from './control-panel-authoring';
 import type { StudioPanelSpec } from '../graph-document/model/studio-workspace';
 
@@ -167,6 +168,15 @@ describe('control panel authoring', () => {
     const retypedPanels = updateControlWidgetInputKind(panels, 'control-panel-1', widgetA.id, 'text');
     expect(retypedPanels[0]).toMatchObject({
       widgets: [{ ...widgetA, inputKind: 'text' }, widgetB],
+    });
+
+    const sliderPanels = updateControlWidgetSliderConfig(panels, 'control-panel-1', widgetA.id, {
+      min: 0,
+      max: 1,
+      step: 0.05,
+    });
+    expect(sliderPanels[0]).toMatchObject({
+      widgets: [{ ...widgetA, slider: { min: 0, max: 1, step: 0.05 } }, widgetB],
     });
 
     const reorderedPanels = moveControlWidgetInPanel(panels, 'control-panel-1', widgetB.id, 'up');

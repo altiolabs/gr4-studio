@@ -6,6 +6,8 @@ import { resolveStudioPlotStyle } from './plot-style';
 const plotSpecCache = new Map<string, PlotPanelSpec>();
 const X_RANGE_PARAMETER_KEYS = ['x_min', 'xmin', 'xMin', 'x_max', 'xmax', 'xMax'] as const;
 const Y_RANGE_PARAMETER_KEYS = ['y_min', 'ymin', 'yMin', 'y_max', 'ymax', 'yMax'] as const;
+type PlotParameterValue = string | number | boolean | null;
+type PlotParameterMap = Readonly<Record<string, PlotParameterValue>>;
 
 // Scalar timeseries metadata remains graph/block-owned.
 // Accepted optional keys from node parameters:
@@ -13,27 +15,36 @@ const Y_RANGE_PARAMETER_KEYS = ['y_min', 'ymin', 'yMin', 'y_max', 'ymax', 'yMax'
 // - x_label | xlabel
 // - y_label | ylabel
 // - series_labels | channel_labels (comma-separated)
-function readParameterValue(parameters: Readonly<Record<string, string>> | undefined, keys: readonly string[]): string | undefined {
+function readParameterValue(parameters: PlotParameterMap | undefined, keys: readonly string[]): PlotParameterValue | undefined {
   if (!parameters) {
     return undefined;
   }
 
   for (const key of keys) {
     const value = parameters[key];
-    if (typeof value !== 'string') {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        return trimmed;
+      }
       continue;
     }
-    const trimmed = value.trim();
-    if (trimmed.length > 0) {
-      return trimmed;
+
+    if (value !== null && value !== undefined) {
+      return value;
     }
   }
 
   return undefined;
 }
 
-function parseSeriesLabels(parameters: Readonly<Record<string, string>> | undefined): string[] | undefined {
-  const raw = readParameterValue(parameters, ['series_labels', 'channel_labels']);
+function readTextParameterValue(parameters: PlotParameterMap | undefined, keys: readonly string[]): string | undefined {
+  const value = readParameterValue(parameters, keys);
+  return typeof value === 'string' ? value : undefined;
+}
+
+function parseSeriesLabels(parameters: PlotParameterMap | undefined): string[] | undefined {
+  const raw = readTextParameterValue(parameters, ['series_labels', 'channel_labels']);
   if (!raw) {
     return undefined;
   }
@@ -44,12 +55,12 @@ function parseSeriesLabels(parameters: Readonly<Record<string, string>> | undefi
   return labels.length > 0 ? labels : undefined;
 }
 
-function parseChannels(parameters: Readonly<Record<string, string>> | undefined): number | undefined {
+function parseChannels(parameters: PlotParameterMap | undefined): number | undefined {
   const raw = readParameterValue(parameters, ['channels']);
-  if (!raw) {
+  if (raw === undefined) {
     return undefined;
   }
-  const parsed = Number.parseInt(raw, 10);
+  const parsed = Number.parseInt(String(raw), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return undefined;
   }
@@ -63,23 +74,26 @@ function buildDefaultSeriesLabels(channelCount: number | undefined): string[] | 
   return Array.from({ length: channelCount }, (_, index) => `ch${index}`);
 }
 
-function parseWindowSize(parameters: Readonly<Record<string, string>> | undefined): number | undefined {
+function parseWindowSize(parameters: PlotParameterMap | undefined): number | undefined {
   const raw = readParameterValue(parameters, ['window_size']);
-  if (!raw) {
+  if (raw === undefined) {
     return undefined;
   }
-  const parsed = Number.parseInt(raw, 10);
+  const parsed = Number.parseInt(String(raw), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) {
     return undefined;
   }
   return parsed;
 }
 
-function parseBooleanValue(raw: string | undefined): boolean | undefined {
-  if (!raw) {
+function parseBooleanValue(raw: PlotParameterValue | undefined): boolean | undefined {
+  if (typeof raw === 'boolean') {
+    return raw;
+  }
+  if (raw === undefined || raw === null) {
     return undefined;
   }
-  const normalized = raw.trim().toLowerCase();
+  const normalized = String(raw).trim().toLowerCase();
   if (normalized === 'true' || normalized === '1' || normalized === 'yes' || normalized === 'on') {
     return true;
   }
@@ -89,21 +103,21 @@ function parseBooleanValue(raw: string | undefined): boolean | undefined {
   return undefined;
 }
 
-function parseOptionalNumber(parameters: Readonly<Record<string, string>> | undefined, keys: readonly string[]): number | undefined {
+function parseOptionalNumber(parameters: PlotParameterMap | undefined, keys: readonly string[]): number | undefined {
   const raw = readParameterValue(parameters, keys);
-  if (!raw) {
+  if (raw === undefined || raw === null || raw === '') {
     return undefined;
   }
-  const parsed = Number.parseFloat(raw);
+  const parsed = Number.parseFloat(String(raw));
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function resolvePhosphorSpectrumTuning(
-  parameters: Readonly<Record<string, string>> | undefined,
+  parameters: PlotParameterMap | undefined,
 ): PhosphorSpectrumTuning | undefined {
   const intensity = parseOptionalNumber(parameters, ['phosphor_intensity', 'histo_scale', 'phosphor_scale']);
   const decayMs = parseOptionalNumber(parameters, ['phosphor_decay_ms', 'histo_t0d']);
-  const colorMap = readParameterValue(parameters, ['color_map', 'phosphor_color_map']);
+  const colorMap = readTextParameterValue(parameters, ['color_map', 'phosphor_color_map']);
 
   if (
     intensity === undefined &&
@@ -128,10 +142,24 @@ function hasValidManualRange(min: number | undefined, max: number | undefined): 
   if (!Number.isFinite(min) || !Number.isFinite(max)) {
     return false;
   }
-  return (max as number) > (min as number);
+  return (max as number) !== (min as number);
 }
 
-function serializeParameters(parameters: Readonly<Record<string, string>> | undefined, excludedKeys: readonly string[] = []): string {
+function normalizeManualRange(
+  min: number | undefined,
+  max: number | undefined,
+): { min: number; max: number } | undefined {
+  if (!hasValidManualRange(min, max)) {
+    return undefined;
+  }
+
+  return {
+    min: Math.min(min as number, max as number),
+    max: Math.max(min as number, max as number),
+  };
+}
+
+function serializeParameters(parameters: PlotParameterMap | undefined, excludedKeys: readonly string[] = []): string {
   if (!parameters) {
     return '';
   }
@@ -141,7 +169,7 @@ function serializeParameters(parameters: Readonly<Record<string, string>> | unde
     Object.keys(parameters)
       .filter((key) => !excluded.has(key))
       .sort()
-      .reduce<Record<string, string>>((acc, key) => {
+      .reduce<Record<string, PlotParameterValue>>((acc, key) => {
         acc[key] = parameters[key];
         return acc;
       }, {}),
@@ -181,7 +209,7 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
   const binding = entry.nodeBlockTypeId ? lookupStudioKnownBlockBinding(entry.nodeBlockTypeId) : null;
   const payloadFormat = binding?.payloadFormat;
   const title =
-    readParameterValue(entry.nodeParameters, ['plot_title', 'title']) ??
+    readTextParameterValue(entry.nodeParameters, ['plot_title', 'title']) ??
     entry.nodeDisplayName ??
     entry.panel.title ??
     entry.panel.nodeId;
@@ -197,8 +225,8 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
       payloadFormat === 'dataset-xy-json-v1');
   const isWaterfall = entry.panel.kind === 'waterfall' || payloadFormat === 'waterfall-spectrum-json-v1';
   const xLabel =
-    readParameterValue(entry.nodeParameters, ['x_label', 'xlabel']) ?? (isSeries2D || isWaterfall || isHistogram ? 'Frequency' : 'sample');
-  const yLabel = readParameterValue(entry.nodeParameters, ['y_label', 'ylabel']) ?? (isWaterfall || isHistogram ? 'Power' : 'value');
+    readTextParameterValue(entry.nodeParameters, ['x_label', 'xlabel']) ?? (isSeries2D || isWaterfall || isHistogram ? 'Frequency' : 'sample');
+  const yLabel = readTextParameterValue(entry.nodeParameters, ['y_label', 'ylabel']) ?? (isWaterfall || isHistogram ? 'Power' : 'value');
   // Metadata precedence:
   // 1) explicit graph/block params (series_labels/channel_labels)
   // 2) payload-side metadata (handled at runtime for dataset/vector payloads)
@@ -213,8 +241,8 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
   const xMax = parseOptionalNumber(entry.nodeParameters, ['x_max', 'xmax', 'xMax']);
   const yMin = parseOptionalNumber(entry.nodeParameters, ['y_min', 'ymin', 'yMin']);
   const yMax = parseOptionalNumber(entry.nodeParameters, ['y_max', 'ymax', 'yMax']);
-  const hasManualXRange = hasValidManualRange(xMin, xMax);
-  const hasManualYRange = hasValidManualRange(yMin, yMax);
+  const manualXRange = normalizeManualRange(xMin, xMax);
+  const manualYRange = normalizeManualRange(yMin, yMax);
   const resolvedPayloadFormat =
     payloadFormat === 'dataset-xy-json-v1'
       ? 'dataset-xy-json-v1'
@@ -249,11 +277,11 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
     ? {}
     : {
         xRange: isSeries2D || isHistogram
-          ? !autoscale && hasManualXRange
+          ? !autoscale && manualXRange
             ? {
                 auto: false,
-                min: xMin,
-                max: xMax,
+                min: manualXRange.min,
+                max: manualXRange.max,
               }
             : { auto: true }
           : {
@@ -262,9 +290,9 @@ export function derivePlotPanelSpec(entry: WorkspacePanelViewModel): PlotPanelSp
               max: Math.max(0, windowSize - 1),
             },
         yRange: {
-          auto: !(!autoscale && hasManualYRange),
-          min: !autoscale && hasManualYRange ? yMin : undefined,
-          max: !autoscale && hasManualYRange ? yMax : undefined,
+          auto: !(!autoscale && manualYRange),
+          min: !autoscale && manualYRange ? manualYRange.min : undefined,
+          max: !autoscale && manualYRange ? manualYRange.max : undefined,
         },
       };
 

@@ -15,7 +15,13 @@ import {
 } from '@dnd-kit/core';
 import { Group, Panel, Separator } from 'react-resizable-panels';
 import { useState } from 'react';
-import type { StudioLayoutNode, StudioLayoutSpec, StudioPanelSpec, StudioPlotPaletteSpec } from '../graph-document/model/studio-workspace';
+import type {
+  StudioControlWidgetSliderConfig,
+  StudioLayoutNode,
+  StudioLayoutSpec,
+  StudioPanelSpec,
+  StudioPlotPaletteSpec,
+} from '../graph-document/model/studio-workspace';
 import { collectLayoutPaneIds } from '../graph-document/model/studio-layout';
 import type { SplitDropPosition } from '../graph-document/model/studio-layout';
 import type { ReactNode } from 'react';
@@ -23,6 +29,7 @@ import type { SplitNodePath } from '../graph-document/model/studio-layout';
 import { ControlPanelView } from '../control-panels/control-panel-view';
 import type { ResolvedControlWidget } from '../control-panels/control-panel-binding-resolution';
 import { readExplicitPlotPanelTitle } from './model/panel-display-title';
+import type { ExpressionBinding } from '../variables/model/types';
 
 export type WorkspacePanelViewModel = {
   panel: StudioPanelSpec;
@@ -30,7 +37,7 @@ export type WorkspacePanelViewModel = {
   nodePanelTitle?: string;
   nodeDisplayName?: string;
   nodeBlockTypeId?: string;
-  nodeParameters?: Readonly<Record<string, string>>;
+  nodeParameters?: Readonly<Record<string, string | number | boolean | null>>;
   controlWidgets?: readonly ResolvedControlWidget[];
   bindingStatus?: 'unsupported' | 'unconfigured' | 'configured' | 'invalid';
   bindingTransport?: string;
@@ -51,9 +58,15 @@ export type WorkspacePanelEditHandlers = {
     widgetId: string,
     inputKind: 'text' | 'number' | 'slider' | 'boolean' | 'enum',
   ) => void;
+  onUpdateControlWidgetSliderConfig?: (
+    panelId: string,
+    widgetId: string,
+    slider: StudioControlWidgetSliderConfig,
+  ) => void;
   onMoveControlWidget?: (panelId: string, widgetId: string, direction: 'up' | 'down') => void;
   onRemoveControlWidget?: (panelId: string, widgetId: string) => void;
   onMoveControlWidgetToPanel?: (panelId: string, widgetId: string, targetPanelId: string) => void;
+  onUpdateVariableValue?: (variableName: string, binding: ExpressionBinding) => void;
 };
 
 type WorkspaceViewProps = {
@@ -88,9 +101,11 @@ function LayoutEditorPane({
   onRenameControlPanel,
   onUpdateControlWidgetLabel,
   onUpdateControlWidgetInputKind,
+  onUpdateControlWidgetSliderConfig,
   onMoveControlWidget,
   onRemoveControlWidget,
   onMoveControlWidgetToPanel,
+  onUpdateVariableValue,
 }: {
   entry: WorkspacePanelViewModel;
   isActive: boolean;
@@ -104,9 +119,15 @@ function LayoutEditorPane({
     widgetId: string,
     inputKind: 'text' | 'number' | 'slider' | 'boolean' | 'enum',
   ) => void;
+  onUpdateControlWidgetSliderConfig?: (
+    panelId: string,
+    widgetId: string,
+    slider: StudioControlWidgetSliderConfig,
+  ) => void;
   onMoveControlWidget?: (panelId: string, widgetId: string, direction: 'up' | 'down') => void;
   onRemoveControlWidget?: (panelId: string, widgetId: string) => void;
   onMoveControlWidgetToPanel?: (panelId: string, widgetId: string, targetPanelId: string) => void;
+  onUpdateVariableValue?: (variableName: string, binding: ExpressionBinding) => void;
 }) {
   const { panel } = entry;
   const blockTitle = entry.nodePanelTitle ?? panel.title ?? entry.nodeDisplayName ?? panel.nodeId;
@@ -169,9 +190,11 @@ function LayoutEditorPane({
               controlPanelOptions={controlPanelOptions}
               onUpdateWidgetLabel={onUpdateControlWidgetLabel}
               onUpdateWidgetInputKind={onUpdateControlWidgetInputKind}
+              onUpdateWidgetSliderConfig={onUpdateControlWidgetSliderConfig}
               onMoveWidget={onMoveControlWidget}
               onRemoveWidget={onRemoveControlWidget}
               onMoveWidgetToPanel={onMoveControlWidgetToPanel}
+              onUpdateVariableValue={onUpdateVariableValue}
             />
           </div>
         ) : (
@@ -273,9 +296,11 @@ function LayoutTreePaneNode({
   onRenameControlPanel,
   onUpdateControlWidgetLabel,
   onUpdateControlWidgetInputKind,
+  onUpdateControlWidgetSliderConfig,
   onMoveControlWidget,
   onRemoveControlWidget,
   onMoveControlWidgetToPanel,
+  onUpdateVariableValue,
 }: {
   entry: WorkspacePanelViewModel;
   activePanelId?: string;
@@ -289,9 +314,15 @@ function LayoutTreePaneNode({
     widgetId: string,
     inputKind: 'text' | 'number' | 'slider' | 'boolean' | 'enum',
   ) => void;
+  onUpdateControlWidgetSliderConfig?: (
+    panelId: string,
+    widgetId: string,
+    slider: StudioControlWidgetSliderConfig,
+  ) => void;
   onMoveControlWidget?: (panelId: string, widgetId: string, direction: 'up' | 'down') => void;
   onRemoveControlWidget?: (panelId: string, widgetId: string) => void;
   onMoveControlWidgetToPanel?: (panelId: string, widgetId: string, targetPanelId: string) => void;
+  onUpdateVariableValue?: (variableName: string, binding: ExpressionBinding) => void;
 }) {
   const { attributes, listeners, setNodeRef } = useDraggable({
     id: entry.panel.id,
@@ -311,9 +342,11 @@ function LayoutTreePaneNode({
         onRenameControlPanel={onRenameControlPanel}
         onUpdateControlWidgetLabel={onUpdateControlWidgetLabel}
         onUpdateControlWidgetInputKind={onUpdateControlWidgetInputKind}
+        onUpdateControlWidgetSliderConfig={onUpdateControlWidgetSliderConfig}
         onMoveControlWidget={onMoveControlWidget}
         onRemoveControlWidget={onRemoveControlWidget}
         onMoveControlWidgetToPanel={onMoveControlWidgetToPanel}
+        onUpdateVariableValue={onUpdateVariableValue}
       />
       <DropTarget position="left" targetPanelId={entry.panel.id} activeDragPanelId={activeDragPanelId} />
       <DropTarget position="right" targetPanelId={entry.panel.id} activeDragPanelId={activeDragPanelId} />
@@ -335,9 +368,11 @@ function renderLayoutTreeNode({
   onRenameControlPanel,
   onUpdateControlWidgetLabel,
   onUpdateControlWidgetInputKind,
+  onUpdateControlWidgetSliderConfig,
   onMoveControlWidget,
   onRemoveControlWidget,
   onMoveControlWidgetToPanel,
+  onUpdateVariableValue,
 }: {
   node: StudioLayoutNode;
   nodePath: readonly number[];
@@ -354,9 +389,15 @@ function renderLayoutTreeNode({
     widgetId: string,
     inputKind: 'text' | 'number' | 'slider' | 'boolean' | 'enum',
   ) => void;
+  onUpdateControlWidgetSliderConfig?: (
+    panelId: string,
+    widgetId: string,
+    slider: StudioControlWidgetSliderConfig,
+  ) => void;
   onMoveControlWidget?: (panelId: string, widgetId: string, direction: 'up' | 'down') => void;
   onRemoveControlWidget?: (panelId: string, widgetId: string) => void;
   onMoveControlWidgetToPanel?: (panelId: string, widgetId: string, targetPanelId: string) => void;
+  onUpdateVariableValue?: (variableName: string, binding: ExpressionBinding) => void;
 }): ReactNode {
   if (node.kind === 'pane') {
     const entry = visibleEntryByPanelId.get(node.panelId);
@@ -373,9 +414,11 @@ function renderLayoutTreeNode({
         onRenameControlPanel={onRenameControlPanel}
         onUpdateControlWidgetLabel={onUpdateControlWidgetLabel}
         onUpdateControlWidgetInputKind={onUpdateControlWidgetInputKind}
+        onUpdateControlWidgetSliderConfig={onUpdateControlWidgetSliderConfig}
         onMoveControlWidget={onMoveControlWidget}
         onRemoveControlWidget={onRemoveControlWidget}
         onMoveControlWidgetToPanel={onMoveControlWidgetToPanel}
+        onUpdateVariableValue={onUpdateVariableValue}
       />
     );
   }
@@ -395,9 +438,11 @@ function renderLayoutTreeNode({
         onRenameControlPanel,
         onUpdateControlWidgetLabel,
         onUpdateControlWidgetInputKind,
+        onUpdateControlWidgetSliderConfig,
         onMoveControlWidget,
         onRemoveControlWidget,
         onMoveControlWidgetToPanel,
+        onUpdateVariableValue,
       }),
     }))
     .filter((item) => item.node !== null);
@@ -492,9 +537,11 @@ export function WorkspaceView({
   onRenameControlPanel,
   onUpdateControlWidgetLabel,
   onUpdateControlWidgetInputKind,
+  onUpdateControlWidgetSliderConfig,
   onMoveControlWidget,
   onRemoveControlWidget,
   onMoveControlWidgetToPanel,
+  onUpdateVariableValue,
 }: WorkspaceViewProps) {
   const [activeDragPanelId, setActiveDragPanelId] = useState<string | null>(null);
   const sensors = useSensors(
@@ -529,9 +576,11 @@ export function WorkspaceView({
     onRenameControlPanel,
     onUpdateControlWidgetLabel,
     onUpdateControlWidgetInputKind,
+    onUpdateControlWidgetSliderConfig,
     onMoveControlWidget,
     onRemoveControlWidget,
     onMoveControlWidgetToPanel,
+    onUpdateVariableValue,
     controlPanelOptions,
   });
 

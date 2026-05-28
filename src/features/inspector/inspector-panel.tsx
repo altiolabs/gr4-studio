@@ -11,7 +11,6 @@ import { useRuntimeBlockSettings } from './hooks/use-runtime-block-settings';
 import { useSchedulersQuery } from './hooks/use-schedulers-query';
 import {
   resolveRuntimeSettingsAvailability,
-  shouldApplyRuntimeSettingImmediately,
   toRuntimeSettingsErrorMessage,
 } from './runtime-settings-model';
 import { useEditorStore } from '../graph-editor/store/editorStore';
@@ -185,7 +184,7 @@ function RuntimeSettingsCard({
         patch: {
           [name]: value,
         },
-        mode: shouldApplyRuntimeSettingImmediately(name) ? 'immediate' : 'staged',
+        mode: 'staged',
       });
       if (
         selectedBlock &&

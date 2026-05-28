@@ -132,6 +132,10 @@ export function buildEmptyAlignedData(seriesCount: number): uPlot.AlignedData {
   return Array.from({ length: seriesCount + 1 }, () => []) as unknown as uPlot.AlignedData;
 }
 
+function shouldResetScalesForDataUpdate(ranges: Pick<PlotViewSpec, 'xRange' | 'yRange'>): boolean {
+  return ranges.xRange?.auto !== false && ranges.yRange?.auto !== false;
+}
+
 function applyExplicitScales(chart: uPlot, ranges: Pick<PlotViewSpec, 'xRange' | 'yRange'>): void {
   if (ranges.xRange?.auto === false) {
     chart.setScale('x', {
@@ -305,7 +309,7 @@ export function TimeseriesUplotAdapter({ spec, frame, width, height }: PlotAdapt
       return;
     }
     lastDataSignatureRef.current = signature;
-    chartRef.current.setData(alignedData);
+    chartRef.current.setData(alignedData, shouldResetScalesForDataUpdate({ xRange: spec.xRange, yRange: spec.yRange }));
     applyExplicitScales(chartRef.current, { xRange: spec.xRange, yRange: spec.yRange });
   }, [alignedData, frame.meta?.sequence, frame.meta?.state, spec.xRange, spec.yRange]);
 

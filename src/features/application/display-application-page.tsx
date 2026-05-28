@@ -6,9 +6,11 @@ import { getSession } from '../../lib/api/sessionsApi';
 import type { ExecutionState } from '../runtime-session/store/runtimeSessionStore';
 import { ApplicationView } from './application-view';
 import {
+  publishDisplayApplicationVariableUpdate,
   readDisplayApplicationLaunchSnapshot,
   type DisplayApplicationLaunchSnapshot,
 } from './runtime/display-application-launch';
+import type { ExpressionBinding } from '../variables/model/types';
 
 function executionStateFromSession(state: string | undefined, fallback: ExecutionState): ExecutionState {
   if (state === 'running' || state === 'stopped' || state === 'error') {
@@ -29,6 +31,14 @@ function DisplayApplicationRuntime({ snapshot }: { snapshot: DisplayApplicationL
   const statusText = sessionQuery.isError
     ? 'Session unavailable'
     : sessionQuery.data?.lastError ?? `Session ${snapshot.sessionId}`;
+  const updateVariableValue = (variableName: string, binding: ExpressionBinding) => {
+    publishDisplayApplicationVariableUpdate({
+      launchId: snapshot.launchId,
+      sourceTabId: snapshot.sourceTabId,
+      variableName,
+      binding,
+    });
+  };
 
   useEffect(() => {
     window.document.title = `${title} - gr4-studio`;
@@ -48,6 +58,7 @@ function DisplayApplicationRuntime({ snapshot }: { snapshot: DisplayApplicationL
           panelEntries={snapshot.panelEntries}
           layout={snapshot.layout}
           executionState={sessionQuery.isError ? 'error' : executionState}
+          onUpdateVariableValue={updateVariableValue}
         />
       </main>
     </div>

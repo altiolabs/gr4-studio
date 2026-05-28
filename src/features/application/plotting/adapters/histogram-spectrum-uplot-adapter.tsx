@@ -48,6 +48,25 @@ function resolveValueRange(values: readonly number[], manualRange?: { min?: numb
   };
 }
 
+function shouldResetScalesForDataUpdate(ranges: Pick<PlotAdapterProps['spec'], 'xRange' | 'yRange'>): boolean {
+  return ranges.xRange?.auto !== false && ranges.yRange?.auto !== false;
+}
+
+function applyExplicitScales(chart: uPlot, ranges: Pick<PlotAdapterProps['spec'], 'xRange' | 'yRange'>): void {
+  if (ranges.xRange?.auto === false) {
+    chart.setScale('x', {
+      min: ranges.xRange.min ?? 0,
+      max: ranges.xRange.max ?? 1,
+    });
+  }
+  if (ranges.yRange?.auto === false) {
+    chart.setScale('y', {
+      min: ranges.yRange.min ?? 0,
+      max: ranges.yRange.max ?? 1,
+    });
+  }
+}
+
 export function drawPhosphorSpectrumRaster(params: {
   ctx: CanvasRenderingContext2D;
   bbox: uPlot.BBox;
@@ -257,6 +276,7 @@ export function PhosphorSpectrumUplotAdapter({ spec, frame, width, height }: Plo
       buildEmptyAlignedData(seriesOptions.length - 1),
       host,
     );
+    applyExplicitScales(chart, { xRange: spec.xRange, yRange: spec.yRange });
     chartRef.current = chart;
     lastDataSignatureRef.current = '';
 
@@ -299,11 +319,13 @@ export function PhosphorSpectrumUplotAdapter({ spec, frame, width, height }: Plo
     const firstPoints = alignedData[0]?.length ?? 0;
     const signature = `${sequence}:${firstPoints}:${frame.meta?.state ?? 'na'}`;
     if (signature === lastDataSignatureRef.current) {
+      applyExplicitScales(chartRef.current, { xRange: spec.xRange, yRange: spec.yRange });
       return;
     }
     lastDataSignatureRef.current = signature;
-    chartRef.current.setData(alignedData);
-  }, [alignedData, frame.meta?.sequence, frame.meta?.state]);
+    chartRef.current.setData(alignedData, shouldResetScalesForDataUpdate({ xRange: spec.xRange, yRange: spec.yRange }));
+    applyExplicitScales(chartRef.current, { xRange: spec.xRange, yRange: spec.yRange });
+  }, [alignedData, frame.meta?.sequence, frame.meta?.state, spec.xRange, spec.yRange]);
 
   return <div ref={plotHostRef} className="h-full min-h-0 w-full overflow-hidden rounded border border-slate-800 bg-slate-950" />;
 }

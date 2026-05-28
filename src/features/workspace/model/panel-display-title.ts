@@ -1,4 +1,6 @@
-export function readExplicitPlotPanelTitle(parameters: Readonly<Record<string, string>> | undefined): string | undefined {
+export function readExplicitPlotPanelTitle(
+  parameters: Readonly<Record<string, string | number | boolean | null>> | undefined,
+): string | undefined {
   if (!parameters) {
     return undefined;
   }

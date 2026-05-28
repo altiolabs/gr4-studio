@@ -49,7 +49,7 @@ import { resolveCurrentSessionStudioBindingView } from '../features/runtime-sess
 import { useRuntimeSessionStore } from '../features/runtime-session/store/runtimeSessionStore';
 import { setBlockSettings } from '../lib/api/block-settings';
 import { buildCurrentGraphSubmissionFromEditorSnapshot } from '../features/runtime-submission/model/current-graph-submission';
-import { shouldApplyRuntimeSettingImmediately } from '../features/inspector/runtime-settings-model';
+import { shouldPropagateResolvedRuntimeSetting } from '../features/inspector/runtime-settings-model';
 import { WorkspaceView, type WorkspacePanelViewModel } from '../features/workspace/workspace-view';
 import { resolveGraphVariables } from '../features/variables/model/resolveGraphVariables';
 import { deriveDefaultStudioPanelsFromNodes } from '../features/workspace/model/panel-derivation';
@@ -67,15 +67,22 @@ import {
   moveControlWidgetToPanel,
   updateControlWidgetInputKind,
   updateControlWidgetLabel,
+  updateControlWidgetSliderConfig,
 } from '../features/control-panels/control-panel-authoring';
 import { PlotStyleModal } from '../features/workspace/plot-style-modal';
-import type { ApplicationMode, StudioPlotStyleConfig, StudioVariable } from '../features/graph-document/model/studio-workspace';
+import type {
+  ApplicationMode,
+  StudioControlWidgetSliderConfig,
+  StudioPlotStyleConfig,
+  StudioVariable,
+} from '../features/graph-document/model/studio-workspace';
 import { getBlockDetails, type BlockDetails } from '../lib/api/block-details';
 import type { SessionRecord } from '../lib/api/sessionsApi';
 import { config } from '../lib/config';
 import { isDescriptorBasedBindingFamily } from '../features/graph-editor/runtime/studio-managed-runtime-authoring';
 import {
   buildDisplayApplicationUrl,
+  subscribeToDisplayApplicationCommands,
   writeDisplayApplicationLaunchSnapshot,
 } from '../features/application/runtime/display-application-launch';
 
@@ -363,6 +370,34 @@ export function StudioPage() {
     },
     [updateVariable],
   );
+  const updateVariableValueByName = useCallback(
+    (variableName: string, binding: StudioVariable['binding']) => {
+      const targetVariable = (studioVariables ?? []).find((variable) => variable.name === variableName);
+      if (!targetVariable) {
+        return;
+      }
+      updateVariable(targetVariable.id, { binding });
+    },
+    [studioVariables, updateVariable],
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    return subscribeToDisplayApplicationCommands((command) => {
+      if (command.type !== 'variable-update') {
+        return;
+      }
+      if (command.sourceTabId !== activeTabId) {
+        return;
+      }
+      const targetVariable = (studioVariables ?? []).find((variable) => variable.name === command.variableName);
+      if (!targetVariable) {
+        return;
+      }
+      updateVariable(targetVariable.id, { binding: command.binding });
+    });
+  }, [activeTabId, studioVariables, updateVariable]);
   const mergedWorkspacePanels = useMemo(
     () =>
       mergeSavedAndDerivedStudioPanels({
@@ -609,11 +644,16 @@ export function StudioPage() {
           if (parameter.readOnly || !parameter.mutable) {
             return;
           }
-          if (!shouldApplyRuntimeSettingImmediately(parameter.name)) {
-            return;
-          }
           const resolvedParameter = resolvedParameters[parameter.name];
           if (!resolvedParameter || resolvedParameter.state !== 'resolved' || resolvedParameter.value === undefined) {
+            return;
+          }
+          if (
+            !shouldPropagateResolvedRuntimeSetting({
+              name: parameter.name,
+              bindingKind: resolvedParameter.binding.kind,
+            })
+          ) {
             return;
           }
           patch[parameter.name] = resolvedParameter.value;
@@ -631,7 +671,7 @@ export function StudioPage() {
           if (cancelled) {
             return;
           }
-          await setBlockSettings(activeRuntimeContext.sessionId as string, nodeId, patch, 'immediate');
+          await setBlockSettings(activeRuntimeContext.sessionId as string, nodeId, patch, 'staged');
         }),
       );
 
@@ -1251,6 +1291,13 @@ export function StudioPage() {
   ) => {
     setStudioPanels(updateControlWidgetInputKind(mergedWorkspacePanels, panelId, widgetId, inputKind));
   };
+  const updateControlWidgetSliderConfigInWorkspace = (
+    panelId: string,
+    widgetId: string,
+    slider: StudioControlWidgetSliderConfig,
+  ) => {
+    setStudioPanels(updateControlWidgetSliderConfig(mergedWorkspacePanels, panelId, widgetId, slider));
+  };
 
   const moveControlWidgetInWorkspace = (panelId: string, widgetId: string, direction: 'up' | 'down') => {
     setStudioPanels(moveControlWidgetInPanel(mergedWorkspacePanels, panelId, widgetId, direction));
@@ -1554,9 +1601,11 @@ export function StudioPage() {
                 onRenameControlPanel={renameControlPanel}
                 onUpdateControlWidgetLabel={updateControlWidgetLabelInWorkspace}
                 onUpdateControlWidgetInputKind={updateControlWidgetInputKindInWorkspace}
+                onUpdateControlWidgetSliderConfig={updateControlWidgetSliderConfigInWorkspace}
                 onMoveControlWidget={moveControlWidgetInWorkspace}
                 onRemoveControlWidget={removeControlWidgetInWorkspace}
                 onMoveControlWidgetToPanel={moveControlWidgetToPanelInWorkspace}
+                onUpdateVariableValue={updateVariableValueByName}
               />
             ) : activeCenterView === 'variables' ? (
               <VariablesView
@@ -1574,17 +1623,7 @@ export function StudioPage() {
                 panelEntries={renderedWorkspacePanelEntries}
                 layout={workspaceLayout}
                 executionState={runtimeView?.executionState}
-                onUpdateVariableValue={
-                  runtimeView?.executionState === 'running'
-                    ? undefined
-                    : (variableName, binding) => {
-                        const targetVariable = (studioVariables ?? []).find((variable) => variable.name === variableName);
-                        if (!targetVariable) {
-                          return;
-                        }
-                        updateVariable(targetVariable.id, { binding });
-                      }
-                }
+                onUpdateVariableValue={updateVariableValueByName}
               />
             )}
             <PlotStyleModal

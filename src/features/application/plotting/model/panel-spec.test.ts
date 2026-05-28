@@ -354,6 +354,67 @@ describe('derivePlotPanelSpec', () => {
     });
   });
 
+  it('keeps manual x and y ranges available for PowerSpectrumSink when autoscale is disabled', () => {
+    const spec = derivePlotPanelSpec(
+      makeSeriesEntry({
+        panel: {
+          id: 'studio-panel:node-spectrum',
+          nodeId: 'node-spectrum',
+          kind: 'series2d',
+          title: 'Power Spectrum',
+          visible: true,
+          previewOnCanvas: false,
+        },
+        nodeBlockTypeId: 'gr::studio::StudioPowerSpectrumSink<float32>',
+        nodeParameters: {
+          autoscale: false,
+          x_min: '-2400000',
+          x_max: '2400000',
+          y_min: '-120',
+          y_max: '-20',
+        },
+      }),
+    );
+
+    expect(spec?.view.xRange).toEqual({
+      auto: false,
+      min: -2400000,
+      max: 2400000,
+    });
+    expect(spec?.view.yRange).toEqual({
+      auto: false,
+      min: -120,
+      max: -20,
+    });
+  });
+
+  it('normalizes reversed PowerSpectrumSink manual ranges when autoscale is disabled', () => {
+    const spec = derivePlotPanelSpec(
+      makeSeriesEntry({
+        panel: {
+          id: 'studio-panel:node-spectrum',
+          nodeId: 'node-spectrum',
+          kind: 'series2d',
+          title: 'Power Spectrum',
+          visible: true,
+          previewOnCanvas: false,
+        },
+        nodeBlockTypeId: 'gr::studio::StudioPowerSpectrumSink<complex<float32>>',
+        nodeParameters: {
+          autoscale: false,
+          y_min: 20,
+          y_max: -100,
+        },
+      }),
+    );
+
+    expect(spec?.view.yRange).toEqual({
+      auto: false,
+      min: -100,
+      max: 20,
+    });
+  });
+
   it('falls back to auto y scaling when the manual y range is invalid', () => {
     const spec = derivePlotPanelSpec(
       makeSeriesEntry({
@@ -362,7 +423,7 @@ describe('derivePlotPanelSpec', () => {
           x_min: '0',
           x_max: '0',
           y_min: '2',
-          y_max: '1',
+          y_max: '2',
         },
       }),
     );

@@ -64,6 +64,13 @@ export function shouldApplyRuntimeSettingImmediately(name: string): boolean {
   return LIVE_UPDATABLE_SETTING_NAMES.has(name.trim().toLowerCase());
 }
 
+export function shouldPropagateResolvedRuntimeSetting(params: {
+  name: string;
+  bindingKind: 'literal' | 'expression';
+}): boolean {
+  return params.bindingKind === 'expression' || shouldApplyRuntimeSettingImmediately(params.name);
+}
+
 export function toRuntimeSettingsErrorMessage(error: unknown): string {
   if (error instanceof ApiClientError) {
     if (error.code === 'NETWORK') {

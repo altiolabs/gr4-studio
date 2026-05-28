@@ -3,6 +3,7 @@ import type { JsonPrimitive } from '../variables/model/types';
 import type {
   StudioControlPanelSpec,
   StudioControlWidgetInputKind,
+  StudioControlWidgetSliderConfig,
   StudioControlWidgetSpec,
   StudioControlWidgetBinding,
   StudioPanelSpec,
@@ -345,6 +346,31 @@ export function updateControlWidgetInputKind(
           ? {
               ...widget,
               inputKind,
+            }
+          : widget,
+      ),
+    };
+  });
+}
+
+export function updateControlWidgetSliderConfig(
+  panels: readonly StudioPanelSpec[] | undefined,
+  panelId: string,
+  widgetId: string,
+  slider: StudioControlWidgetSliderConfig,
+): StudioPanelSpec[] {
+  return (panels ?? []).map((panel) => {
+    if (panel.kind !== 'control' || panel.id !== panelId) {
+      return panel;
+    }
+
+    return {
+      ...panel,
+      widgets: panel.widgets.map((widget) =>
+        widget.id === widgetId
+          ? {
+              ...widget,
+              slider,
             }
           : widget,
       ),

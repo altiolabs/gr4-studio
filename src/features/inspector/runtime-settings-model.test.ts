@@ -3,6 +3,7 @@ import { ApiClientError } from '../../lib/api/client';
 import {
   resolveRuntimeSettingsAvailability,
   shouldApplyRuntimeSettingImmediately,
+  shouldPropagateResolvedRuntimeSetting,
   toRuntimeSettingsErrorMessage,
 } from './runtime-settings-model';
 
@@ -160,5 +161,11 @@ describe('runtime-settings-model', () => {
     expect(shouldApplyRuntimeSettingImmediately('z_max')).toBe(true);
     expect(shouldApplyRuntimeSettingImmediately('sample_rate')).toBe(false);
     expect(shouldApplyRuntimeSettingImmediately('endpoint')).toBe(false);
+  });
+
+  it('propagates resolved expression settings for live variable controls', () => {
+    expect(shouldPropagateResolvedRuntimeSetting({ name: 'alpha', bindingKind: 'expression' })).toBe(true);
+    expect(shouldPropagateResolvedRuntimeSetting({ name: 'sample_rate', bindingKind: 'literal' })).toBe(false);
+    expect(shouldPropagateResolvedRuntimeSetting({ name: 'poll_ms', bindingKind: 'literal' })).toBe(true);
   });
 });

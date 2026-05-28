@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDisplayApplicationUrl,
+  publishDisplayApplicationVariableUpdate,
   readDisplayApplicationLaunchSnapshot,
   writeDisplayApplicationLaunchSnapshot,
 } from './display-application-launch';
@@ -59,5 +60,23 @@ describe('display application launch handoff', () => {
         href: 'file:///tmp/gr4-studio/index.html#/old',
       } as Location),
     ).toBe('file:///tmp/gr4-studio/index.html#/app-runtime/launch-1');
+  });
+
+  it('publishes variable update commands through storage', () => {
+    const storage = createMemoryStorage();
+    const command = publishDisplayApplicationVariableUpdate(
+      {
+        launchId: 'launch-1',
+        sourceTabId: 'tab-1',
+        variableName: 'alpha',
+        binding: { kind: 'literal', value: 0.5 },
+      },
+      storage,
+    );
+
+    expect(command.type).toBe('variable-update');
+    expect(command.variableName).toBe('alpha');
+    expect(storage.length).toBe(1);
+    expect(storage.getItem(`gr4-studio:display-application:command:${command.commandId}`)).toContain('"alpha"');
   });
 });

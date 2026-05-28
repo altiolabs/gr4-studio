@@ -3,6 +3,7 @@ import type { EditorGraphNode } from '../graph-editor/model/types';
 import type {
   StudioControlPanelSpec,
   StudioControlWidgetInputKind,
+  StudioControlWidgetSliderConfig,
   StudioControlWidgetSpec,
   StudioControlWidgetBinding,
 } from '../graph-document/model/studio-workspace';
@@ -34,6 +35,7 @@ export type ResolvedControlWidget = {
   currentValue: string;
   enumOptions?: readonly string[];
   enumLabels?: Record<string, string>;
+  slider?: StudioControlWidgetSliderConfig;
   state: ControlWidgetBindingState;
   reason?: string;
   nodeDisplayName?: string;
@@ -149,6 +151,7 @@ export function resolveControlPanelWidgetBindings(input: {
           label: widget.label?.trim() || widget.binding.variableName,
           binding: widget.binding,
           inputKind: widget.inputKind,
+          slider: widget.slider,
           runtimeSessionId: null,
           currentValue: '',
           state: 'missing_variable' as const,
@@ -162,6 +165,7 @@ export function resolveControlPanelWidgetBindings(input: {
         label: widget.label?.trim() || widget.binding.variableName,
         binding: widget.binding,
         inputKind: widget.inputKind,
+        slider: widget.slider,
         runtimeSessionId: null,
         currentValue: stringifyResolvedValue(displayValue),
         state: 'ready' as const,
@@ -178,6 +182,7 @@ export function resolveControlPanelWidgetBindings(input: {
         label,
         binding,
         inputKind: widget.inputKind,
+        slider: widget.slider,
         runtimeSessionId: input.runtime?.sessionId ?? null,
         currentValue: '',
         state: 'missing_node' as const,
@@ -192,6 +197,7 @@ export function resolveControlPanelWidgetBindings(input: {
         label,
         binding,
         inputKind: widget.inputKind,
+        slider: widget.slider,
         runtimeSessionId: input.runtime?.sessionId ?? null,
         currentValue: '',
         state: 'missing_parameter' as const,
@@ -211,6 +217,7 @@ export function resolveControlPanelWidgetBindings(input: {
         label,
         binding: widget.binding,
         inputKind: widget.inputKind,
+        slider: widget.slider,
         runtimeSessionId: input.runtime?.sessionId ?? null,
         currentValue: parameterEntry.value,
         enumOptions,
@@ -229,6 +236,7 @@ export function resolveControlPanelWidgetBindings(input: {
       label,
       binding: widget.binding,
       inputKind: widget.inputKind,
+      slider: widget.slider,
       runtimeSessionId: input.runtime?.sessionId ?? null,
       currentValue: parameterEntry.value,
       enumOptions,
