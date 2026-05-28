@@ -78,6 +78,7 @@ import type {
 } from '../features/graph-document/model/studio-workspace';
 import { getBlockDetails, type BlockDetails } from '../lib/api/block-details';
 import type { SessionRecord } from '../lib/api/sessionsApi';
+import type { ExpressionBinding } from '../features/variables/model/types';
 import { config } from '../lib/config';
 import { isDescriptorBasedBindingFamily } from '../features/graph-editor/runtime/studio-managed-runtime-authoring';
 import {
@@ -196,6 +197,9 @@ export function StudioPage() {
   const [isSessionsDrawerOpen, setIsSessionsDrawerOpen] = useState(false);
   const [plotStyleEditorPanelId, setPlotStyleEditorPanelId] = useState<string | null>(null);
   const [pendingDestructiveAction, setPendingDestructiveAction] = useState<PendingDestructiveAction>(null);
+  const [runtimeVariableOverridesByTabId, setRuntimeVariableOverridesByTabId] = useState<
+    Record<string, { sessionId: string; valuesByName: Record<string, ExpressionBinding> }>
+  >({});
   const [showUnsupportedNotice, setShowUnsupportedNotice] = useState<boolean>(() => {
     if (typeof window === 'undefined') {
       return false;
@@ -357,10 +361,35 @@ export function StudioPage() {
       return null;
     }
   }, [blockDetailsByType, currentSnapshot]);
+  const runtimeView = activeTabId ? getTabRuntimeView(activeTabId, currentSubmissionContent, schedulerId) : null;
+  const activeRuntimeContext = activeTabId ? runtimeContextsByTabId[activeTabId] : null;
   const resolvedGraph = useMemo(
     () => resolveGraphVariables(serializedSnapshot.document),
     [serializedSnapshot.document],
   );
+  const activeRuntimeVariableOverrides = useMemo(() => {
+    if (!activeTabId || !activeRuntimeContext?.sessionId) {
+      return {};
+    }
+
+    const overrides = runtimeVariableOverridesByTabId[activeTabId];
+    if (!overrides || overrides.sessionId !== activeRuntimeContext.sessionId) {
+      return {};
+    }
+    return overrides.valuesByName;
+  }, [activeRuntimeContext?.sessionId, activeTabId, runtimeVariableOverridesByTabId]);
+  const runtimeResolvedGraph = useMemo(
+    () =>
+      resolveGraphVariables(serializedSnapshot.document, {
+        variableOverridesByName: activeRuntimeVariableOverrides,
+      }),
+    [activeRuntimeVariableOverrides, serializedSnapshot.document],
+  );
+  const runtimeVariableOverrideKey = useMemo(
+    () => JSON.stringify(activeRuntimeVariableOverrides),
+    [activeRuntimeVariableOverrides],
+  );
+  const resolvedGraphForRuntime = activeRuntimeContext?.sessionId ? runtimeResolvedGraph : resolvedGraph;
   const handleCreateVariable = useCallback(() => {
     addVariable();
   }, [addVariable]);
@@ -376,9 +405,31 @@ export function StudioPage() {
       if (!targetVariable) {
         return;
       }
+
+      if (activeTabId && activeRuntimeContext?.sessionId && runtimeView?.executionState === 'running') {
+        setRuntimeVariableOverridesByTabId((current) => {
+          const existing = current[activeTabId];
+          const valuesByName =
+            existing && existing.sessionId === activeRuntimeContext.sessionId
+              ? existing.valuesByName
+              : {};
+          return {
+            ...current,
+            [activeTabId]: {
+              sessionId: activeRuntimeContext.sessionId as string,
+              valuesByName: {
+                ...valuesByName,
+                [variableName]: binding,
+              },
+            },
+          };
+        });
+        return;
+      }
+
       updateVariable(targetVariable.id, { binding });
     },
-    [studioVariables, updateVariable],
+    [activeRuntimeContext?.sessionId, activeTabId, runtimeView?.executionState, studioVariables, updateVariable],
   );
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -395,9 +446,46 @@ export function StudioPage() {
       if (!targetVariable) {
         return;
       }
+      if (activeRuntimeContext?.sessionId && runtimeView?.executionState === 'running') {
+        setRuntimeVariableOverridesByTabId((current) => {
+          const existing = current[activeTabId];
+          const valuesByName =
+            existing && existing.sessionId === activeRuntimeContext.sessionId
+              ? existing.valuesByName
+              : {};
+          return {
+            ...current,
+            [activeTabId]: {
+              sessionId: activeRuntimeContext.sessionId as string,
+              valuesByName: {
+                ...valuesByName,
+                [command.variableName]: command.binding,
+              },
+            },
+          };
+        });
+        return;
+      }
       updateVariable(targetVariable.id, { binding: command.binding });
     });
-  }, [activeTabId, studioVariables, updateVariable]);
+  }, [activeRuntimeContext?.sessionId, activeTabId, runtimeView?.executionState, studioVariables, updateVariable]);
+  useEffect(() => {
+    setRuntimeVariableOverridesByTabId((current) => {
+      let changed = false;
+      const next: typeof current = {};
+
+      Object.entries(current).forEach(([tabId, overrides]) => {
+        const context = runtimeContextsByTabId[tabId];
+        if (context?.sessionId === overrides.sessionId) {
+          next[tabId] = overrides;
+          return;
+        }
+        changed = true;
+      });
+
+      return changed ? next : current;
+    });
+  }, [runtimeContextsByTabId]);
   const mergedWorkspacePanels = useMemo(
     () =>
       mergeSavedAndDerivedStudioPanels({
@@ -456,8 +544,6 @@ export function StudioPage() {
   const applicationMode = application?.mode ?? 'in_app';
   const applicationTitle = application?.title?.trim() || activeTab?.document.displayName || documentName || 'Application';
   const activeCenterView: CenterViewMode = activeTabId ? centerViewByTabId[activeTabId] ?? 'graph' : 'graph';
-  const runtimeView = activeTabId ? getTabRuntimeView(activeTabId, currentSubmissionContent, schedulerId) : null;
-  const activeRuntimeContext = activeTabId ? runtimeContextsByTabId[activeTabId] : null;
   const buildWorkspacePanelEntriesForRuntime = useCallback(
     (runtime: {
       sessionId: string | null;
@@ -490,7 +576,7 @@ export function StudioPage() {
                 panel,
                 nodeById,
                 blockDetailsByType,
-                resolvedGraph,
+                resolvedGraph: resolvedGraphForRuntime,
                 runtime: controlRuntime,
               }),
             };
@@ -507,7 +593,7 @@ export function StudioPage() {
                 panel,
                 nodeById,
                 blockDetailsByType,
-                resolvedGraph,
+                resolvedGraph: resolvedGraphForRuntime,
                 runtime: controlRuntime,
               }),
             };
@@ -521,7 +607,7 @@ export function StudioPage() {
         );
         const resolvedParameterValues = buildResolvedParameterValues(
           effectiveParameterValues,
-          resolvedGraph.parametersByNodeId[sourceNode.instanceId],
+          resolvedGraphForRuntime.parametersByNodeId[sourceNode.instanceId],
         );
         const bindingView = resolveCurrentSessionStudioBindingView({
           blockTypeId: sourceNode.blockTypeId,
@@ -536,7 +622,7 @@ export function StudioPage() {
                 panel,
                 nodeById,
                 blockDetailsByType,
-                resolvedGraph,
+                resolvedGraph: resolvedGraphForRuntime,
                 runtime: controlRuntime,
               })
             : undefined;
@@ -561,7 +647,7 @@ export function StudioPage() {
         };
       });
     },
-    [blockDetailsByType, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes, resolvedGraph],
+    [blockDetailsByType, effectiveStudioPlotPalettes, mergedWorkspacePanels, nodes, resolvedGraphForRuntime],
   );
   const lastPropagatedRuntimeSnapshotRef = useRef<string | null>(null);
   const workspacePanelEntries = useMemo<WorkspacePanelViewModel[]>(
@@ -608,33 +694,20 @@ export function StudioPage() {
       return;
     }
 
-    const propagationKey = `${activeTabId}:${activeRuntimeContext.sessionId}:${serializedSnapshot.contentHash}`;
+    const propagationKey = `${activeTabId}:${activeRuntimeContext.sessionId}:${serializedSnapshot.contentHash}:${runtimeVariableOverrideKey}`;
     if (lastPropagatedRuntimeSnapshotRef.current === propagationKey) {
       return;
     }
 
     let cancelled = false;
     const pushResolvedValues = async () => {
-      const hasWebSocketBinding = nodes.some((node) => {
-        const resolvedParameters = resolvedGraph.parametersByNodeId[node.instanceId];
-        const transportResolved = resolvedParameters?.transport;
-        if (transportResolved?.state !== 'resolved') {
-          return false;
-        }
-        return typeof transportResolved.value === 'string' && transportResolved.value.trim().toLowerCase() === 'websocket';
-      });
-
-      if (hasWebSocketBinding) {
-        return;
-      }
-
       const updates = nodes.flatMap((node) => {
         const blockDetails = blockDetailsByType.get(node.blockTypeId);
         if (!blockDetails) {
           return [];
         }
 
-        const resolvedParameters = resolvedGraph.parametersByNodeId[node.instanceId];
+        const resolvedParameters = resolvedGraphForRuntime.parametersByNodeId[node.instanceId];
         if (!resolvedParameters) {
           return [];
         }
@@ -690,8 +763,9 @@ export function StudioPage() {
     activeTabId,
     blockDetailsByType,
     nodes,
-    resolvedGraph.parametersByNodeId,
+    resolvedGraphForRuntime.parametersByNodeId,
     runtimeView,
+    runtimeVariableOverrideKey,
     serializedSnapshot.contentHash,
   ]);
 

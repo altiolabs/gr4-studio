@@ -104,6 +104,26 @@ describe('resolveGraphVariables', () => {
     expect(resolved.parametersByNodeId['node-1']?.tau.value).toBe(0.000075);
   });
 
+  it('can resolve against temporary variable overrides without mutating the document', () => {
+    const document = makeDocument();
+    const resolved = resolveGraphVariables(document, {
+      variableOverridesByName: {
+        center_freq: {
+          kind: 'literal',
+          value: 200,
+        },
+      },
+    });
+
+    expect(resolved.variablesByName.center_freq.value).toBe(200);
+    expect(resolved.variablesByName.offset.value).toBe(100);
+    expect(resolved.parametersByNodeId['node-1']?.freq.value).toBe(125);
+    expect(document.metadata.studio?.variables?.[0]?.binding).toEqual({
+      kind: 'literal',
+      value: 100,
+    });
+  });
+
   it('reports unknown variables and cycles', () => {
     const document: GraphDocument = {
       format: 'gr4-studio.graph',

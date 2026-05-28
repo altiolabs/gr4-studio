@@ -31,6 +31,10 @@ export type ResolvedGraphVariables = {
   diagnostics: GraphExpressionDiagnostic[];
 };
 
+export type ResolveGraphVariablesOptions = {
+  variableOverridesByName?: Readonly<Record<string, ExpressionBinding>>;
+};
+
 function isNumericLiteral(value: JsonPrimitive): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
@@ -134,7 +138,10 @@ function coerceDependencyValue(
   return value;
 }
 
-export function resolveGraphVariables(document: GraphDocument): ResolvedGraphVariables {
+export function resolveGraphVariables(
+  document: GraphDocument,
+  options: ResolveGraphVariablesOptions = {},
+): ResolvedGraphVariables {
   const diagnostics: GraphExpressionDiagnostic[] = [];
   const variablesByName: Record<string, ResolvedExpressionBinding> = {};
   const variables = document.metadata.studio?.variables ?? [];
@@ -149,7 +156,10 @@ export function resolveGraphVariables(document: GraphDocument): ResolvedGraphVar
       });
       continue;
     }
-    variableByName.set(variable.name, { id: variable.id, binding: variable.binding });
+    variableByName.set(variable.name, {
+      id: variable.id,
+      binding: options.variableOverridesByName?.[variable.name] ?? variable.binding,
+    });
   }
 
   const resolving = new Set<string>();
