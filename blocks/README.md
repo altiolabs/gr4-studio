@@ -9,13 +9,18 @@ Current families in `blocks/studio`:
 - `StudioSeriesSink`
 - `Studio2DSeriesSink`
 - `StudioDataSetSink`
-- `StudioAudioMonitor`
+- `StudioPowerSpectrumSink`
+- `StudioWaterfallSink`
+- `StudioAudioSink`
 - `StudioImageSink`
 
-Current transport support for these included blocks is limited to:
+Transport support is block-specific. Current modes used by the included blocks are:
 
 - `http_snapshot`
 - `http_poll`
+- `websocket`
+
+Spectrum and waterfall sinks expose FFT window selection through reflected enum metadata so Studio can render dropdown controls.
 
 ## License
 

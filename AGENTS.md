@@ -56,7 +56,6 @@ Initial block families:
 * `StudioSeriesSink`
 * `Studio2DSeriesSink`
 * `StudioDataSetSink`
-* `StudioAudioMonitor`
 * `StudioImageSink`
 
 These are:

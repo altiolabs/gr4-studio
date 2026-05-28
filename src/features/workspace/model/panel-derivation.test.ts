@@ -83,7 +83,7 @@ describe('deriveDefaultStudioPanelsFromNodes', () => {
       },
       {
         instanceId: 'node-audio',
-        blockTypeId: 'gr::studio::StudioAudioMonitor<float32>',
+        blockTypeId: 'gr::studio::StudioAudioSink<float32>',
         displayName: 'Audio',
       },
     ]);
@@ -111,7 +111,7 @@ describe('deriveDefaultStudioPanelsFromNodes', () => {
       },
       {
         instanceId: 'b-node',
-        blockTypeId: 'gr::studio::StudioAudioMonitor<float32>',
+        blockTypeId: 'gr::studio::StudioAudioSink<float32>',
         displayName: 'B',
       },
     ];

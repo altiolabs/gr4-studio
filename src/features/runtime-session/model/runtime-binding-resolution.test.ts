@@ -282,25 +282,23 @@ describe('descriptor-based runtime binding resolution', () => {
     });
   });
 
-  it('adapts generic descriptors for known Studio blocks outside the previous hardcoded family list', () => {
+  it('adapts generic descriptors for known Studio blocks outside the descriptor-managed list', () => {
     expect(
       resolveCurrentSessionStudioBindingView({
-        blockTypeId: 'gr::studio::StudioAudioMonitor<float32>',
-        nodeInstanceId: 'audio0',
+        blockTypeId: 'gr::studio::StudioDataSetSink<float32>',
+        nodeInstanceId: 'dataset0',
         parameterValues: {
           transport: 'http_poll',
-          endpoint: 'http://legacy-host:18080/legacy-audio',
+          endpoint: 'http://legacy-host:18080/legacy-dataset',
           poll_ms: '200',
-          channels: '2',
-          sample_rate: '48000',
         },
         session: runningSession([
           {
-            id: 'audio-stream',
-            blockInstanceName: 'audio0',
+            id: 'dataset-stream',
+            blockInstanceName: 'dataset0',
             transport: 'http_poll',
-            payloadFormat: 'audio-window-json-v1',
-            path: '/sessions/sess-1/streams/audio-stream/http',
+            payloadFormat: 'dataset-xy-json-v1',
+            path: '/sessions/sess-1/streams/dataset-stream/http',
             ready: true,
           },
         ]),
@@ -308,10 +306,8 @@ describe('descriptor-based runtime binding resolution', () => {
     ).toMatchObject({
       status: 'configured',
       transport: 'http_poll',
-      endpoint: '/api/sessions/sess-1/streams/audio-stream/http',
-      sampleRate: 48000,
-      channels: 2,
-      payloadFormat: 'audio-window-json-v1',
+      endpoint: '/api/sessions/sess-1/streams/dataset-stream/http',
+      payloadFormat: 'dataset-xy-json-v1',
     });
   });
 

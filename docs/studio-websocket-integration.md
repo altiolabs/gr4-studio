@@ -8,6 +8,7 @@ Current websocket-enabled Studio sinks in Studio code:
 - `Studio2DSeriesSink`
 - `StudioPowerSpectrumSink`
 - `StudioWaterfallSink`
+- `StudioAudioSink`
 
 Current descriptor-driven slice:
 
@@ -15,6 +16,7 @@ Current descriptor-driven slice:
 - `Studio2DSeriesSink`
 - `StudioPowerSpectrumSink`
 - `StudioWaterfallSink`
+- `StudioAudioSink`
 
 ## Core rules
 
@@ -67,6 +69,7 @@ Current descriptor-driven slice:
 - Series uses JSON websocket frames for bounded 1D sample windows.
 - 2D series uses JSON websocket frames for `series2d-xy-json-v1` XY payloads.
 - Power spectrum uses binary websocket frames for dense numeric spectra.
+- Audio sink uses binary websocket frames for `audio-float32-binary-v1` playback payloads.
 - The current descriptor-driven slice uses `update_ms` as the live send cadence while preserving a first-frame-immediate startup path where applicable.
 
 Use those blocks as the reference implementations when adding websocket support to another sink family.

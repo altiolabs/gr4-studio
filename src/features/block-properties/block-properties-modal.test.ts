@@ -105,9 +105,7 @@ describe('coerceBlockPropertyLiteralValue', () => {
   });
 
   it('keeps unsupported families unchanged', () => {
-    expect(isDescriptorBindingHiddenParameter('gr::studio::StudioAudioMonitor<float32>', 'endpoint')).toBe(false);
-    expect(getAuthoringParameterLabel('gr::studio::StudioAudioMonitor<float32>', 'endpoint', 'Endpoint')).toBe(
-      'Endpoint',
-    );
+    expect(isDescriptorBindingHiddenParameter('gr::blocks::NullSink<float32>', 'endpoint')).toBe(false);
+    expect(getAuthoringParameterLabel('gr::blocks::NullSink<float32>', 'endpoint', 'Endpoint')).toBe('Endpoint');
   });
 });

@@ -99,6 +99,7 @@ Semantics:
 - Payload normalizes to one XY trace for plotting.
 - `StudioPowerSpectrumSink` uses this contract to publish FFT frequency bins against averaged power values.
 - `StudioPowerSpectrumSink` uses `sample_rate` to space FFT bins and `center_freq` to offset those bins onto an absolute RF frequency axis. With `center_freq=0`, the x axis remains relative baseband frequency.
+- `StudioPowerSpectrumSink` does not use `x_min` / `x_max`; the emitted frequency bins define the x axis. When `autoscale=false`, Studio applies `y_min` / `y_max` to the rendered power range.
 - `StudioPowerSpectrumSink` with `persistence=true` uses the same contract to publish FFT frequency bins for the live phosphor spectrum renderer. Its phosphor look is controlled by `phosphor_intensity` and `phosphor_decay_ms`.
 
 Frontend routing:

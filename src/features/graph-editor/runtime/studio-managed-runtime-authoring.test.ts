@@ -160,21 +160,17 @@ describe('descriptor-based authoring helpers', () => {
 
   it('extracts descriptor-based transport settings for known Studio blocks outside the hidden-endpoint list', () => {
     expect(
-      buildStudioDescriptorAuthoringView('gr::studio::StudioAudioMonitor<float32>', {
+      buildStudioDescriptorAuthoringView('gr::studio::StudioDataSetSink<float32>', {
         transport: 'http_poll',
         poll_ms: '220',
-        sample_rate: '48000',
-        channels: '2',
-        topic: 'audio',
+        topic: 'dataset',
       }),
     ).toMatchObject({
       status: 'configured',
-      family: 'audio',
+      family: 'series2d',
       transport: 'http_poll',
       updateMs: 220,
-      sampleRate: 48000,
-      channels: 2,
-      topic: 'audio',
+      topic: 'dataset',
     });
   });
 });

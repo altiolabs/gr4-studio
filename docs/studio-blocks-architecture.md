@@ -61,7 +61,6 @@ Rules:
 - `StudioDataSetSink`
 - `StudioPowerSpectrumSink`
 - `StudioWaterfallSink`
-- `StudioAudioMonitor`
 - `StudioAudioSink`
 - `StudioImageSink`
 
@@ -72,7 +71,6 @@ The code currently registers concrete type variants for each family, for example
 - `gr::studio::StudioDataSetSink<...>`
 - `gr::studio::StudioPowerSpectrumSink<...>`
 - `gr::studio::StudioWaterfallSink<...>`
-- `gr::studio::StudioAudioMonitor<...>`
 - `gr::studio::StudioAudioSink<...>`
 - `gr::studio::StudioImageSink<...>`
 
@@ -98,7 +96,7 @@ Rules:
 - do not assume all combinations are valid
 - validate parameters locally, not authoritatively
 
-Websocket transport currently exists for selected sinks only. Descriptor-adapted current-session bindings currently include `StudioSeriesSink`, `Studio2DSeriesSink`, `StudioPowerSpectrumSink`, and `StudioWaterfallSink`. When adding websocket support to a new sink, follow the implementation checklist in `docs/studio-websocket-integration.md`.
+Websocket transport currently exists for selected sinks only. Descriptor-adapted current-session bindings currently include `StudioSeriesSink`, `Studio2DSeriesSink`, `StudioPowerSpectrumSink`, `StudioWaterfallSink`, and `StudioAudioSink`. When adding websocket support to a new sink, follow the implementation checklist in `docs/studio-websocket-integration.md`.
 For websocket-capable sinks, `update_ms` is the live cadence control used by the native send path.
 
 ## Standard parameters
@@ -140,13 +138,13 @@ Rendering is handled separately:
 - `series2d-xy-json-v1` and `dataset-xy-json-v1` -> XY/vector plot path
 - `StudioPowerSpectrumSink` uses the `dataset-xy-json-v1` path for FFT-based spectrum rendering
 - `StudioPowerSpectrumSink` uses `sample_rate` for FFT-bin spacing and optional `center_freq` to offset the x axis from relative baseband Hz to absolute RF Hz
+- `StudioPowerSpectrumSink` owns its x axis through FFT metadata and emitted frequency bins. It does not expose `x_min` / `x_max`; with `autoscale=false`, Studio applies only `y_min` / `y_max` to the rendered spectrum range.
 - `StudioPowerSpectrumSink` with `persistence=true` also uses the `dataset-xy-json-v1` path, but routes to the phosphor spectrum renderer with a persistent glow behind the live trace. The phosphor look is tuned via `phosphor_intensity` and `phosphor_decay_ms`.
 - `StudioWaterfallSink` uses the `waterfall-spectrum-json-v1` path for bounded FFT-history waterfall rendering
 - `StudioWaterfallSink` uses `time_span` and `sample_rate` as the fixed waterfall depth controls and quantizes the resulting duration to the FFT size
 - `StudioWaterfallSink` emits the effective quantized `time_span` together with `sample_rate`
 - `StudioWaterfallSink` also carries `autoscale`, `z_min`, and `z_max` parameters that control the rendered waterfall colormap range
 - Waterfall plots ignore the generic `x_min` / `x_max` / `y_min` / `y_max` axis-range parameters
-- `StudioAudioMonitor` is a waveform snapshot monitor and uses `audio-window-json-v1`
 - `StudioAudioSink` is a playback-oriented sink and uses `audio-float32-binary-v1` over websocket
 - image and audio panel kinds -> separate renderers
 
@@ -191,7 +189,7 @@ The display route is a runtime client, not an editor:
 - it does not mark documents dirty
 - closing it does not stop or delete the session
 - parameter-bound controls write to the running session through block settings APIs
-- variable-bound controls are local display state unless an editor update callback is explicitly supplied
+- variable-bound controls publish runtime override commands back to the owning Studio tab when launched from Studio; those overrides are per-session and are not saved as graph defaults
 
 Use the main Studio runtime controls to stop or delete sessions. Use **Open Display** to reopen a display client for an already running linked session.
 

@@ -1,36 +1,34 @@
-# Studio Audio Playback Implementation Plan
+# Studio Audio Playback Notes
 
-## Goal
+## Current State
 
 Allow FM listening directly in Studio from a GR4 flowgraph.
 
-The current `StudioAudioMonitor<float>` is a waveform snapshot monitor. It keeps a bounded sample window and exposes JSON over HTTP. It is not suitable for real-time playback because it has no clocked audio stream, no browser playback buffer, no device routing, and no underrun handling.
-
-The playback path should be implemented as a live audio sink family, not by polling JSON windows.
+Studio uses a live audio sink family for playback, not polled JSON sample windows.
 
 ## Target UX
 
-Audio panels should provide:
+Audio panels currently provide:
 
-- play / pause control
+- mute / unmute control
 - volume slider
 - playback device selection
-- current state: disconnected, buffering, playing, underrun, stalled
-- basic audio level indicator
+- current connection state
+- sample-rate, channel, buffer, and underrun status
 
-Device selection should use browser output-device APIs when available. On browsers without selectable output support, Studio should show the default output device only and keep playback functional.
+Device selection uses browser output-device APIs when available. On browsers without selectable output support, Studio shows the default output device and keeps playback functional.
 
 ## Architecture
 
-Add a new sink:
+Studio uses a playback-oriented sink:
 
 - `gr::studio::StudioAudioSink<float>`
 
-Keep `StudioAudioMonitor<float>` as a waveform/debug monitor. Do not overload it with playback semantics.
+Do not add a separate waveform/debug audio monitor unless there is a clear non-playback workflow for it.
 
-The audio sink should use WebSocket transport with binary frames. HTTP polling is a poor fit for playback because request cadence, JSON parsing, and buffering jitter will cause audible gaps.
+The audio sink uses WebSocket transport with binary frames. HTTP polling is a poor fit for playback because request cadence, JSON parsing, and buffering jitter cause audible gaps.
 
-Playback ownership must live above the audio panel renderer. The audio panel is a control/status surface only. If the panel owns the WebSocket and `AudioContext`, playback stops when the user switches back to graph editing or when the panel is temporarily unmounted. For FM listening, playback lifecycle should be tied to the runtime session and sink node, not to panel visibility.
+Playback ownership lives above the audio panel renderer. The audio panel is a control/status surface only. Playback lifecycle is tied to the runtime session and sink node, not to panel visibility.
 
 Target ownership model:
 
@@ -53,7 +51,7 @@ Playback session key:
 ${sessionId}:${nodeInstanceId}
 ```
 
-The service should tear down playback when the graph stops, the session is deleted, the sink node disappears, or the user explicitly pauses/stops playback. It should not tear down merely because the workspace switches between Graph and Application views.
+The service tears down playback when the graph stops, the session is deleted, the sink node disappears, or the user explicitly pauses/stops playback. It does not tear down merely because the workspace switches between Graph and Application views.
 
 Recommended flowgraph placement for FM:
 
@@ -61,15 +59,15 @@ Recommended flowgraph placement for FM:
 ... -> QuadratureDemod -> audio filtering/deemphasis -> resampler -> StudioAudioSink<float>
 ```
 
-The sink should expect normalized mono or interleaved float audio in roughly `[-1, 1]`.
+The sink expects normalized mono or interleaved float audio in roughly `[-1, 1]`.
 
 ## Native Block
 
-Create `StudioAudioSink<float>` in `blocks/studio/include/gnuradio-4.0/studio/StudioAudioSink.hpp`.
+`StudioAudioSink<float>` lives in `blocks/studio/include/gnuradio-4.0/studio/StudioAudioSink.hpp`.
 
-Suggested parameters:
+Parameters:
 
-- `transport`: enum or string, initially `websocket`
+- `transport`: explicit transport, currently `websocket`
 - `endpoint`: listen URL/path
 - `sample_rate`: input audio sample rate in Hz
 - `channels`: interleaved channel count
@@ -79,9 +77,9 @@ Suggested parameters:
 - `clip`: clamp samples to `[-1, 1]`, default `true`
 - `topic`: optional stream topic
 
-Supported type:
+Supported reflected types:
 
-- `float` only for the first implementation
+- `float`
 
 Frame sizing:
 
@@ -90,7 +88,7 @@ samples_per_frame = sample_rate * frame_ms / 1000
 payload_samples = samples_per_frame * channels
 ```
 
-The block should accumulate incoming samples until a complete audio frame is available, then publish one binary WebSocket message. It must consume all input samples, but it should not build an unbounded outbound queue. If clients are slow, prefer latest/limited buffering over blocking the scheduler.
+The block accumulates incoming samples until a complete audio frame is available, then publishes one binary WebSocket message.
 
 ## Binary Frame Contract
 
@@ -111,42 +109,42 @@ payload:      float32[frames * channels], interleaved
 
 Keep one complete audio packet per WebSocket message.
 
-Add this contract to `docs/studio-blocks-payload-contracts.md` as `audio-float32-binary-v1`.
+This contract is documented in `docs/studio-blocks-payload-contracts.md` as `audio-float32-binary-v1`.
 
 ## Runtime Binding
 
-Update `src/features/graph-editor/runtime/known-block-bindings.ts`:
+`src/features/graph-editor/runtime/known-block-bindings.ts` defines the audio sink bindings:
 
-- add exact block IDs for `StudioAudioSink<float32>` and `StudioAudioSink<float>`
+- exact block IDs for `StudioAudioSink<float32>` and `StudioAudioSink<float>`
 - family: `audio`
 - supported transport: `websocket`
 - payload format: `audio-float32-binary-v1`
 - parameters: `transport`, `endpoint`, `sample_rate`, `channels`, `topic`
 
-Update runtime binding tests for descriptor-driven audio streams.
+Runtime binding tests cover descriptor-driven audio streams.
 
-The current audio monitor binding can remain as `audio-window-json-v1`, but the playback renderer should prefer `StudioAudioSink` for live audio.
+`StudioAudioSink` is the only first-party Studio audio block. It is the live audio path for both runtime binding and rendering.
 
 ## Frontend Runtime
 
-Add an audio WebSocket runtime:
+The audio WebSocket runtime:
 
 - parse `audio-float32-binary-v1`
 - validate magic/version/sample type/channels/sample rate/frame count
 - expose normalized `Float32Array` chunks to the playback engine
 - track sequence gaps and stalled streams
 
-Suggested files:
+Files:
 
 - `src/features/application/audio/runtime/audio-websocket-runtime.ts`
 - `src/features/application/audio/runtime/audio-frame.ts`
 - tests beside those files
 
-The runtime should not render UI directly. It should feed a playback controller.
+The runtime does not render UI directly. It feeds a playback controller.
 
 ## Browser Playback Engine
 
-Use `AudioWorklet` for stable low-latency playback.
+Studio uses `AudioWorklet` for stable low-latency playback.
 
 Main thread responsibilities:
 
@@ -170,16 +168,14 @@ Do not use ScriptProcessorNode; it is deprecated and too jitter-prone for this u
 Sample-rate handling:
 
 - If sink `sample_rate` matches `AudioContext.sampleRate`, play directly.
-- If it differs, first implementation may require the flowgraph to resample to browser rate, typically `48000`.
-- Add browser-side resampling only after the direct path is stable.
+- If it differs, configure the graph to resample to browser rate, typically `48000`.
+- Browser-side resampling remains a later enhancement.
 
-For FM listening, the recommended first target is `48000 Hz` mono float audio from the graph.
+For FM listening, the recommended target is `48000 Hz` mono float audio from the graph.
 
 ## Persistent Audio Session Store
 
-Add a store/service layer between runtime binding and the renderer.
-
-Suggested file:
+The store/service layer between runtime binding and the renderer is implemented in:
 
 - `src/features/application/audio/audio-session-store.ts`
 
@@ -207,13 +203,13 @@ Responsibilities:
   - `syncRuntime(sessionKey, runtimeBinding)`
   - `cleanupMissingSessions(activeSessionKeys)`
 
-State should be keyed by the control-plane session id plus Studio node instance id. If the same graph is restarted with a new session id, the previous audio session should be stopped and a fresh one should be created.
+State is keyed by the control-plane session id plus Studio node instance id. If the same graph is restarted with a new session id, the previous audio session is stopped and a fresh one is created.
 
-The store should prefer latest-runtime metadata when endpoint, sample rate, or channel count changes. A changed endpoint should reconnect. A changed sample rate/channel count should recreate or reconfigure the audio context/worklet.
+The store prefers latest-runtime metadata when endpoint, sample rate, or channel count changes. A changed endpoint reconnects. A changed sample rate/channel count recreates or reconfigures the audio context/worklet.
 
 ## Device Selection
 
-The panel should expose output devices through `navigator.mediaDevices.enumerateDevices()`.
+The panel exposes output devices through `navigator.mediaDevices.enumerateDevices()`.
 
 Implementation notes:
 
@@ -223,7 +219,7 @@ Implementation notes:
 - route the Web Audio graph through a hidden media element if needed for `setSinkId`
 - when `setSinkId` is unavailable, show only default output and disable selection
 
-The UI should handle:
+The UI handles:
 
 - default output
 - selected device disappears
@@ -232,9 +228,9 @@ The UI should handle:
 
 ## Audio Panel UI
 
-Replace `AudioPlaceholderRenderer` with a real renderer.
+`AudioLiveRenderer` is the live renderer.
 
-Suggested files:
+Files:
 
 - `src/features/workspace/renderers/audio-live-renderer.tsx`
 - `src/features/application/audio/audio-playback-controller.ts`
@@ -242,19 +238,19 @@ Suggested files:
 
 Controls:
 
-- play / pause button
+- mute / unmute button
 - volume slider, `0` to `1`, default `0.8`
 - output device select
 - buffer/underrun status
-- small level meter
+- connection state
 
-Do not autoplay sound on graph start. Browser policy requires user interaction before starting an `AudioContext`, and surprising audio playback is bad UX.
+The audio session starts from the live audio panel path and remains controlled by the browser's `AudioContext` policy.
 
-The panel renderer must not directly own the WebSocket subscription or `AudioContext`. It should subscribe to the persistent audio session store and dispatch commands. This allows playback to continue when switching back to graph view.
+The panel renderer does not directly own the WebSocket subscription or `AudioContext`. It subscribes to the persistent audio session store and dispatches commands. This allows playback to continue when switching back to graph view.
 
 ## Native Tests
 
-Add C++ tests for:
+Current C++ coverage includes `qa_StudioAudioSink`; keep it covering:
 
 - block registration
 - parameter reflection
@@ -266,33 +262,26 @@ Add C++ tests for:
 
 ## Frontend Tests
 
-Add TypeScript tests for:
+Current TypeScript coverage includes:
 
 - binary frame parsing
 - invalid frame rejection
 - sequence gap detection
 - binding resolution for `StudioAudioSink`
-- device selection fallback behavior
-- playback controller buffer state transitions
+- audio session store lifecycle
 
-The AudioWorklet itself should keep logic small enough to test with a plain ring-buffer helper outside browser APIs.
+The AudioWorklet itself stays small and keeps browser-specific behavior isolated.
 
-## Implementation Order
+## Remaining Work
 
-1. Add the native `StudioAudioSink<float>` block with binary WebSocket frames.
-2. Register the block and add C++ tests for frame layout and lifecycle.
-3. Add Studio binding metadata and runtime binding tests.
-4. Add the binary audio frame parser and tests.
-5. Add an `AudioWorklet` ring-buffer playback path.
-6. Add a persistent runtime audio session store keyed by session id and sink node id.
-7. Replace the placeholder audio renderer with playback controls backed by the persistent store.
-8. Add output device enumeration and fallback behavior.
-9. Add lifecycle cleanup on graph stop/session delete/node removal.
-10. Validate with an FM graph at mono `48000 Hz`.
+- Validate the full FM graph at mono `48000 Hz` for sustained playback.
+- Decide whether the renderer needs an explicit play/pause affordance in addition to mute.
+- Add browser-side resampling only if non-48000 Hz sources become a real workflow requirement.
+- Decide whether stereo FM should be supported immediately or after mono playback is stable.
 
 ## Validation Flowgraph
 
-Initial FM validation should use:
+Initial FM validation uses:
 
 ```text
 RF source
@@ -315,7 +304,6 @@ Expected checks:
 
 ## Open Decisions
 
-- Whether to keep `StudioAudioMonitor` visible as a waveform-only block or rename it later to avoid confusion.
 - Whether browser-side resampling is required for non-48000 Hz audio.
-- Whether stereo FM should be handled initially or deferred until mono playback is stable.
+- Whether stereo FM should be enabled before or after mono playback is validated for longer sessions.
 - Whether audio frames should carry stream time tags once GR4 tag propagation is reliable for this path.

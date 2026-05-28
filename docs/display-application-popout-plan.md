@@ -92,9 +92,10 @@ The display application does not own graph editor state:
 - application-only route does not call editor store mutation APIs
 - application-only route does not mark the graph document dirty
 - application-only route does not update graph variables or graph parameters
-- in-app display also stops variable-control editor mutation while the graph is running
 - parameter-bound controls continue to write to the running session via block settings APIs when valid
-- variable-bound controls use local display state when no graph-editor update callback is provided
+- variable-bound controls publish runtime override commands to the owning Studio tab when launched from Studio
+- runtime variable overrides are per-tab/per-session, resolve expression-backed parameters for the running session, and are cleared when the session changes or is deleted
+- if a display route is opened without an owning Studio tab callback, variable-bound controls fall back to local display state
 
 If graph-level persistence of changed controls is needed later, add an explicit "Apply to graph" workflow.
 
@@ -114,5 +115,4 @@ The display application is keyed by session id:
 - Add stronger runtime validation/schema for launch snapshot payloads.
 - Add explicit launch snapshot cleanup/expiry.
 - Add optional coordination for reusing/updating an existing display window.
-- Add optional variable-control mapping to explicit runtime parameter updates.
 - Add broader tests for StudioPage run branching and runtime-local control behavior.

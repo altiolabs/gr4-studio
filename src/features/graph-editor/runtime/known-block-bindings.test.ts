@@ -25,7 +25,7 @@ describe('known Studio block bindings', () => {
     }, {});
 
     expect(counts).toEqual({
-      audio: 4,
+      audio: 2,
       image: 3,
       series: 4,
       series2d: 12,
@@ -265,23 +265,6 @@ describe('known Studio block bindings', () => {
       transport: 'http_snapshot',
       endpoint: 'http://127.0.0.1:18082/snapshot',
       channels: 1,
-    });
-
-    const audioConfigured = buildStudioBindingView('gr::studio::StudioAudioMonitor<float32>', {
-      transport: 'http_poll',
-      endpoint: 'http://127.0.0.1:18083/snapshot',
-      sample_rate: '48000',
-      channels: '2',
-      poll_ms: '120',
-    });
-    expect(audioConfigured).toMatchObject({
-      status: 'configured',
-      family: 'audio',
-      transport: 'http_poll',
-      endpoint: 'http://127.0.0.1:18083/snapshot',
-      sampleRate: 48000,
-      channels: 2,
-      updateMs: 120,
     });
 
     const audioSinkConfigured = buildStudioBindingView('gr::studio::StudioAudioSink<float32>', {

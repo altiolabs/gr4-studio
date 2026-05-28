@@ -18,7 +18,7 @@ Current included blocks:
 - `StudioDataSetSink`
 - `StudioPowerSpectrumSink`
 - `StudioWaterfallSink`
-- `StudioAudioMonitor`
+- `StudioAudioSink`
 - `StudioImageSink`
 
 Notes:
@@ -27,18 +27,22 @@ Notes:
 - `Studio2DSeriesSink` exposes `series2d-xy-json-v1` payloads and now supports websocket transport using the same JSON frame contract as its HTTP snapshot path. Live cadence is controlled by `update_ms`.
 - `StudioDataSetSink` exposes `dataset-xy-json-v1` payloads (`layout: pairs_xy`) for DataSet-backed visualization paths.
 - `StudioPowerSpectrumSink` also exposes `dataset-xy-json-v1` payloads and is intended for FFT-based averaged power spectrum visualization.
+- `StudioPowerSpectrumSink` uses `fft_size`, `sample_rate`, and `center_freq` to define the x axis. It does not expose `x_min` / `x_max`; `autoscale=false` applies to the y axis through `y_min` / `y_max`.
 - `StudioPowerSpectrumSink` with `persistence=true` uses the same `dataset-xy-json-v1` payload path, but the Studio UI renders it as a GQRX-style phosphor spectrum with a persistent glow behind the live trace. The phosphor look is tuned with `phosphor_intensity` and `phosphor_decay_ms`.
 - `StudioWaterfallSink` exposes `waterfall-spectrum-json-v1` payloads and is intended for bounded FFT-history waterfall visualization.
 - `StudioWaterfallSink` uses `time_span` together with `sample_rate` as the fixed depth controls and quantizes the resulting duration to the configured FFT size.
 - `StudioWaterfallSink` emits the effective quantized `time_span` together with `sample_rate`.
 - `StudioWaterfallSink` uses `autoscale`, `z_min`, and `z_max` to control the rendered colormap range.
 - Waterfall rendering ignores generic `x_min` / `x_max` / `y_min` / `y_max` axis-range settings.
+- `StudioPowerSpectrumSink` and `StudioWaterfallSink` expose `window` as `gr::algorithm::window::Type` so reflection can provide enum choices to the UI.
+- `StudioAudioSink` exposes `audio-float32-binary-v1` websocket payloads for browser playback.
 
 Native QA target:
 
 - `qa_Studio2DSeriesSink`
 - `qa_StudioPowerSpectrumSink`
 - `qa_StudioWaterfallSink`
+- `qa_StudioAudioSink`
 
 Notes:
 

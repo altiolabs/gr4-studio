@@ -9,7 +9,7 @@ This folder holds small, manual-validation assets for Studio features.
 What it demonstrates:
 
 - a minimal `SignalGenerator<float32> -> StudioWaterfallSink<float32>` graph
-- `http_poll` transport on the waterfall sink
+- waterfall live rendering
 - fixed waterfall depth driven by `time_span` and `sample_rate`
 - a deterministic starting point for live waterfall validation in Studio
 
@@ -21,10 +21,11 @@ What it demonstrates:
 
 - a minimal `SignalGenerator<float32> -> StudioPowerSpectrumSink<float32>` graph with `persistence=true`
 - phosphor tuning via `phosphor_intensity` and `phosphor_decay_ms`
-- `http_poll` transport on the power-spectrum sink
+- power-spectrum live rendering
 - a crisp live spectrum trace with a colored persistent glow behind it
 - a deterministic starting point for live phosphor-spectrum validation in Studio
 - it reuses the same `dataset-xy-json-v1` payload contract as `StudioPowerSpectrumSink`
+- the x axis comes from FFT metadata and payload bins; `autoscale=false` uses `y_min` / `y_max`
 
 Canonical payload fixtures are shared with the power spectrum path because the payload contract is the same.
 
@@ -44,7 +45,8 @@ Phosphor spectrum uses the same dataset XY contract as the power spectrum sink, 
 4. Confirm the panel appears and responds to hover.
 5. For the phosphor spectrum, check that the current line stays crisp while old energy glows behind it.
 6. Adjust `phosphor_intensity` and `phosphor_decay_ms` to change how brightly and how long the phosphor field persists.
-6. For the waterfall, set `autoscale=false` and adjust `z_min` / `z_max`, then adjust `time_span` and `sample_rate` to verify fixed depth.
+7. For the power spectrum, set `autoscale=false` and adjust `y_min` / `y_max`.
+8. For the waterfall, set `autoscale=false` and adjust `z_min` / `z_max`, then adjust `time_span` and `sample_rate` to verify fixed depth.
 
 ## Native QA pointers
 
